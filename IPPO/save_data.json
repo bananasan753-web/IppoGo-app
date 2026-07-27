@@ -1,0 +1,181 @@
+{
+  "target_list": [
+    {
+      "title": "実践問題を解きなおす(104回～107回)",
+      "tasks": {
+        "Lv.1": "机の上にプリントを置いた",
+        "Lv.2": "10分出来た",
+        "Lv.3": "60分出来た",
+        "Lv.4": "50問解いた",
+        "Lv.5": "1年分の実践問題が終わった"
+      },
+      "completed": false,
+      "deadline": "2026/07/31",
+      "deadline_answered": false,
+      "deadline_result": null,
+      "reminder_mode": "once",
+      "deadline_reminder_stopped": false,
+      "deadline_daily_log": []
+    },
+    {
+      "title": "実践問題を解きなおす(108回～111回)",
+      "tasks": {
+        "Lv.1": "机の上にプリントを置いた",
+        "Lv.2": "10分出来た",
+        "Lv.3": "60分出来た",
+        "Lv.4": "50問解いた",
+        "Lv.5": "1年分の実践問題が終わった"
+      },
+      "completed": false,
+      "deadline": null,
+      "deadline_answered": false,
+      "deadline_result": null,
+      "reminder_mode": "once",
+      "deadline_reminder_stopped": false,
+      "deadline_daily_log": []
+    },
+    {
+      "title": "RECの講義を聞く (物理)",
+      "tasks": {
+        "Lv.1": "講義画面を開いた",
+        "Lv.2": "10分やった",
+        "Lv.3": "一講義分やった",
+        "Lv.4": "60分やった",
+        "Lv.5": "一単元終わらせた"
+      },
+      "completed": false
+    },
+    {
+      "title": "RECの講義を聞く (生物)",
+      "tasks": {
+        "Lv.1": "講義画面を開いた",
+        "Lv.2": "10分やった",
+        "Lv.3": "一講義分やった",
+        "Lv.4": "60分やった",
+        "Lv.5": "一単元終わらせた"
+      },
+      "completed": false
+    },
+    {
+      "title": "RECの講義を聞く (化学)",
+      "tasks": {
+        "Lv.1": "講義画面を開いた",
+        "Lv.2": "10分やった",
+        "Lv.3": "一講義分やった",
+        "Lv.4": "60分やった",
+        "Lv.5": "一単元終わらせた"
+      },
+      "completed": false
+    },
+    {
+      "title": "RECの講義を聞く (薬理)",
+      "tasks": {
+        "Lv.1": "講義画面を開いた",
+        "Lv.2": "10分やった",
+        "Lv.3": "一講義分やった",
+        "Lv.4": "60分やった",
+        "Lv.5": "一単元終わらせた"
+      },
+      "completed": false
+    },
+    {
+      "title": "RECの講義を聞く (薬剤)",
+      "tasks": {
+        "Lv.1": "講義画面を開いた",
+        "Lv.2": "10分やった",
+        "Lv.3": "一講義分やった",
+        "Lv.4": "60分やった",
+        "Lv.5": "一単元終わらせた"
+      },
+      "completed": false
+    },
+    {
+      "title": "RECの講義を聞く (法規)",
+      "tasks": {
+        "Lv.1": "講義画面を開いた",
+        "Lv.2": "10分やった",
+        "Lv.3": "一講義分やった",
+        "Lv.4": "60分やった",
+        "Lv.5": "一単元終わらせた"
+      },
+      "completed": false
+    },
+    {
+      "title": "RECの講義を聞く (薬物治療)",
+      "tasks": {
+        "Lv.1": "講義画面を開いた",
+        "Lv.2": "10分やった",
+        "Lv.3": "一講義分やった",
+        "Lv.4": "60分やった",
+        "Lv.5": "一単元終わらせた"
+      },
+      "completed": false
+    },
+    {
+      "title": "RECの講義を聞く (実務)",
+      "tasks": {
+        "Lv.1": "講義画面を開いた",
+        "Lv.2": "10分やった",
+        "Lv.3": "一講義分やった",
+        "Lv.4": "60分やった",
+        "Lv.5": "一単元終わらせた"
+      },
+      "completed": false
+    },
+    {
+      "title": "RECの講義を聞く (衛生)",
+      "tasks": {
+        "Lv.1": "講義画面を開いた",
+        "Lv.2": "10分やった",
+        "Lv.3": "一講義分やった",
+        "Lv.4": "60分やった",
+        "Lv.5": "一単元終わらせた"
+      },
+      "completed": false
+    }
+  ],
+  "jar_capacity": 30,
+  "jar_candies": [],
+  "all_candy_log": [],
+  "jar_complete_log": [],
+  "last_jar_capacity": 30,
+  "course_km": {
+    "village": 6
+  },
+  "course_complete_sound_played": {},
+  "course_complete_companion_message": {},
+  "course_run_log": [
+    {
+      "date": "2026/07/24 13:27",
+      "course": "一歩村一周コース",
+      "km": 1,
+      "task": "【RECの講義を聞く (生物) - Lv.1】 講義画面を開いた",
+      "companion": "とり"
+    },
+    {
+      "date": "2026/07/24 13:27",
+      "course": "一歩村一周コース",
+      "km": 2,
+      "task": "【RECの講義を聞く (生物) - Lv.2】 10分やった",
+      "companion": "とり"
+    },
+    {
+      "date": "2026/07/24 13:27",
+      "course": "一歩村一周コース",
+      "km": 3,
+      "task": "【RECの講義を聞く (生物) - Lv.3】 一講義分やった",
+      "companion": "とり"
+    }
+  ],
+  "course_complete_log": [],
+  "companion": "bird",
+  "goal_complete_log": [],
+  "calendar_stickers": {
+    "2026/07/24": 3
+  },
+  "calendar_notes": {
+    "2026/07/24": "今日から研究室！\n卒論作成で改めて6年生なんだなと実感。\nやることは沢山あるけど、少しずつタスクをこなしていきたい。"
+  },
+  "sticker_type": "circle",
+  "sticker_color": "赤"
+}

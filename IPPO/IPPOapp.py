@@ -81,9 +81,9 @@ PERSISTENT_KEYS = [
     "calendar_notes",
     "sticker_type",
     "sticker_color",
-    "time_records",            # 追加：時間記録ログ
-    "timer_target_seconds",    # 追加：タイマー目標時間（秒）
-    "timer_sound_choice",      # 追加：アラーム音選択（A or B）
+    "time_records",  # 追加：時間記録ログ
+    "timer_target_seconds",  # 追加：タイマー目標時間（秒）
+    "timer_sound_choice",  # 追加：アラーム音選択（A or B）
 ]
 
 PERSISTENT_DEFAULTS = {
@@ -1082,7 +1082,8 @@ elif st.session_state.page in [
 
         if daily_timer_records:
             for tr in daily_timer_records:
-                st.info(f"⏰{tr['time_str']} 記録！({tr['memo'] if tr['memo'] else 'メモなし'})")
+                memo_part = f" ({tr['memo']})" if tr['memo'] else ""
+                st.info(f"⏰{tr['time_str']} 記録！{memo_part}")
 
         if daily_goal_completions:
             for g in daily_goal_completions:
@@ -1145,65 +1146,64 @@ elif st.session_state.page in [
         st.title("⏱️ 時間記録（ストップウォッチ）")
         st.write("時間を計測して、その記録をカレンダーに残せます！")
 
-        # 時間設定エクスパンダー
-        with st.expander("⏰ 時間設定・アラーム設定"):
-            target_min = st.number_input("設定時間（分）", min_value=0, max_value=120, value=st.session_state.timer_target_seconds // 60)
-            target_sec = st.number_input("設定時間（秒）", min_value=0, max_value=59, value=st.session_state.timer_target_seconds % 60)
+        # 時間設定（タイマー機能）
+        with st.expander("⏰ 時間設定（自由設定）", expanded=True):
+            col_t1, col_t2 = st.columns(2)
+            with col_t1:
+                target_min = st.number_input("目標時間（分）", min_value=0, max_value=120,
+                                             value=st.session_state.timer_target_seconds // 60, key="timer_min_input")
+            with col_t2:
+                target_sec = st.number_input("目標時間（秒）", min_value=0, max_value=59,
+                                             value=st.session_state.timer_target_seconds % 60, key="timer_sec_input")
             st.session_state.timer_target_seconds = target_min * 60 + target_sec
 
-            sound_choice = st.radio(
-                "鳴らす音を選択してください（設定時間になると1回鳴ります）",
-                options=["A", "B"],
-                format_func=lambda x: "A: 自転車のベル" if x == "A" else "B: 決定ボタンを押す21",
-                index=0 if st.session_state.timer_sound_choice == "A" else 1,
-                horizontal=True
-            )
-            st.session_state.timer_sound_choice = sound_choice
-
-            st.caption(f"現在の設定：{target_min}分{target_sec}秒 に達すると 音{sound_choice} が一度だけ鳴ります。")
+            st.caption(f"現在の設定: **{target_min}分{target_sec}秒** になると風船が飛んでお知らせします🎈（タイマーは停止せず継続します）")
 
         st.write("---")
 
         # 時間計算（リアルタイム経過時間）
         if st.session_state.sw_running:
             current_elapsed = st.session_state.sw_elapsed + (time.time() - st.session_state.sw_start_time)
-            # 設定時間アラーム判定
+            # 設定時間達成アラーム・風船の判定
             if st.session_state.timer_target_seconds > 0 and current_elapsed >= st.session_state.timer_target_seconds:
                 if not st.session_state.timer_alarm_played:
-                    play_timer_sound(st.session_state.timer_sound_choice)
                     st.session_state.timer_alarm_played = True
+                    st.balloons()
         else:
             current_elapsed = st.session_state.sw_elapsed
+
+        # 時間到達メッセージ表示
+        if st.session_state.timer_alarm_played:
+            st.success("🎈 設定した時間になりました！")
 
         m, s = divmod(int(current_elapsed), 60)
         h, m = divmod(m, 60)
         time_display_str = f"{h:02d}:{m:02d}:{s:02d}"
 
-        # 大きく経過時間を表示（現在の時刻とは混同しない表記）
-        st.markdown(f"<h1 style='text-align: center; font-size: 72px; font-family: monospace;'>{time_display_str}</h1>", unsafe_allow_html=True)
-        st.caption("※リアルタイムで経過した時間を表示しています")
+        # 経過時間を大きく表示（※現在時刻との混同防止）
+        st.markdown(f"<h1 style='text-align: center; font-size: 72px; font-family: monospace;'>⏱️ {time_display_str}</h1>",
+                    unsafe_allow_html=True)
+        st.caption("<div style='text-align: center;'>※現在時刻ではなく、ストップウォッチのリアルタイム経過時間です</div>", unsafe_allow_html=True)
 
         st.write("")
 
         # ボタンコントロール
         if not st.session_state.sw_stopped:
             # 未ストップ（初期状態または稼働中）
-            col_sw1, col_sw2 = st.columns(2)
-            with col_sw1:
-                if not st.session_state.sw_running:
-                    if st.button("▶ オン (計測開始)", use_container_width=True, type="primary"):
-                        st.session_state.sw_running = True
-                        st.session_state.sw_start_time = time.time()
-                        st.session_state.timer_alarm_played = False
-                        st.rerun()
-                else:
-                    if st.button("⏸ ストップ", use_container_width=True, type="secondary"):
-                        st.session_state.sw_running = False
-                        st.session_state.sw_elapsed = current_elapsed
-                        st.session_state.sw_stopped = True
-                        st.rerun()
+            if not st.session_state.sw_running:
+                if st.button("▶ オン (計測開始)", use_container_width=True, type="primary"):
+                    st.session_state.sw_running = True
+                    st.session_state.sw_start_time = time.time()
+                    st.session_state.timer_alarm_played = False
+                    st.rerun()
+            else:
+                if st.button("⏸ ストップ", use_container_width=True, type="secondary"):
+                    st.session_state.sw_running = False
+                    st.session_state.sw_elapsed = current_elapsed
+                    st.session_state.sw_stopped = True
+                    st.rerun()
         else:
-            # ストップ中：再開、リセット、記録ボタンが出現
+            # ストップを押した際にのみ出現：再開、リセット、記録ボタン
             col_r1, col_r2, col_r3 = st.columns(3)
             with col_r1:
                 if st.button("▶ 再開", use_container_width=True):
@@ -1224,39 +1224,41 @@ elif st.session_state.page in [
                     st.session_state.sw_show_record_input = True
                     st.rerun()
 
-        # 記録入力フォーム
+        # 記録入力フォーム（「記録」ボタンを押した際に出現）
         if st.session_state.sw_show_record_input:
             st.write("---")
-            st.markdown("### 📝 記録メモの記入")
-            
-            formatted_time_record = f"{m}分{s}秒" if h == 0 else f"{h}時間{m}分{s}秒"
-            memo_text = st.text_input("カレンダーに残すメモ（任意）", placeholder="例：漢字ドリル、腕立て伏せなど")
+            st.markdown("### 📝 カレンダーに記録を記入")
 
-            if st.button("💾 カレンダーに記録を保存する", type="primary"):
+            formatted_time_record = f"{m}分{s}秒" if h == 0 else f"{h}時間{m}分{s}秒"
+            memo_text = st.text_input("任意メモ（例：漢字ドリル、読書など）", placeholder="未記入でもOKです", key="sw_memo_input")
+
+            if st.button("💾 カレンダーに保存する", type="primary"):
                 play_click_sound(delay=0)
                 today_date_str = datetime.now().strftime("%Y/%m/%d")
                 now_datetime_str = datetime.now().strftime("%Y/%m/%d %H:%M")
-                
-                # 記録用フォーマット生成: ⏰××(時間)記録！(メモで書いた文)
+
+                # 指定形式: ⏰××(時間)記録！(メモで書いた文)
+                memo_content = memo_text.strip()
+                log_text = f"⏰{formatted_time_record}記録！{memo_content}"
+
                 record_entry = {
                     "date": now_datetime_str,
                     "time_str": formatted_time_record,
-                    "memo": memo_text.strip(),
+                    "memo": memo_content,
                 }
-                
+
                 st.session_state.time_records.append(record_entry)
                 add_sticker_for_date(today_date_str)
 
-                # メモ書きがある場合はカレンダーのノートにも追記
-                log_note_line = f"⏰{formatted_time_record} 記録！{memo_text.strip()}"
+                # カレンダーのメモ欄へ追記
                 if st.session_state.calendar_notes.get(today_date_str):
-                    st.session_state.calendar_notes[today_date_str] += f"\n{log_note_line}"
+                    st.session_state.calendar_notes[today_date_str] += f"\n{log_text}"
                 else:
-                    st.session_state.calendar_notes[today_date_str] = log_note_line
+                    st.session_state.calendar_notes[today_date_str] = log_text
 
-                st.success(f"カレンダーに「⏰{formatted_time_record} 記録！({memo_text.strip()})」を保存しました！")
-                
-                # 状態のリセット
+                st.success(f"カレンダーに「{log_text}」を保存しました！")
+
+                # タイマー状態を初期化
                 st.session_state.sw_running = False
                 st.session_state.sw_elapsed = 0
                 st.session_state.sw_stopped = False
@@ -1264,7 +1266,7 @@ elif st.session_state.page in [
                 st.session_state.timer_alarm_played = False
                 st.rerun()
 
-        # ストップウォッチ更新用ループ（計測中のみ自動リフレッシュ）
+        # リアルタイム表示更新用ループ（計測中のみ画面更新）
         if st.session_state.sw_running:
             time.sleep(0.1)
             st.rerun()

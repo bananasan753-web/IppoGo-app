@@ -1,3 +1,4 @@
+import base64
 import calendar as cal_module
 import datetime
 from datetime import date, datetime

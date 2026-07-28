@@ -25,8 +25,9 @@ st.markdown("""
     </style>
     """, unsafe_allow_html=True)
 
+
 # =====================================================
-# 🌐 Supabase 接続設定 & ユーザー切替
+# 🌐 Supabase 接続設定
 # =====================================================
 @st.cache_resource
 def init_supabase() -> Client:
@@ -34,22 +35,13 @@ def init_supabase() -> Client:
     key = st.secrets["SUPABASE_KEY"]
     return create_client(url, key)
 
+
 try:
     supabase = init_supabase()
 except Exception as e:
     st.error("Supabaseへの接続に失敗しました。Secretsの設定を確認してください。")
     st.stop()
 
-# サイドバーにユーザー切り替え枠を設置
-st.sidebar.title("👤 ユーザー設定")
-current_user_id = st.sidebar.text_input("ユーザー名（またはID）を入力", value="ゲスト")
-
-if not current_user_id.strip():
-    st.sidebar.warning("ユーザー名を入力してください。")
-    st.stop()
-
-st.sidebar.info(f"現在のユーザー: **{current_user_id}**")
-st.sidebar.write("---")
 
 # =====================================================
 # 🔊 効果音まわりの設定
@@ -60,8 +52,10 @@ JAR_FULL_SOUND_PATH = os.path.join(os.path.dirname(__file__), "sounds", "歓声�
 
 JAR_SIZE_LABELS = {30: "S", 50: "M", 100: "L"}
 
+
 def jar_size_label(capacity: int) -> str:
     return JAR_SIZE_LABELS.get(capacity, "?")
+
 
 # =====================================================
 # 💾 セーブデータ（Supabaseクラウド連携）
@@ -106,6 +100,16 @@ PERSISTENT_DEFAULTS = {
     "sticker_color": "赤",
 }
 
+
+def check_user_exists(uid: str) -> bool:
+    """Supabaseに指定ユーザーのデータが存在するか確認する"""
+    try:
+        response = supabase.table("user_data").select("id").eq("id", uid).execute()
+        return bool(response.data and len(response.data) > 0)
+    except Exception:
+        return False
+
+
 def load_progress(uid):
     """Supabaseから指定ユーザーのデータを読み込む"""
     try:
@@ -117,11 +121,13 @@ def load_progress(uid):
                     st.session_state[key] = saved_data[key]
                 else:
                     default_val = PERSISTENT_DEFAULTS[key]
-                    st.session_state[key] = type(default_val)(default_val) if isinstance(default_val, (list, dict)) else default_val
+                    st.session_state[key] = type(default_val)(default_val) if isinstance(default_val,
+                                                                                         (list, dict)) else default_val
         else:
             reset_progress_in_memory()
     except Exception as e:
         st.error(f"データの読み込みに失敗しました: {e}")
+
 
 def save_progress():
     """現在の進捗を Supabase に保存する"""
@@ -142,6 +148,7 @@ def save_progress():
     except Exception as e:
         pass
 
+
 def reset_progress_in_memory():
     """メモリ上の進捗を初期値に戻す"""
     for key, default_value in PERSISTENT_DEFAULTS.items():
@@ -149,6 +156,7 @@ def reset_progress_in_memory():
             st.session_state[key] = type(default_value)(default_value)
         else:
             st.session_state[key] = default_value
+
 
 def reset_progress():
     """進捗を初期化しSupabaseからも削除する"""
@@ -160,24 +168,22 @@ def reset_progress():
         except Exception:
             pass
 
-# ユーザー切り替え検知
-if "current_user" not in st.session_state or st.session_state["current_user"] != current_user_id:
-    st.session_state["current_user"] = current_user_id
-    load_progress(current_user_id)
 
 # =====================================================
 # 🏃 ランニングコース共通設定 & SVG処理
 # =====================================================
 RUNNING_COURSES = {
-    "village":    {"name": "一歩村一周コース",         "distance": 30,  "tier": "🟢 初級", "bonus": None,        "ready": True},
-    "town":       {"name": "その調子！二歩町巡り",       "distance": 40,  "tier": "🟢 初級", "bonus": None,        "ready": True},
-    "downtown":   {"name": "進め三歩市街道",            "distance": 50,  "tier": "🟢 初級", "bonus": None,        "ready": False},
-    "prefecture": {"name": "信じて進む四歩県道",         "distance": 70,  "tier": "🟡 中級", "bonus": "skip",      "ready": False},
-    "nation":     {"name": "君ならできる五歩国道",       "distance": 90,  "tier": "🟡 中級", "bonus": "skip",      "ready": False},
-    "continent":  {"name": "焦らず行こう六歩大陸路",     "distance": 120, "tier": "🟡 中級", "bonus": "skip",      "ready": False},
-    "world":      {"name": "よくがんばった七歩世界道",   "distance": 150, "tier": "🔴 上級", "bonus": "extra_run", "ready": False},
-    "space":      {"name": "誇っていい八歩宇宙路",       "distance": 200, "tier": "🔴 上級", "bonus": "extra_run", "ready": False},
-    "galaxy":     {"name": "どこまでも行ける九歩銀河道", "distance": 300, "tier": "🔴 上級", "bonus": "extra_run", "ready": False},
+    "village": {"name": "一歩村一周コース", "distance": 30, "tier": "🟢 初級", "bonus": None, "ready": True},
+    "town": {"name": "その調子！二歩町巡り", "distance": 40, "tier": "🟢 初級", "bonus": None, "ready": True},
+    "downtown": {"name": "進め三歩市街道", "distance": 50, "tier": "🟢 初級", "bonus": None, "ready": False},
+    "prefecture": {"name": "信じて進む四歩県道", "distance": 70, "tier": "🟡 中級", "bonus": "skip", "ready": False},
+    "nation": {"name": "君ならできる五歩国道", "distance": 90, "tier": "🟡 中級", "bonus": "skip", "ready": False},
+    "continent": {"name": "焦らず行こう六歩大陸路", "distance": 120, "tier": "🟡 中級", "bonus": "skip", "ready": False},
+    "world": {"name": "よくがんばった七歩世界道", "distance": 150, "tier": "🔴 上級", "bonus": "extra_run",
+              "ready": False},
+    "space": {"name": "誇っていい八歩宇宙路", "distance": 200, "tier": "🔴 上級", "bonus": "extra_run", "ready": False},
+    "galaxy": {"name": "どこまでも行ける九歩銀河道", "distance": 300, "tier": "🔴 上級", "bonus": "extra_run",
+               "ready": False},
 }
 RUNNING_TIER_ORDER = ["🟢 初級", "🟡 中級", "🔴 上級"]
 
@@ -198,6 +204,7 @@ COURSE_BONUS_MESSAGES = {
 BONUS_CHANCE = 0.20
 BONUS_KM_RANGE = (2, 5)
 
+
 def maybe_apply_bonus(course_key: str):
     course = RUNNING_COURSES.get(course_key, {})
     bonus_type = course.get("bonus")
@@ -206,6 +213,7 @@ def maybe_apply_bonus(course_key: str):
     bonus_km = random.randint(*BONUS_KM_RANGE)
     message = COURSE_BONUS_MESSAGES.get(bonus_type, "").format(km=bonus_km)
     return bonus_km, message
+
 
 def render_candy_jar_svg(candies: list, capacity: int) -> str:
     count = len(candies)
@@ -248,7 +256,8 @@ def render_candy_jar_svg(candies: list, capacity: int) -> str:
         cy = interior_bottom - spacing_y * row - spacing_y / 2 + jitter_y
         cy = max(cy, interior_top)
         emoji = candy.get("emoji", "🍬")
-        tooltip_text = f"入れた日：{candy.get('date', '')}".replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+        tooltip_text = f"入れた日：{candy.get('date', '')}".replace("&", "&amp;").replace("<", "&lt;").replace(">",
+                                                                                                              "&gt;")
         shapes_svg += (
             f'<text x="{cx:.1f}" y="{cy:.1f}" font-size="{font_size:.1f}" '
             f'text-anchor="middle" dominant-baseline="central">{emoji}'
@@ -263,6 +272,7 @@ def render_candy_jar_svg(candies: list, capacity: int) -> str:
     </svg>
     """
 
+
 # =====================================================
 # 🔊 音声読み込み
 # =====================================================
@@ -274,9 +284,11 @@ def load_sound_base64(path: str):
         data = f.read()
     return base64.b64encode(data).decode()
 
+
 _sound_b64 = load_sound_base64(SOUND_PATH)
 _achieve_sound_b64 = load_sound_base64(ACHIEVE_SOUND_PATH)
 _jar_full_sound_b64 = load_sound_base64(JAR_FULL_SOUND_PATH)
+
 
 def play_click_sound(delay: float = 1.2):
     if _sound_b64 is None:
@@ -286,6 +298,7 @@ def play_click_sound(delay: float = 1.2):
     if delay:
         time.sleep(delay)
 
+
 def play_achieve_sound(delay: float = 0):
     if _achieve_sound_b64 is None:
         return
@@ -293,6 +306,7 @@ def play_achieve_sound(delay: float = 0):
     st.components.v1.html(sound_html, height=0)
     if delay:
         time.sleep(delay)
+
 
 def play_jar_full_sound(delay: float = 0):
     if _jar_full_sound_b64 is None:
@@ -302,11 +316,18 @@ def play_jar_full_sound(delay: float = 0):
     if delay:
         time.sleep(delay)
 
+
 # =====================================================
 # 1. 記憶の部屋（セッション状態）の初期化
 # =====================================================
 if "page" not in st.session_state:
     st.session_state.page = "title"
+if "login_step" not in st.session_state:
+    st.session_state.login_step = "title"  # 'title', 'login_input', 'confirm'
+if "temp_user_id" not in st.session_state:
+    st.session_state.temp_user_id = ""
+if "current_user" not in st.session_state:
+    st.session_state.current_user = None
 if "game_started" not in st.session_state:
     st.session_state.game_started = False
 if "target_list" not in st.session_state:
@@ -441,13 +462,16 @@ if "sticker_type" not in st.session_state:
 if "sticker_color" not in st.session_state:
     st.session_state.sticker_color = "赤"
 
+
 def get_current_sticker_emoji() -> str:
     if st.session_state.sticker_type == "circle":
         return STICKER_CIRCLE_COLORS.get(st.session_state.sticker_color, "🔴")
     return STICKER_FIXED_TYPES.get(st.session_state.sticker_type, {}).get("emoji", "🔴")
 
+
 def add_sticker_for_date(date_str: str):
     st.session_state.calendar_stickers[date_str] = st.session_state.calendar_stickers.get(date_str, 0) + 1
+
 
 def should_prompt_deadline_today(target_data: dict) -> bool:
     deadline = target_data.get("deadline")
@@ -463,6 +487,7 @@ def should_prompt_deadline_today(target_data: dict) -> bool:
         return False
     return today_str == deadline
 
+
 def record_deadline_answer(target_data: dict, result_label: str):
     today_str = datetime.now().strftime("%Y/%m/%d")
     if target_data.get("reminder_mode") == "daily":
@@ -475,6 +500,7 @@ def record_deadline_answer(target_data: dict, result_label: str):
         target_data["deadline_result"] = result_label
     add_sticker_for_date(today_str)
 
+
 def get_sticker_preview(date_str: str, limit: int = MAX_STICKERS_SHOWN, show_remainder: bool = True) -> str:
     count = st.session_state.calendar_stickers.get(date_str, 0)
     if count <= 0:
@@ -484,6 +510,7 @@ def get_sticker_preview(date_str: str, limit: int = MAX_STICKERS_SHOWN, show_rem
     if show_remainder and count > limit:
         preview += f"+{count - limit}"
     return preview
+
 
 if "calendar_view_year" not in st.session_state:
     st.session_state.calendar_view_year = datetime.now().year
@@ -500,46 +527,133 @@ if st.session_state.page == "title":
     st.subheader("〜完璧主義をハックする、最初の一歩アプリ〜")
     st.write("")
 
-    col_new, col_continue = st.columns(2)
-    with col_new:
-        if st.button("🆕 スタート / ユーザー切替", use_container_width=True, type="primary"):
-            play_click_sound()
-            st.session_state.game_started = True
-            st.session_state.page = "menu_select"
-            st.rerun()
+    # ステップ1：はじめから / つづきから 選択画面
+    if st.session_state.login_step == "title":
+        col_new, col_continue = st.columns(2)
+        with col_new:
+            if st.button("🆕 はじめから", use_container_width=True, type="primary"):
+                play_click_sound(delay=0)
+                st.session_state.login_mode = "new"
+                st.session_state.login_step = "login_input"
+                st.rerun()
 
-    st.write("")
-    st.write("")
+        with col_continue:
+            if st.button("▶️ つづきから", use_container_width=True, type="secondary"):
+                play_click_sound(delay=0)
+                st.session_state.login_mode = "continue"
+                st.session_state.login_step = "login_input"
+                st.rerun()
 
-    spacer_col, settings_col = st.columns([3, 1])
-    with settings_col:
-        with st.expander("⚙️ 設定"):
-            st.caption("現在選択中のユーザーの進捗データ（目標・お菓子・ランニング記録など）を完全削除します。")
-            if st.session_state.get("confirm_delete_save"):
-                st.warning("本当に削除しますか？この操作は取り消せません。")
-                confirm_col, cancel_col = st.columns(2)
-                with confirm_col:
-                    if st.button("🗑️ 削除する", key="confirm_delete_yes"):
-                        play_click_sound(delay=0)
-                        reset_progress()
-                        st.session_state.confirm_delete_save = False
-                        st.success("データを削除しました。")
-                        st.rerun()
-                with cancel_col:
-                    if st.button("やめる", key="confirm_delete_no"):
-                        play_click_sound(delay=0)
-                        st.session_state.confirm_delete_save = False
-                        st.rerun()
-            else:
-                if st.button("🗑️ データを削除", key="open_delete_confirm"):
+    # ステップ2：ユーザーID入力画面
+    elif st.session_state.login_step == "login_input":
+        if st.session_state.get("login_mode") == "new":
+            st.markdown("### 🆕 新しく始めるユーザー名を入力してください")
+            input_name = st.text_input("ユーザー名（またはID）", key="input_user_name_new")
+            
+            col_ok, col_back = st.columns(2)
+            with col_ok:
+                if st.button("決定してスタート", type="primary", use_container_width=True):
                     play_click_sound(delay=0)
-                    st.session_state.confirm_delete_save = True
+                    if input_name.strip():
+                        st.session_state.current_user = input_name.strip()
+                        reset_progress_in_memory()
+                        st.session_state.game_started = True
+                        st.session_state.page = "menu_select"
+                        st.session_state.login_step = "title"
+                        st.rerun()
+                    else:
+                        st.warning("ユーザー名を入力してください。")
+            with col_back:
+                if st.button("戻る", use_container_width=True):
+                    play_click_sound(delay=0)
+                    st.session_state.login_step = "title"
                     st.rerun()
+
+        else: # continue モード
+            st.markdown("### ▶️ 前ログインしたときの名前（ID）を入力してください")
+            input_name = st.text_input("ユーザー名（またはID）", key="input_user_name_continue")
+            
+            col_search, col_back = st.columns(2)
+            with col_search:
+                if st.button("検索する", type="primary", use_container_width=True):
+                    play_click_sound(delay=0)
+                    if input_name.strip():
+                        uid = input_name.strip()
+                        if check_user_exists(uid):
+                            st.session_state.temp_user_id = uid
+                            st.session_state.login_step = "confirm"
+                            st.rerun()
+                        else:
+                            st.error(f"「{uid}」のセーブデータが見つかりませんでした。名前を確認してください。")
+                    else:
+                        st.warning("ユーザー名を入力してください。")
+            with col_back:
+                if st.button("戻る", use_container_width=True):
+                    play_click_sound(delay=0)
+                    st.session_state.login_step = "title"
+                    st.rerun()
+
+    # ステップ3：データの確認画面（はい／いいえ）
+    elif st.session_state.login_step == "confirm":
+        st.success(f"🎉 **{st.session_state.temp_user_id}** さんのセーブデータが見つかりました！")
+        st.markdown("### このデータで続けますか？")
+        st.write("")
+
+        col_yes, col_no = st.columns(2)
+        with col_yes:
+            if st.button("はい", type="primary", use_container_width=True):
+                play_click_sound(delay=0)
+                st.session_state.current_user = st.session_state.temp_user_id
+                load_progress(st.session_state.current_user)
+                st.session_state.game_started = True
+                st.session_state.page = "menu_select"
+                st.session_state.login_step = "title"
+                st.rerun()
+
+        with col_no:
+            if st.button("いいえ", use_container_width=True):
+                play_click_sound(delay=0)
+                st.session_state.login_step = "title"
+                st.session_state.temp_user_id = ""
+                st.rerun()
+
+    st.write("")
+    st.write("")
+
+    # タイトル画面設定エリア
+    if st.session_state.get("current_user"):
+        spacer_col, settings_col = st.columns([3, 1])
+        with settings_col:
+            with st.expander("⚙️ 設定"):
+                st.caption(f"現在のユーザー: **{st.session_state.current_user}** のデータを削除します。")
+                if st.session_state.get("confirm_delete_save"):
+                    st.warning("本当に削除しますか？この操作は取り消せません。")
+                    confirm_col, cancel_col = st.columns(2)
+                    with confirm_col:
+                        if st.button("🗑️ 削除する", key="confirm_delete_yes"):
+                            play_click_sound(delay=0)
+                            reset_progress()
+                            st.session_state.confirm_delete_save = False
+                            st.success("データを削除しました。")
+                            st.rerun()
+                    with cancel_col:
+                        if st.button("やめる", key="confirm_delete_no"):
+                            play_click_sound(delay=0)
+                            st.session_state.confirm_delete_save = False
+                            st.rerun()
+                else:
+                    if st.button("🗑️ データを削除", key="open_delete_confirm"):
+                        play_click_sound(delay=0)
+                        st.session_state.confirm_delete_save = True
+                        st.rerun()
 
 # =====================================================
 # 3. 【2ページ目：メニュー画面】
 # =====================================================
 elif st.session_state.page == "menu_select":
+    st.sidebar.title("👤 ユーザー情報")
+    st.sidebar.info(f"ログイン中: **{st.session_state.current_user}**")
+    
     st.title("🗺️ メニューセレクト")
     st.markdown("## 🎯 挑戦する項目を選んでください：")
     st.write("")
@@ -571,6 +685,9 @@ elif st.session_state.page in [
 
     # サイドバーメニュー
     with st.sidebar:
+        st.title("👤 ユーザー情報")
+        st.info(f"ログイン中: **{st.session_state.current_user}**")
+        st.write("---")
         st.title("⚙️ クイックメニュー")
         if st.button("🎯 目標登録画面へ"):
             play_click_sound()
@@ -592,6 +709,7 @@ elif st.session_state.page in [
         if st.button("🏠 タイトルに戻る"):
             play_click_sound()
             st.session_state.page = "title"
+            st.session_state.login_step = "title"
             st.rerun()
 
     # --- 目標登録画面 ---
@@ -676,12 +794,15 @@ elif st.session_state.page in [
                             st.caption(f"🎯 チャレンジ期限：{deadline_display}（リマインドは停止中）")
                         elif is_daily_mode:
                             daily_log = target_data.get("deadline_daily_log", [])
-                            st.caption(f"🎯 チャレンジ期限：{deadline_display}〜（{reminder_mode_label}／これまでの回答数：{len(daily_log)}回）")
+                            st.caption(
+                                f"🎯 チャレンジ期限：{deadline_display}〜（{reminder_mode_label}／これまでの回答数：{len(daily_log)}回）")
                         elif target_data.get("deadline_answered"):
-                            st.caption(f"🎯 チャレンジ期限：{deadline_display}（結果：{target_data.get('deadline_result', '?')} 報告済み）")
+                            st.caption(
+                                f"🎯 チャレンジ期限：{deadline_display}（結果：{target_data.get('deadline_result', '?')} 報告済み）")
                         else:
-                            st.caption(f"🎯 チャレンジ期限：{deadline_display} まで（{reminder_mode_label}／この日になったら結果を聞くよ）")
-                        
+                            st.caption(
+                                f"🎯 チャレンジ期限：{deadline_display} まで（{reminder_mode_label}／この日になったら結果を聞くよ）")
+
                         if st.button("期限を解除する", key=f"clear_deadline_{i}"):
                             play_click_sound(delay=0)
                             target_data["deadline"] = None
@@ -693,11 +814,13 @@ elif st.session_state.page in [
                             st.rerun()
                     else:
                         with st.expander("🎯 この日までチャレンジ！を設定する"):
-                            new_deadline = st.date_input("いつまでに頑張る？", value=datetime.today(), key=f"deadline_input_{i}")
+                            new_deadline = st.date_input("いつまでに頑張る？", value=datetime.today(),
+                                                         key=f"deadline_input_{i}")
                             new_reminder_mode = st.radio(
                                 "結果はいつ聞く？",
                                 options=["once", "daily"],
-                                format_func=lambda m: "その日だけ聞く" if m == "once" else "答えた後も毎日聞く（繰り返しチェックイン）",
+                                format_func=lambda
+                                    m: "その日だけ聞く" if m == "once" else "答えた後も毎日聞く（繰り返しチェックイン）",
                                 key=f"deadline_mode_{i}",
                             )
                             if st.button("この日を設定する", key=f"set_deadline_{i}"):
@@ -771,7 +894,9 @@ elif st.session_state.page in [
                 st.session_state.calendar_view_year = new_year
                 st.rerun()
         with nav_title:
-            st.markdown(f"<h3 style='text-align:center;'>{st.session_state.calendar_view_year}年{st.session_state.calendar_view_month}月</h3>", unsafe_allow_html=True)
+            st.markdown(
+                f"<h3 style='text-align:center;'>{st.session_state.calendar_view_year}年{st.session_state.calendar_view_month}月</h3>",
+                unsafe_allow_html=True)
         with nav_next:
             if st.button("次月 ▶", use_container_width=True, key="cal_next_month"):
                 play_click_sound()
@@ -788,7 +913,8 @@ elif st.session_state.page in [
         weekday_labels = ["月", "火", "水", "木", "金", "土", "日"]
         header_cols = st.columns(7)
         for header_col, label in zip(header_cols, weekday_labels):
-            header_col.markdown(f"<div style='text-align:center; font-weight:bold;'>{label}</div>", unsafe_allow_html=True)
+            header_col.markdown(f"<div style='text-align:center; font-weight:bold;'>{label}</div>",
+                                unsafe_allow_html=True)
 
         cal_obj = cal_module.Calendar(firstweekday=0)
         week_rows = cal_obj.monthdayscalendar(st.session_state.calendar_view_year, st.session_state.calendar_view_month)
@@ -802,11 +928,13 @@ elif st.session_state.page in [
                         st.write("")
                     else:
                         cell_date_str = f"{st.session_state.calendar_view_year}/{st.session_state.calendar_view_month:02d}/{day_num:02d}"
-                        cell_sticker_preview = get_sticker_preview(cell_date_str, limit=GRID_STICKERS_SHOWN, show_remainder=False)
+                        cell_sticker_preview = get_sticker_preview(cell_date_str, limit=GRID_STICKERS_SHOWN,
+                                                                   show_remainder=False)
                         day_label = f"🔹{day_num}" if cell_date_str == today_str else f"{day_num}"
 
                         has_deadline = any(
-                            t.get("deadline") == cell_date_str or any(entry["date"] == cell_date_str for entry in t.get("deadline_daily_log", []))
+                            t.get("deadline") == cell_date_str or any(
+                                entry["date"] == cell_date_str for entry in t.get("deadline_daily_log", []))
                             for t in st.session_state.target_list
                         )
                         has_note = bool(st.session_state.calendar_notes.get(cell_date_str))
@@ -816,7 +944,8 @@ elif st.session_state.page in [
                         cell_label = f"{day_label} {label_line2}" if label_line2 else day_label
 
                         is_selected = (cell_date_str == st.session_state.selected_calendar_date)
-                        if st.button(cell_label, key=f"cal_day_{cell_date_str}", use_container_width=True, type="primary" if is_selected else "secondary"):
+                        if st.button(cell_label, key=f"cal_day_{cell_date_str}", use_container_width=True,
+                                     type="primary" if is_selected else "secondary"):
                             play_click_sound(delay=0)
                             st.session_state.selected_calendar_date = cell_date_str
 
@@ -826,7 +955,9 @@ elif st.session_state.page in [
         st.markdown(f"### 🔍 {selected_date_display} の記録")
 
         existing_note = st.session_state.calendar_notes.get(selected_date_str, "")
-        note_input = st.text_area("📝 この日の一言メモ・予定", value=existing_note, key=f"note_input_{selected_date_str}", height=80, placeholder="例：友達とカフェに行く予定など")
+        note_input = st.text_area("📝 この日の一言メモ・予定", value=existing_note,
+                                  key=f"note_input_{selected_date_str}", height=80,
+                                  placeholder="例：友達とカフェに行く予定など")
         if st.button("💾 メモを保存", key=f"save_note_{selected_date_str}"):
             play_click_sound(delay=0)
             if note_input.strip():
@@ -866,10 +997,13 @@ elif st.session_state.page in [
             st.write("---")
 
         daily_candies = [c for c in st.session_state.all_candy_log if c["date"].startswith(selected_date_str)]
-        daily_jar_completions = [j for j in st.session_state.jar_complete_log if j["date"].startswith(selected_date_str)]
+        daily_jar_completions = [j for j in st.session_state.jar_complete_log if
+                                 j["date"].startswith(selected_date_str)]
         daily_runs = [r for r in st.session_state.course_run_log if r["date"].startswith(selected_date_str)]
-        daily_course_completions = [v for v in st.session_state.course_complete_log if v["date"].startswith(selected_date_str)]
-        daily_goal_completions = [g for g in st.session_state.goal_complete_log if g["date"].startswith(selected_date_str)]
+        daily_course_completions = [v for v in st.session_state.course_complete_log if
+                                    v["date"].startswith(selected_date_str)]
+        daily_goal_completions = [g for g in st.session_state.goal_complete_log if
+                                  g["date"].startswith(selected_date_str)]
 
         sticker_line = get_sticker_preview(selected_date_str, limit=MAX_STICKERS_SHOWN, show_remainder=True)
         st.markdown(f"#### 🎨 この日のシール：{sticker_line if sticker_line else '（まだ貼られていません）'}")
@@ -877,14 +1011,20 @@ elif st.session_state.page in [
         with st.expander(f"⚙️ シールの見た目を設定（現在：{get_current_sticker_emoji()}）"):
             sticker_type_labels = {"circle": "丸", **{k: v["label"] for k, v in STICKER_FIXED_TYPES.items()}}
             sticker_type_keys = list(sticker_type_labels.keys())
-            chosen_type = st.radio("シールの種類", options=sticker_type_keys, format_func=lambda k: sticker_type_labels[k], index=sticker_type_keys.index(st.session_state.sticker_type), horizontal=True, key="sticker_type_radio")
+            chosen_type = st.radio("シールの種類", options=sticker_type_keys,
+                                   format_func=lambda k: sticker_type_labels[k],
+                                   index=sticker_type_keys.index(st.session_state.sticker_type), horizontal=True,
+                                   key="sticker_type_radio")
             if chosen_type != st.session_state.sticker_type:
                 st.session_state.sticker_type = chosen_type
                 st.rerun()
 
             if st.session_state.sticker_type == "circle":
                 color_keys = list(STICKER_CIRCLE_COLORS.keys())
-                chosen_color = st.radio("丸の色", options=color_keys, format_func=lambda c: f"{STICKER_CIRCLE_COLORS[c]} {c}", index=color_keys.index(st.session_state.sticker_color), horizontal=True, key="sticker_color_radio")
+                chosen_color = st.radio("丸の色", options=color_keys,
+                                        format_func=lambda c: f"{STICKER_CIRCLE_COLORS[c]} {c}",
+                                        index=color_keys.index(st.session_state.sticker_color), horizontal=True,
+                                        key="sticker_color_radio")
                 if chosen_color != st.session_state.sticker_color:
                     st.session_state.sticker_color = chosen_color
                     st.rerun()
@@ -915,12 +1055,14 @@ elif st.session_state.page in [
             st.success(f"🏃 この日は合計 **{sum(r['km'] for r in daily_runs)}km** 走りました！！")
             for run in daily_runs:
                 with st.container(border=True):
-                    st.markdown(f"#### 🏃 {run.get('course', 'ランニング')}：{run['km']}km 進んだ（{run['date'].split(' ')[1]}）")
+                    st.markdown(
+                        f"#### 🏃 {run.get('course', 'ランニング')}：{run['km']}km 進んだ（{run['date'].split(' ')[1]}）")
                     st.write(f"**クリアしたクエスト：** {run['task']}")
                     if run.get("companion"):
                         st.write(f"**一緒に走った相棒：** 🐾 {run['companion']}")
 
-        if not (daily_candies or daily_jar_completions or daily_runs or daily_course_completions or daily_goal_completions):
+        if not (
+                daily_candies or daily_jar_completions or daily_runs or daily_course_completions or daily_goal_completions):
             st.info("この日の記録はありません")
 
     # --- ステージ画面 ---
@@ -945,7 +1087,9 @@ elif st.session_state.page in [
         st.title("🍬 魔法のお菓子瓶ステージ")
 
         st.markdown("### 🏺 まずは貯めるお菓子瓶のサイズを決めよう！")
-        jar_option = st.selectbox("どの瓶に貯める？", [30, 50, 100], format_func=lambda x: f"小さめの瓶（{x}個入り）" if x == 30 else (f"普通の瓶（{x}個入り）" if x == 50 else f"特大の瓶（{x}個入り）"))
+        jar_option = st.selectbox("どの瓶に貯める？", [30, 50, 100],
+                                  format_func=lambda x: f"小さめの瓶（{x}個入り）" if x == 30 else (
+                                      f"普通の瓶（{x}個入り）" if x == 50 else f"特大の瓶（{x}個入り）"))
         st.session_state.jar_capacity = jar_option
 
         if jar_option != st.session_state.last_jar_capacity:
@@ -973,9 +1117,11 @@ elif st.session_state.page in [
             else:
                 target_titles = [t["title"] for t in st.session_state.target_list]
                 selected_target_title = st.selectbox("🎯 どの目標を達成した？", target_titles)
-                selected_target_data = next(t for t in st.session_state.target_list if t["title"] == selected_target_title)
+                selected_target_data = next(
+                    t for t in st.session_state.target_list if t["title"] == selected_target_title)
 
-                level_options = [f"{lv}: {task} (🍬×{lv.split('.')[1]}個パワー)" for lv, task in selected_target_data["tasks"].items()]
+                level_options = [f"{lv}: {task} (🍬×{lv.split('.')[1]}個パワー)" for lv, task in
+                                 selected_target_data["tasks"].items()]
                 selected_level_str = st.selectbox("⭐ どのレベルをクリアした？", level_options)
 
                 chosen_lv_key = selected_level_str.split(":")[0]
@@ -1039,10 +1185,13 @@ elif st.session_state.page in [
                 else:
                     st.markdown("#### 🏺 完成した瓶たち")
                     for jar_record in reversed(st.session_state.jar_complete_log):
-                        jar_size_text = jar_record.get("size_label", JAR_SIZE_LABELS.get(jar_record.get("capacity"), "?"))
-                        with st.expander(f"🍯 {jar_record.get('date', '')} お菓子のビン({jar_size_text})完成✨", expanded=False):
+                        jar_size_text = jar_record.get("size_label",
+                                                       JAR_SIZE_LABELS.get(jar_record.get("capacity"), "?"))
+                        with st.expander(f"🍯 {jar_record.get('date', '')} お菓子のビン({jar_size_text})完成✨",
+                                         expanded=False):
                             if jar_record.get("candies"):
-                                st.markdown(render_candy_jar_svg(jar_record["candies"], jar_record.get("capacity", 30)), unsafe_allow_html=True)
+                                st.markdown(render_candy_jar_svg(jar_record["candies"], jar_record.get("capacity", 30)),
+                                            unsafe_allow_html=True)
 
         with side_candy_col:
             st.markdown("### 🍬 飴を選ぶ")
@@ -1056,7 +1205,8 @@ elif st.session_state.page in [
                     {"emoji": "🍪", "label": "チョコチップクッキー"}
                 ]
                 for candy in candies_spec:
-                    if st.button(f"{candy['emoji']}\n\n{candy['label']}", use_container_width=True, key=f"btn_{candy['emoji']}"):
+                    if st.button(f"{candy['emoji']}\n\n{candy['label']}", use_container_width=True,
+                                 key=f"btn_{candy['emoji']}"):
                         play_click_sound()
                         current_time_str = datetime.now().strftime("%Y/%m/%d %H:%M")
 
@@ -1127,7 +1277,8 @@ elif st.session_state.page in [
             comp_cols = st.columns(3)
             for col, (comp_key, comp_data) in zip(comp_cols, COMPANIONS.items()):
                 with col:
-                    st.markdown(f"<div style='text-align:center; font-size:64px;'>{comp_data['emoji']}</div>", unsafe_allow_html=True)
+                    st.markdown(f"<div style='text-align:center; font-size:64px;'>{comp_data['emoji']}</div>",
+                                unsafe_allow_html=True)
                     if st.button(comp_data["name"], use_container_width=True, key=f"pick_companion_{comp_key}"):
                         play_click_sound()
                         st.session_state.companion = comp_key
@@ -1145,7 +1296,9 @@ elif st.session_state.page in [
 
         if st.session_state.companion:
             comp = COMPANIONS[st.session_state.companion]
-            st.markdown(f"<div style='font-size:20px;'>{comp['emoji']} <b>{comp['name']}</b> が一緒に走っています！</div>", unsafe_allow_html=True)
+            st.markdown(
+                f"<div style='font-size:20px;'>{comp['emoji']} <b>{comp['name']}</b> が一緒に走っています！</div>",
+                unsafe_allow_html=True)
         else:
             st.caption("🐾 相棒が未選択です。ステージ選択画面の「相棒選択」から選べます。")
 
@@ -1162,11 +1315,15 @@ elif st.session_state.page in [
             selected_course_target_title = None
         else:
             course_target_titles = [t["title"] for t in st.session_state.target_list]
-            selected_course_target_title = st.selectbox("🎯 どの目標を達成した？", course_target_titles, key=f"course_target_select_{course_key}")
-            selected_course_target_data = next(t for t in st.session_state.target_list if t["title"] == selected_course_target_title)
+            selected_course_target_title = st.selectbox("🎯 どの目標を達成した？", course_target_titles,
+                                                        key=f"course_target_select_{course_key}")
+            selected_course_target_data = next(
+                t for t in st.session_state.target_list if t["title"] == selected_course_target_title)
 
-            course_level_options = [f"{lv}: {task} (🏃×{lv.split('.')[1]}km進む)" for lv, task in selected_course_target_data["tasks"].items()]
-            selected_course_level_str = st.selectbox("⭐ どのレベルをクリアした？", course_level_options, key=f"course_level_select_{course_key}")
+            course_level_options = [f"{lv}: {task} (🏃×{lv.split('.')[1]}km進む)" for lv, task in
+                                    selected_course_target_data["tasks"].items()]
+            selected_course_level_str = st.selectbox("⭐ どのレベルをクリアした？", course_level_options,
+                                                     key=f"course_level_select_{course_key}")
 
             course_chosen_lv_key = selected_course_level_str.split(":")[0]
             course_chosen_km = int(course_chosen_lv_key.split(".")[1])

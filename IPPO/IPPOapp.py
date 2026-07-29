@@ -349,6 +349,8 @@ if "target_list" not in st.session_state:
     st.session_state.target_list = []
 if "confirm_delete_target_index" not in st.session_state:
     st.session_state.confirm_delete_target_index = None
+if "editing_target_index" not in st.session_state:
+    st.session_state.editing_target_index = None
 if "calendar_notes" not in st.session_state:
     st.session_state.calendar_notes = {}
 if "ai_filled" not in st.session_state:
@@ -787,29 +789,62 @@ elif st.session_state.page in [
             st.markdown("## 🛡️ 登録済みのクエスト一覧")
             for i, target_data in enumerate(st.session_state.target_list):
                 with st.expander(f"🎯 {target_data['title']}", expanded=True):
-                    for lv, task in target_data["tasks"].items():
-                        st.info(f"**{lv}**: {task}")
 
-                    st.write("")
-                    if target_data.get("completed", False):
-                        st.success("🎉 この目標は達成済みです！おめでとう！")
-                        if st.button("🔄 もう一度挑戦する", key=f"retry_target_{i}"):
-                            play_click_sound(delay=0)
-                            target_data["completed"] = False
-                            st.rerun()
+                    # --- 編集モードと通常モードの切り替え ---
+                    if st.session_state.get("editing_target_index") == i:
+                        st.markdown("### ✏️ 目標の編集")
+                        edit_title = st.text_input("最終目標タイトル", value=target_data["title"], key=f"edit_title_{i}")
+                        edit_lv1 = st.text_input("Lv.1", value=target_data["tasks"].get("Lv.1", ""), key=f"edit_lv1_{i}")
+                        edit_lv2 = st.text_input("Lv.2", value=target_data["tasks"].get("Lv.2", ""), key=f"edit_lv2_{i}")
+                        edit_lv3 = st.text_input("Lv.3", value=target_data["tasks"].get("Lv.3", ""), key=f"edit_lv3_{i}")
+                        edit_lv4 = st.text_input("Lv.4", value=target_data["tasks"].get("Lv.4", ""), key=f"edit_lv4_{i}")
+                        edit_lv5 = st.text_input("Lv.5", value=target_data["tasks"].get("Lv.5", ""), key=f"edit_lv5_{i}")
+
+                        save_col, cancel_col = st.columns(2)
+                        with save_col:
+                            if st.button("💾 変更を保存", key=f"save_edit_{i}", type="primary", use_container_width=True):
+                                if edit_title and edit_lv1 and edit_lv2 and edit_lv3 and edit_lv4 and edit_lv5:
+                                    play_click_sound(delay=0)
+                                    target_data["title"] = edit_title.strip()
+                                    target_data["tasks"] = {
+                                        "Lv.1": edit_lv1, "Lv.2": edit_lv2, "Lv.3": edit_lv3,
+                                        "Lv.4": edit_lv4, "Lv.5": edit_lv5
+                                    }
+                                    st.session_state.editing_target_index = None
+                                    st.success("目標を更新しました！")
+                                    st.rerun()
+                                else:
+                                    st.error("⚠️ すべての項目を入力してください。")
+                        with cancel_col:
+                            if st.button("キャンセル", key=f"cancel_edit_{i}", use_container_width=True):
+                                play_click_sound(delay=0)
+                                st.session_state.editing_target_index = None
+                                st.rerun()
+
                     else:
-                        if st.button("🏆 最終目標を達成した！", type="primary", key=f"complete_target_{i}"):
-                            play_jar_full_sound()
-                            target_data["completed"] = True
-                            now = get_now_jst()
-                            now_datetime_str = now.strftime("%Y/%m/%d %H:%M")
-                            today_date_str = now.strftime("%Y/%m/%d")
-                            st.session_state.goal_complete_log.append({
-                                "date": now_datetime_str,
-                                "title": target_data["title"],
-                            })
-                            add_sticker_for_date(today_date_str)
-                            st.rerun()
+                        for lv, task in target_data["tasks"].items():
+                            st.info(f"**{lv}**: {task}")
+
+                        st.write("")
+                        if target_data.get("completed", False):
+                            st.success("🎉 この目標は達成済みです！おめでとう！")
+                            if st.button("🔄 もう一度挑戦する", key=f"retry_target_{i}"):
+                                play_click_sound(delay=0)
+                                target_data["completed"] = False
+                                st.rerun()
+                        else:
+                            if st.button("🏆 最終目標を達成した！", type="primary", key=f"complete_target_{i}"):
+                                play_jar_full_sound()
+                                target_data["completed"] = True
+                                now = get_now_jst()
+                                now_datetime_str = now.strftime("%Y/%m/%d %H:%M")
+                                today_date_str = now.strftime("%Y/%m/%d")
+                                st.session_state.goal_complete_log.append({
+                                    "date": now_datetime_str,
+                                    "title": target_data["title"],
+                                })
+                                add_sticker_for_date(today_date_str)
+                                st.rerun()
 
                     st.write("")
                     st.write("---")
@@ -863,6 +898,7 @@ elif st.session_state.page in [
                                 st.rerun()
 
                     st.write("---")
+                    # 操作ボタンエリア（編集・複製・削除）
                     if st.session_state.get("confirm_delete_target_index") == i:
                         st.warning(f"『{target_data['title']}』を削除しますか？この操作は取り消せません。")
                         del_confirm_col, del_cancel_col = st.columns(2)
@@ -878,10 +914,28 @@ elif st.session_state.page in [
                                 st.session_state.confirm_delete_target_index = None
                                 st.rerun()
                     else:
-                        if st.button("🗑️ この目標を削除", key=f"delete_target_{i}"):
-                            play_click_sound(delay=0)
-                            st.session_state.confirm_delete_target_index = i
-                            st.rerun()
+                        col_edit, col_copy, col_del = st.columns(3)
+                        with col_edit:
+                            if st.button("✏️ 編集", key=f"edit_target_{i}", use_container_width=True):
+                                play_click_sound(delay=0)
+                                st.session_state.editing_target_index = i
+                                st.rerun()
+                        with col_copy:
+                            if st.button("📋 複製", key=f"copy_target_{i}", use_container_width=True):
+                                play_click_sound(delay=0)
+                                copied_target = {
+                                    "title": f"{target_data['title']} (コピー)",
+                                    "tasks": target_data["tasks"].copy(),
+                                    "completed": False
+                                }
+                                st.session_state.target_list.insert(i + 1, copied_target)
+                                st.success("目標を複製しました！")
+                                st.rerun()
+                        with col_del:
+                            if st.button("🗑️ 削除", key=f"delete_target_{i}", use_container_width=True):
+                                play_click_sound(delay=0)
+                                st.session_state.confirm_delete_target_index = i
+                                st.rerun()
 
     # --- カレンダー画面 ---
     elif st.session_state.page == "calendar_page":
@@ -1063,8 +1117,28 @@ elif st.session_state.page in [
 
         if daily_timer_records:
             for tr in daily_timer_records:
+                col_rec, col_del = st.columns([4, 1])
                 memo_part = f" ({tr['memo']})" if tr['memo'] else ""
-                st.info(f"⏰{tr['time_str']} 記録！{memo_part}")
+                with col_rec:
+                    st.info(f"⏰{tr['time_str']} 記録！{memo_part}")
+                with col_del:
+                    if st.button("🗑️ 削除", key=f"del_time_{tr['date']}_{tr['time_str']}_{tr['memo']}"):
+                        play_click_sound(delay=0)
+                        # 時間記録リストから削除
+                        st.session_state.time_records.remove(tr)
+                        
+                        # カレンダーメモ欄からも削除対象行を取り除く処理
+                        log_text_to_remove = f"⏰{tr['time_str']} 記録！({tr['memo']})"
+                        current_note = st.session_state.calendar_notes.get(selected_date_str, "")
+                        if current_note:
+                            lines = current_note.split("\n")
+                            lines = [line for line in lines if line.strip() != log_text_to_remove.strip()]
+                            new_note = "\n".join(lines).strip()
+                            if new_note:
+                                st.session_state.calendar_notes[selected_date_str] = new_note
+                            else:
+                                st.session_state.calendar_notes.pop(selected_date_str, None)
+                        st.rerun()
 
         if daily_goal_completions:
             for g in daily_goal_completions:

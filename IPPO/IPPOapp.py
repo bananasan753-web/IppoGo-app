@@ -12,9 +12,11 @@ from supabase import create_client, Client
 # 日本標準時（JST）の定義
 JST = zoneinfo.ZoneInfo("Asia/Tokyo")
 
+
 def get_now_jst():
     """アプリ内時間を常に日本時間に統一するヘルパー関数"""
     return datetime.now(JST)
+
 
 # --- メニュー選択ボタンなどの文字を大きくするCSS ---
 st.markdown("""
@@ -353,8 +355,6 @@ if "editing_target_index" not in st.session_state:
     st.session_state.editing_target_index = None
 if "calendar_notes" not in st.session_state:
     st.session_state.calendar_notes = {}
-if "ai_filled" not in st.session_state:
-    st.session_state.ai_filled = False
 if "jar_capacity" not in st.session_state:
     st.session_state.jar_capacity = 30
 if "jar_candies" not in st.session_state:
@@ -753,21 +753,11 @@ elif st.session_state.page in [
             st.write("---")
             st.markdown(f"### 📝 『{main_target_input}』のレベル1〜5を入力してください")
 
-            if st.button("💡 思いつかないときは…？ (AIがヒントを入力)"):
-                play_click_sound(delay=0)
-                st.session_state.ai_filled = True
-
-            default_lv1 = "教科書を机の上に置く 📖" if st.session_state.ai_filled else ""
-            default_lv2 = "教科書を1ページだけ開く 🔍" if st.session_state.ai_filled else ""
-            default_lv3 = "問題を1問だけ解いてみる ✏️" if st.session_state.ai_filled else ""
-            default_lv4 = "タイマーをかけて10分間だけ集中する ⏱️" if st.session_state.ai_filled else ""
-            default_lv5 = "ワークの指定ページを1枚終わらせる 🏆" if st.session_state.ai_filled else ""
-
-            lv1 = st.text_input("Lv.1 (例:教科書を開いた！)", value=default_lv1)
-            lv2 = st.text_input("Lv.2 (例:10分出来た！)", value=default_lv2)
-            lv3 = st.text_input("Lv.3 (例:1ページ出来た！)", value=default_lv3)
-            lv4 = st.text_input("Lv.4 (例:60分できた！)", value=default_lv4)
-            lv5 = st.text_input("Lv.5 (例:範囲内の勉強が一周出来た！)", value=default_lv5)
+            lv1 = st.text_input("Lv.1 (例:教科書を開いた！)")
+            lv2 = st.text_input("Lv.2 (例:10分出来た！)")
+            lv3 = st.text_input("Lv.3 (例:1ページ出来た！)")
+            lv4 = st.text_input("Lv.4 (例:60分できた！)")
+            lv5 = st.text_input("Lv.5 (例:範囲内の勉強が一周出来た！)")
 
             if st.button("✨ この目標セットを登録する", type="primary"):
                 if lv1 and lv2 and lv3 and lv4 and lv5:
@@ -779,7 +769,6 @@ elif st.session_state.page in [
                     st.session_state.target_list.append(new_target)
                     play_click_sound()
                     st.success(f"📌 目標『{main_target_input}』を登録しました！お菓子画面で選べるようになったよ！")
-                    st.session_state.ai_filled = False
                     st.rerun()
                 else:
                     st.error("⚠️ 全レベルを入力してください。")
@@ -793,16 +782,23 @@ elif st.session_state.page in [
                     # --- 編集モードと通常モードの切り替え ---
                     if st.session_state.get("editing_target_index") == i:
                         st.markdown("### ✏️ 目標の編集")
-                        edit_title = st.text_input("最終目標タイトル", value=target_data["title"], key=f"edit_title_{i}")
-                        edit_lv1 = st.text_input("Lv.1", value=target_data["tasks"].get("Lv.1", ""), key=f"edit_lv1_{i}")
-                        edit_lv2 = st.text_input("Lv.2", value=target_data["tasks"].get("Lv.2", ""), key=f"edit_lv2_{i}")
-                        edit_lv3 = st.text_input("Lv.3", value=target_data["tasks"].get("Lv.3", ""), key=f"edit_lv3_{i}")
-                        edit_lv4 = st.text_input("Lv.4", value=target_data["tasks"].get("Lv.4", ""), key=f"edit_lv4_{i}")
-                        edit_lv5 = st.text_input("Lv.5", value=target_data["tasks"].get("Lv.5", ""), key=f"edit_lv5_{i}")
+                        edit_title = st.text_input("最終目標タイトル", value=target_data["title"],
+                                                   key=f"edit_title_{i}")
+                        edit_lv1 = st.text_input("Lv.1", value=target_data["tasks"].get("Lv.1", ""),
+                                                 key=f"edit_lv1_{i}")
+                        edit_lv2 = st.text_input("Lv.2", value=target_data["tasks"].get("Lv.2", ""),
+                                                 key=f"edit_lv2_{i}")
+                        edit_lv3 = st.text_input("Lv.3", value=target_data["tasks"].get("Lv.3", ""),
+                                                 key=f"edit_lv3_{i}")
+                        edit_lv4 = st.text_input("Lv.4", value=target_data["tasks"].get("Lv.4", ""),
+                                                 key=f"edit_lv4_{i}")
+                        edit_lv5 = st.text_input("Lv.5", value=target_data["tasks"].get("Lv.5", ""),
+                                                 key=f"edit_lv5_{i}")
 
                         save_col, cancel_col = st.columns(2)
                         with save_col:
-                            if st.button("💾 変更を保存", key=f"save_edit_{i}", type="primary", use_container_width=True):
+                            if st.button("💾 変更を保存", key=f"save_edit_{i}", type="primary",
+                                         use_container_width=True):
                                 if edit_title and edit_lv1 and edit_lv2 and edit_lv3 and edit_lv4 and edit_lv5:
                                     play_click_sound(delay=0)
                                     target_data["title"] = edit_title.strip()
@@ -1126,7 +1122,7 @@ elif st.session_state.page in [
                         play_click_sound(delay=0)
                         # 時間記録リストから削除
                         st.session_state.time_records.remove(tr)
-                        
+
                         # カレンダーメモ欄からも削除対象行を取り除く処理
                         log_text_to_remove = f"⏰{tr['time_str']} 記録！({tr['memo']})"
                         current_note = st.session_state.calendar_notes.get(selected_date_str, "")
@@ -1210,7 +1206,8 @@ elif st.session_state.page in [
             with col_mins:
                 rec_mins = st.number_input("分", min_value=0, max_value=59, value=30, step=1, key="input_rec_mins")
 
-            memo_text = st.text_input("内容（例：数学のワーク、読書、漢字ドリルなど）", placeholder="何をしたか記入してください", key="input_rec_memo")
+            memo_text = st.text_input("内容（例：数学のワーク、読書、漢字ドリルなど）",
+                                      placeholder="何をしたか記入してください", key="input_rec_memo")
 
             st.write("")
             if st.button("💾 カレンダーに同期して記録する", type="primary", use_container_width=True):

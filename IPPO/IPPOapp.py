@@ -1,5 +1,6 @@
 import streamlit as st
 from datetime import datetime, date
+import zoneinfo
 import random
 import base64
 import os
@@ -7,6 +8,13 @@ import time
 import calendar as cal_module
 import json
 from supabase import create_client, Client
+
+# 日本標準時（JST）の定義
+JST = zoneinfo.ZoneInfo("Asia/Tokyo")
+
+def get_now_jst():
+    """アプリ内時間を常に日本時間に統一するヘルパー関数"""
+    return datetime.now(JST)
 
 # --- メニュー選択ボタンなどの文字を大きくするCSS ---
 st.markdown("""
@@ -49,7 +57,7 @@ SOUND_PATH = os.path.join(os.path.dirname(__file__), "sounds", "決定ボタン�
 ACHIEVE_SOUND_PATH = os.path.join(os.path.dirname(__file__), "sounds", "クイズ正解1.mp3")
 JAR_FULL_SOUND_PATH = os.path.join(os.path.dirname(__file__), "sounds", "歓声と拍手.mp3")
 
-# ご指定の追加効果音パス
+# 追加効果音パス
 SOUND_A_PATH = r"C:\Users\banan\PycharmProjects\IPPO\sounds\自転車のベル.mp3"
 SOUND_B_PATH = r"C:\Users\banan\PycharmProjects\IPPO\sounds\決定ボタンを押す21.mp3"
 
@@ -81,9 +89,7 @@ PERSISTENT_KEYS = [
     "calendar_notes",
     "sticker_type",
     "sticker_color",
-    "time_records",  # 追加：時間記録ログ
-    "timer_target_seconds",  # 追加：タイマー目標時間（秒）
-    "timer_sound_choice",  # 追加：アラーム音選択（A or B）
+    "time_records",  # 時間記録ログ
 ]
 
 PERSISTENT_DEFAULTS = {
@@ -105,8 +111,6 @@ PERSISTENT_DEFAULTS = {
     "sticker_type": "circle",
     "sticker_color": "赤",
     "time_records": [],
-    "timer_target_seconds": 600,
-    "timer_sound_choice": "A",
 }
 
 
@@ -297,8 +301,6 @@ def load_sound_base64(path: str):
 _sound_b64 = load_sound_base64(SOUND_PATH)
 _achieve_sound_b64 = load_sound_base64(ACHIEVE_SOUND_PATH)
 _jar_full_sound_b64 = load_sound_base64(JAR_FULL_SOUND_PATH)
-_sound_a_b64 = load_sound_base64(SOUND_A_PATH)
-_sound_b_b64 = load_sound_base64(SOUND_B_PATH)
 
 
 def play_click_sound(delay: float = 1.2):
@@ -328,17 +330,11 @@ def play_jar_full_sound(delay: float = 0):
         time.sleep(delay)
 
 
-def play_timer_sound(sound_type: str = "A"):
-    target_b64 = _sound_a_b64 if sound_type == "A" else _sound_b_b64
-    if target_b64 is None:
-        return
-    sound_html = f'<audio autoplay="true" style="display:none;"><source src="data:audio/mp3;base64,{target_b64}" type="audio/mp3"></audio>'
-    st.components.v1.html(sound_html, height=0)
-
-
 # =====================================================
 # 1. 記憶の部屋（セッション状態）の初期化
 # =====================================================
+now_jst = get_now_jst()
+
 if "page" not in st.session_state:
     st.session_state.page = "title"
 if "login_step" not in st.session_state:
@@ -394,25 +390,9 @@ if "course_complete_log" not in st.session_state:
 if "active_course_key" not in st.session_state:
     st.session_state.active_course_key = "village"
 
-# ストップウォッチ用セッション
-if "sw_running" not in st.session_state:
-    st.session_state.sw_running = False
-if "sw_start_time" not in st.session_state:
-    st.session_state.sw_start_time = 0
-if "sw_elapsed" not in st.session_state:
-    st.session_state.sw_elapsed = 0
-if "sw_stopped" not in st.session_state:
-    st.session_state.sw_stopped = False
-if "sw_show_record_input" not in st.session_state:
-    st.session_state.sw_show_record_input = False
+# 時間記録用セッション
 if "time_records" not in st.session_state:
     st.session_state.time_records = []
-if "timer_target_seconds" not in st.session_state:
-    st.session_state.timer_target_seconds = 600
-if "timer_sound_choice" not in st.session_state:
-    st.session_state.timer_sound_choice = "A"
-if "timer_alarm_played" not in st.session_state:
-    st.session_state.timer_alarm_played = False
 
 COMPANIONS = {
     "cat": {"emoji": "🐱", "name": "ねこ"},
@@ -516,7 +496,7 @@ def should_prompt_deadline_today(target_data: dict) -> bool:
     deadline = target_data.get("deadline")
     if not deadline or target_data.get("deadline_reminder_stopped"):
         return False
-    today_str = datetime.now().strftime("%Y/%m/%d")
+    today_str = get_now_jst().strftime("%Y/%m/%d")
     if target_data.get("reminder_mode") == "daily":
         if today_str < deadline:
             return False
@@ -528,7 +508,7 @@ def should_prompt_deadline_today(target_data: dict) -> bool:
 
 
 def record_deadline_answer(target_data: dict, result_label: str):
-    today_str = datetime.now().strftime("%Y/%m/%d")
+    today_str = get_now_jst().strftime("%Y/%m/%d")
     if target_data.get("reminder_mode") == "daily":
         target_data.setdefault("deadline_daily_log", []).append({
             "date": today_str,
@@ -552,11 +532,11 @@ def get_sticker_preview(date_str: str, limit: int = MAX_STICKERS_SHOWN, show_rem
 
 
 if "calendar_view_year" not in st.session_state:
-    st.session_state.calendar_view_year = datetime.now().year
+    st.session_state.calendar_view_year = now_jst.year
 if "calendar_view_month" not in st.session_state:
-    st.session_state.calendar_view_month = datetime.now().month
+    st.session_state.calendar_view_month = now_jst.month
 if "selected_calendar_date" not in st.session_state:
-    st.session_state.selected_calendar_date = datetime.now().strftime("%Y/%m/%d")
+    st.session_state.selected_calendar_date = now_jst.strftime("%Y/%m/%d")
 
 # =====================================================
 # 2. 【タイトル画面】
@@ -821,8 +801,9 @@ elif st.session_state.page in [
                         if st.button("🏆 最終目標を達成した！", type="primary", key=f"complete_target_{i}"):
                             play_jar_full_sound()
                             target_data["completed"] = True
-                            now_datetime_str = datetime.now().strftime("%Y/%m/%d %H:%M")
-                            today_date_str = datetime.now().strftime("%Y/%m/%d")
+                            now = get_now_jst()
+                            now_datetime_str = now.strftime("%Y/%m/%d %H:%M")
+                            today_date_str = now.strftime("%Y/%m/%d")
                             st.session_state.goal_complete_log.append({
                                 "date": now_datetime_str,
                                 "title": target_data["title"],
@@ -862,7 +843,7 @@ elif st.session_state.page in [
                             st.rerun()
                     else:
                         with st.expander("🎯 この日までチャレンジ！を設定する"):
-                            new_deadline = st.date_input("いつまでに頑張る？", value=datetime.today(),
+                            new_deadline = st.date_input("いつまでに頑張る？", value=get_now_jst().date(),
                                                          key=f"deadline_input_{i}")
                             new_reminder_mode = st.radio(
                                 "結果はいつ聞く？",
@@ -966,7 +947,7 @@ elif st.session_state.page in [
 
         cal_obj = cal_module.Calendar(firstweekday=0)
         week_rows = cal_obj.monthdayscalendar(st.session_state.calendar_view_year, st.session_state.calendar_view_month)
-        today_str = datetime.now().strftime("%Y/%m/%d")
+        today_str = get_now_jst().strftime("%Y/%m/%d")
 
         for week in week_rows:
             week_cols = st.columns(7)
@@ -1106,7 +1087,7 @@ elif st.session_state.page in [
                     st.write(f"**クリアしたクエスト：** {item['task']}")
 
         if daily_runs:
-            st.success(f"🏃 この日は合計 **{sum(r['km'] for r in daily_runs)}km** 走りました！！")
+            st.success(f"🎉 この日は合計 **{sum(r['km'] for r in daily_runs)}km** 走りました！！")
             for run in daily_runs:
                 with st.container(border=True):
                     st.markdown(
@@ -1141,135 +1122,62 @@ elif st.session_state.page in [
                 st.session_state.page = "timer_page"
                 st.rerun()
 
-    # --- 時間記録（ストップウォッチ＆タイマー）画面 ---
+    # --- 時間記録画面 ---
     elif st.session_state.page == "timer_page":
-        st.title("⏱️ 時間記録（ストップウォッチ）")
-        st.write("時間を計測して、その記録をカレンダーに残せます！")
+        st.title("⏱️ 時間記録")
+        st.write("取り組んだ時間と内容を入力して、カレンダーに同期・記録できます！")
 
-        # 時間設定（タイマー機能）
-        with st.expander("⏰ 時間設定（自由設定）", expanded=True):
-            col_t1, col_t2 = st.columns(2)
-            with col_t1:
-                target_min = st.number_input("目標時間（分）", min_value=0, max_value=120,
-                                             value=st.session_state.timer_target_seconds // 60, key="timer_min_input")
-            with col_t2:
-                target_sec = st.number_input("目標時間（秒）", min_value=0, max_value=59,
-                                             value=st.session_state.timer_target_seconds % 60, key="timer_sec_input")
-            st.session_state.timer_target_seconds = target_min * 60 + target_sec
+        with st.container(border=True):
+            st.markdown("### 📝 取り組み記録を入力")
 
-            st.caption(f"現在の設定: **{target_min}分{target_sec}秒** になると風船が飛んでお知らせします🎈（タイマーは停止せず継続します）")
+            col_hours, col_mins = st.columns(2)
+            with col_hours:
+                rec_hours = st.number_input("時間", min_value=0, max_value=24, value=0, step=1, key="input_rec_hours")
+            with col_mins:
+                rec_mins = st.number_input("分", min_value=0, max_value=59, value=30, step=1, key="input_rec_mins")
 
-        st.write("---")
+            memo_text = st.text_input("内容（例：数学のワーク、読書、漢字ドリルなど）", placeholder="何をしたか記入してください", key="input_rec_memo")
 
-        # 時間計算（リアルタイム経過時間）
-        if st.session_state.sw_running:
-            current_elapsed = st.session_state.sw_elapsed + (time.time() - st.session_state.sw_start_time)
-            # 設定時間達成アラーム・風船の判定
-            if st.session_state.timer_target_seconds > 0 and current_elapsed >= st.session_state.timer_target_seconds:
-                if not st.session_state.timer_alarm_played:
-                    st.session_state.timer_alarm_played = True
-                    st.balloons()
-        else:
-            current_elapsed = st.session_state.sw_elapsed
-
-        # 時間到達メッセージ表示
-        if st.session_state.timer_alarm_played:
-            st.success("🎈 設定した時間になりました！")
-
-        m, s = divmod(int(current_elapsed), 60)
-        h, m = divmod(m, 60)
-        time_display_str = f"{h:02d}:{m:02d}:{s:02d}"
-
-        # 経過時間を大きく表示（※現在時刻との混同防止）
-        st.markdown(f"<h1 style='text-align: center; font-size: 72px; font-family: monospace;'>⏱️ {time_display_str}</h1>",
-                    unsafe_allow_html=True)
-        st.caption("<div style='text-align: center;'>※現在時刻ではなく、ストップウォッチのリアルタイム経過時間です</div>", unsafe_allow_html=True)
-
-        st.write("")
-
-        # ボタンコントロール
-        if not st.session_state.sw_stopped:
-            # 未ストップ（初期状態または稼働中）
-            if not st.session_state.sw_running:
-                if st.button("▶ オン (計測開始)", use_container_width=True, type="primary"):
-                    st.session_state.sw_running = True
-                    st.session_state.sw_start_time = time.time()
-                    st.session_state.timer_alarm_played = False
-                    st.rerun()
-            else:
-                if st.button("⏸ ストップ", use_container_width=True, type="secondary"):
-                    st.session_state.sw_running = False
-                    st.session_state.sw_elapsed = current_elapsed
-                    st.session_state.sw_stopped = True
-                    st.rerun()
-        else:
-            # ストップを押した際にのみ出現：再開、リセット、記録ボタン
-            col_r1, col_r2, col_r3 = st.columns(3)
-            with col_r1:
-                if st.button("▶ 再開", use_container_width=True):
-                    st.session_state.sw_running = True
-                    st.session_state.sw_start_time = time.time()
-                    st.session_state.sw_stopped = False
-                    st.rerun()
-            with col_r2:
-                if st.button("🔄 リセット", use_container_width=True):
-                    st.session_state.sw_running = False
-                    st.session_state.sw_elapsed = 0
-                    st.session_state.sw_stopped = False
-                    st.session_state.sw_show_record_input = False
-                    st.session_state.timer_alarm_played = False
-                    st.rerun()
-            with col_r3:
-                if st.button("📝 記録", use_container_width=True, type="primary"):
-                    st.session_state.sw_show_record_input = True
-                    st.rerun()
-
-        # 記録入力フォーム（「記録」ボタンを押した際に出現）
-        if st.session_state.sw_show_record_input:
-            st.write("---")
-            st.markdown("### 📝 カレンダーに記録を記入")
-
-            formatted_time_record = f"{m}分{s}秒" if h == 0 else f"{h}時間{m}分{s}秒"
-            memo_text = st.text_input("任意メモ（例：漢字ドリル、読書など）", placeholder="未記入でもOKです", key="sw_memo_input")
-
-            if st.button("💾 カレンダーに保存する", type="primary"):
-                play_click_sound(delay=0)
-                today_date_str = datetime.now().strftime("%Y/%m/%d")
-                now_datetime_str = datetime.now().strftime("%Y/%m/%d %H:%M")
-
-                # 指定形式: ⏰××(時間)記録！(メモで書いた文)
-                memo_content = memo_text.strip()
-                log_text = f"⏰{formatted_time_record}記録！{memo_content}"
-
-                record_entry = {
-                    "date": now_datetime_str,
-                    "time_str": formatted_time_record,
-                    "memo": memo_content,
-                }
-
-                st.session_state.time_records.append(record_entry)
-                add_sticker_for_date(today_date_str)
-
-                # カレンダーのメモ欄へ追記
-                if st.session_state.calendar_notes.get(today_date_str):
-                    st.session_state.calendar_notes[today_date_str] += f"\n{log_text}"
+            st.write("")
+            if st.button("💾 カレンダーに同期して記録する", type="primary", use_container_width=True):
+                if rec_hours == 0 and rec_mins == 0:
+                    st.warning("⚠️ 1分以上の時間を指定してください。")
+                elif not memo_text.strip():
+                    st.warning("⚠️ 内容を入力してください。")
                 else:
-                    st.session_state.calendar_notes[today_date_str] = log_text
+                    play_click_sound(delay=0)
+                    now = get_now_jst()
+                    today_date_str = now.strftime("%Y/%m/%d")
+                    now_datetime_str = now.strftime("%Y/%m/%d %H:%M")
 
-                st.success(f"カレンダーに「{log_text}」を保存しました！")
+                    # 時間表示文字列の作成 (例: 1時間30分 または 45分)
+                    if rec_hours > 0 and rec_mins > 0:
+                        formatted_time_record = f"{rec_hours}時間{rec_mins}分"
+                    elif rec_hours > 0:
+                        formatted_time_record = f"{rec_hours}時間"
+                    else:
+                        formatted_time_record = f"{rec_mins}分"
 
-                # タイマー状態を初期化
-                st.session_state.sw_running = False
-                st.session_state.sw_elapsed = 0
-                st.session_state.sw_stopped = False
-                st.session_state.sw_show_record_input = False
-                st.session_state.timer_alarm_played = False
-                st.rerun()
+                    memo_content = memo_text.strip()
+                    log_text = f"⏰{formatted_time_record} 記録！({memo_content})"
 
-        # リアルタイム表示更新用ループ（計測中のみ画面更新）
-        if st.session_state.sw_running:
-            time.sleep(0.1)
-            st.rerun()
+                    record_entry = {
+                        "date": now_datetime_str,
+                        "time_str": formatted_time_record,
+                        "memo": memo_content,
+                    }
+
+                    st.session_state.time_records.append(record_entry)
+                    add_sticker_for_date(today_date_str)
+
+                    # カレンダーのメモ欄へ追記・同期
+                    if st.session_state.calendar_notes.get(today_date_str):
+                        st.session_state.calendar_notes[today_date_str] += f"\n{log_text}"
+                    else:
+                        st.session_state.calendar_notes[today_date_str] = log_text
+
+                    st.success(f"🎉 カレンダーに「{log_text}」を記録しました！")
+                    st.rerun()
 
     # --- お菓子集めステージ ---
     elif st.session_state.page == "candy_page":
@@ -1326,7 +1234,7 @@ elif st.session_state.page in [
                     st.session_state.show_candy_buttons = True
                     st.session_state.temp_candy_count = chosen_candy_power
                     st.session_state.last_completed_task = f"【{selected_target_title} - {chosen_lv_key}】 {chosen_task_text}"
-                    add_sticker_for_date(datetime.now().strftime("%Y/%m/%d"))
+                    add_sticker_for_date(get_now_jst().strftime("%Y/%m/%d"))
                 else:
                     st.error("⚠️ 達成する目標を上のメニューから選んでください！")
 
@@ -1353,7 +1261,7 @@ elif st.session_state.page in [
                     play_jar_full_sound()
                     st.session_state.jar_full_sound_played = True
                     st.session_state.jar_complete_log.append({
-                        "date": datetime.now().strftime("%Y/%m/%d %H:%M"),
+                        "date": get_now_jst().strftime("%Y/%m/%d %H:%M"),
                         "capacity": capacity,
                         "size_label": JAR_SIZE_LABELS.get(capacity, "?"),
                         "candies": st.session_state.jar_candies.copy(),
@@ -1397,7 +1305,7 @@ elif st.session_state.page in [
                     if st.button(f"{candy['emoji']}\n\n{candy['label']}", use_container_width=True,
                                  key=f"btn_{candy['emoji']}"):
                         play_click_sound()
-                        current_time_str = datetime.now().strftime("%Y/%m/%d %H:%M")
+                        current_time_str = get_now_jst().strftime("%Y/%m/%d %H:%M")
 
                         if len(st.session_state.jar_candies) < st.session_state.jar_capacity:
                             new_candy = {
@@ -1551,13 +1459,13 @@ elif st.session_state.page in [
                 course_task_text = selected_course_target_data["tasks"][course_chosen_lv_key]
                 companion_name = COMPANIONS[st.session_state.companion]["name"] if st.session_state.companion else None
                 st.session_state.course_run_log.append({
-                    "date": datetime.now().strftime("%Y/%m/%d %H:%M"),
+                    "date": get_now_jst().strftime("%Y/%m/%d %H:%M"),
                     "course": course["name"],
                     "km": total_km_for_log,
                     "task": f"【{selected_course_target_title} - {course_chosen_lv_key}】 {course_task_text}",
                     "companion": companion_name,
                 })
-                add_sticker_for_date(datetime.now().strftime("%Y/%m/%d"))
+                add_sticker_for_date(get_now_jst().strftime("%Y/%m/%d"))
             else:
                 st.error("⚠️ 達成する目標を上のメニューから選んでください！")
 
@@ -1577,7 +1485,7 @@ elif st.session_state.page in [
                 play_jar_full_sound()
                 st.session_state.course_complete_sound_played[course_key] = True
                 st.session_state.course_complete_log.append({
-                    "date": datetime.now().strftime("%Y/%m/%d %H:%M"),
+                    "date": get_now_jst().strftime("%Y/%m/%d %H:%M"),
                     "course": course["name"],
                 })
                 if st.session_state.companion:

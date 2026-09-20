@@ -348,11 +348,25 @@ def render_day_bar_svg(entries: list, bar_width: int = 150, height: int = 720) -
         seg_height = max(y2 - y1, 4)
         color = e.get("color", "#4CAF50")
         label = e.get("label", "")
-        tooltip = f"{e['start']}〜{e['end']} {label}".replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+        safe_label = str(label).replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;").replace('"', "&quot;")
+        tooltip = f"{e['start']}〜{e['end']} {safe_label}"
         svg_parts.append(
             f'<rect x="{label_area + 3}" y="{y1:.1f}" width="{bar_width - 6}" height="{seg_height:.1f}" '
             f'fill="{color}" stroke="#ffffff" stroke-width="1" opacity="0.92" rx="3">'
             f'<title>{tooltip}</title></rect>'
+        )
+        # グラフ上にも予定名を表示（短時間の予定でも読めるよう中央配置）
+        text_y = y1 + max(seg_height / 2 + 4, 14)
+        display_label = str(label)
+        max_chars = max(4, int((bar_width - 18) / 11))
+        if len(display_label) > max_chars:
+            display_label = display_label[:max_chars - 1] + "…"
+        safe_display = display_label.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;").replace('"', "&quot;")
+        # 背景色に左右されにくいよう、白文字＋黒い半透明の縁取り
+        svg_parts.append(
+            f'<text x="{label_area + bar_width / 2:.1f}" y="{text_y:.1f}" text-anchor="middle" '
+            f'font-size="13" font-weight="bold" fill="#ffffff" stroke="#333333" stroke-width="3" paint-order="stroke" '
+            f'stroke-opacity="0.45">{safe_display}</text>'
         )
 
     return (f'<svg viewBox="0 0 {total_width} {height}" width="100%" height="{height}" '
@@ -547,7 +561,8 @@ def render_schedule_and_events(date_str: str, editable: bool):
             st.markdown(f"**{title}**")
             st.markdown(render_day_bar_svg(day_schedule[kind], bar_width=150, height=720), unsafe_allow_html=True)
             if day_schedule[kind]:
-                st.markdown("##### 🖱️ 項目を押して編集・削除") if editable else None
+                if editable:
+                    st.markdown("##### 🖱️ 項目を押して編集・削除")
                 for i, entry in enumerate(day_schedule[kind]):
                     color = entry.get("color", "#4CAF50" if kind == "planned" else "#2196F3")
                     button_label = f"{icon} {entry['start']}〜{entry['end']}　{entry.get('label', '')}"

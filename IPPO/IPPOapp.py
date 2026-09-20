@@ -306,42 +306,58 @@ def minutes_to_hhmm(total_minutes: int) -> str:
     return f"{h:02d}:{m:02d}"
 
 
-def render_day_bar_svg(entries: list, bar_width: int = 70, height: int = 480) -> str:
+def render_day_bar_svg(entries: list, bar_width: int = 150, height: int = 720) -> str:
     """
     24時間分の縦長の帯グラフ（0時始まり）をSVGで描画する。
+    30分ごとに小目盛り、1時間ごとに大目盛り＋時刻ラベルを表示する。
     entries: [{"start": "HH:MM", "end": "HH:MM", "label": str, "color": "#rrggbb"}, ...]
     """
-    label_area = 42
+    label_area = 62
     total_width = bar_width + label_area
     svg_parts = [
-        f'<rect x="{label_area}" y="0" width="{bar_width}" height="{height}" fill="#fafafa" stroke="#333" stroke-width="1.5" />'
+        f'<rect x="{label_area}" y="0" width="{bar_width}" height="{height}" fill="#fafafa" stroke="#333" stroke-width="1.8" />'
     ]
-    for h in range(0, 25):
-        y = height * h / 24
+
+    # 30分ごとの小目盛り、1時間ごとの大目盛り
+    for half_hour in range(0, 49):
+        minutes = half_hour * 30
+        y = height * minutes / (24 * 60)
+        is_major = (minutes % 60 == 0)
+        stroke = "#b8b8b8" if is_major else "#e6e6e6"
+        stroke_width = "1.4" if is_major else "0.8"
         svg_parts.append(
             f'<line x1="{label_area}" y1="{y:.1f}" x2="{label_area + bar_width}" y2="{y:.1f}" '
-            f'stroke="#ddd" stroke-width="1" />'
+            f'stroke="{stroke}" stroke-width="{stroke_width}" />'
         )
-        if h % 2 == 0:
+        if is_major:
+            hour = minutes // 60
             svg_parts.append(
-                f'<text x="{label_area - 4}" y="{y + 3:.1f}" font-size="10" text-anchor="end">{h:02d}時</text>'
+                f'<line x1="{label_area - 8}" y1="{y:.1f}" x2="{label_area}" y2="{y:.1f}" '
+                f'stroke="#555" stroke-width="1.4" />'
             )
+            svg_parts.append(
+                f'<text x="{label_area - 12}" y="{y + 4:.1f}" font-size="13" font-weight="bold" '
+                f'text-anchor="end">{hour:02d}:00</text>'
+            )
+
     for e in entries:
         start_min = time_to_minutes(e["start"])
         end_min = time_to_minutes(e["end"])
         y1 = height * start_min / (24 * 60)
         y2 = height * end_min / (24 * 60)
-        seg_height = max(y2 - y1, 3)
+        seg_height = max(y2 - y1, 4)
         color = e.get("color", "#4CAF50")
         label = e.get("label", "")
         tooltip = f"{e['start']}〜{e['end']} {label}".replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
         svg_parts.append(
-            f'<rect x="{label_area + 2}" y="{y1:.1f}" width="{bar_width - 4}" height="{seg_height:.1f}" '
-            f'fill="{color}" stroke="#ffffff" stroke-width="0.5" opacity="0.9">'
+            f'<rect x="{label_area + 3}" y="{y1:.1f}" width="{bar_width - 6}" height="{seg_height:.1f}" '
+            f'fill="{color}" stroke="#ffffff" stroke-width="1" opacity="0.92" rx="3">'
             f'<title>{tooltip}</title></rect>'
         )
-    return f'<svg viewBox="0 0 {total_width} {height}" width="{total_width}" height="{height}">' + "".join(
-        svg_parts) + "</svg>"
+
+    return (f'<svg viewBox="0 0 {total_width} {height}" width="100%" height="{height}" '
+            f'style="display:block; max-width:100%;">' + "".join(svg_parts) + "</svg>")
+
 
 
 def find_schedule_matches(planned: list, actual: list) -> list:
@@ -381,8 +397,7 @@ def get_ippo_events_for_date(date_str: str) -> list:
 def render_schedule_and_events(date_str: str, editable: bool):
     """
     指定した日の「予定／記録」帯グラフと、隣にIPPOイベントログを表示する。
-    editable=True の場合のみ、予定・記録の追加フォームを表示する（today専用ページで使用）。
-    editable=False の場合は閲覧のみ（カレンダー画面で使用）。
+    editable=True の場合は、予定・記録の追加に加えて既存項目の編集・削除ができる。
     """
     day_schedule = st.session_state.daily_schedule.setdefault(date_str, {"planned": [], "actual": []})
 
@@ -391,15 +406,100 @@ def render_schedule_and_events(date_str: str, editable: bool):
         with col_plan_btn:
             if st.button("📅 予定を立てる", use_container_width=True, key=f"open_plan_form_{date_str}"):
                 play_click_sound(delay=0)
-                st.session_state.schedule_form_open = "planned" if st.session_state.get(
-                    "schedule_form_open") != "planned" else None
+                st.session_state.schedule_form_open = "planned" if st.session_state.get("schedule_form_open") != "planned" else None
+                st.session_state.schedule_edit_target = None
                 st.rerun()
         with col_record_btn:
             if st.button("✅ 記録する", use_container_width=True, key=f"open_record_form_{date_str}"):
                 play_click_sound(delay=0)
-                st.session_state.schedule_form_open = "actual" if st.session_state.get(
-                    "schedule_form_open") != "actual" else None
+                st.session_state.schedule_form_open = "actual" if st.session_state.get("schedule_form_open") != "actual" else None
+                st.session_state.schedule_edit_target = None
                 st.rerun()
+
+        # 既存項目を押したときの編集・削除フォーム
+        edit_target = st.session_state.get("schedule_edit_target")
+        if edit_target and edit_target.get("date") == date_str:
+            edit_kind = edit_target["kind"]
+            edit_index = edit_target["index"]
+            entries = day_schedule.get(edit_kind, [])
+            if 0 <= edit_index < len(entries):
+                entry = entries[edit_index]
+                kind_label = "予定" if edit_kind == "planned" else "記録"
+                st.session_state.schedule_form_open = None
+                with st.container(border=True):
+                    st.markdown(f"#### ✏️ {kind_label}を編集")
+                    edit_col_start, edit_col_end = st.columns(2)
+                    with edit_col_start:
+                        edit_start = st.time_input(
+                            "開始時刻", value=datetime.strptime(entry["start"], "%H:%M").time(),
+                            key=f"edit_sched_start_{date_str}_{edit_kind}_{edit_index}")
+                    with edit_col_end:
+                        edit_end = st.time_input(
+                            "終了時刻", value=datetime.strptime(entry["end"], "%H:%M").time(),
+                            key=f"edit_sched_end_{date_str}_{edit_kind}_{edit_index}")
+                    edit_label = st.text_input(
+                        "内容（なんでもOK）", value=entry.get("label", ""),
+                        key=f"edit_sched_label_{date_str}_{edit_kind}_{edit_index}")
+                    edit_color = st.color_picker(
+                        "色", value=entry.get("color", "#4CAF50" if edit_kind == "planned" else "#2196F3"),
+                        key=f"edit_sched_color_{date_str}_{edit_kind}_{edit_index}")
+
+                    save_col, delete_col, cancel_col = st.columns(3)
+                    with save_col:
+                        if st.button("💾 変更を保存", type="primary", use_container_width=True,
+                                     key=f"save_sched_edit_{date_str}_{edit_kind}_{edit_index}"):
+                            if not edit_label.strip():
+                                st.error("⚠️ 内容を入力してください。")
+                            elif time_to_minutes(edit_start) >= time_to_minutes(edit_end):
+                                st.error("⚠️ 終了時刻は開始時刻より後にしてください。")
+                            else:
+                                play_click_sound(delay=0)
+                                entry.update({
+                                    "start": edit_start.strftime("%H:%M"),
+                                    "end": edit_end.strftime("%H:%M"),
+                                    "label": edit_label.strip(),
+                                    "color": edit_color,
+                                })
+                                st.session_state.schedule_edit_target = None
+                                st.rerun()
+                    with delete_col:
+                        if st.button("🗑️ 削除", use_container_width=True,
+                                     key=f"delete_sched_{date_str}_{edit_kind}_{edit_index}"):
+                            play_click_sound(delay=0)
+                            st.session_state.schedule_delete_target = {
+                                "date": date_str, "kind": edit_kind, "index": edit_index
+                            }
+                            st.rerun()
+                    with cancel_col:
+                        if st.button("キャンセル", use_container_width=True,
+                                     key=f"cancel_sched_edit_{date_str}_{edit_kind}_{edit_index}"):
+                            st.session_state.schedule_edit_target = None
+                            st.rerun()
+
+        # 削除確認
+        delete_target = st.session_state.get("schedule_delete_target")
+        if delete_target and delete_target.get("date") == date_str:
+            delete_kind = delete_target["kind"]
+            delete_index = delete_target["index"]
+            entries = day_schedule.get(delete_kind, [])
+            if 0 <= delete_index < len(entries):
+                target_entry = entries[delete_index]
+                with st.container(border=True):
+                    st.warning(f"「{target_entry.get('label', '')}（{target_entry['start']}〜{target_entry['end']}）」を削除しますか？")
+                    confirm_col, cancel_col = st.columns(2)
+                    with confirm_col:
+                        if st.button("🗑️ 削除する", type="primary", use_container_width=True,
+                                     key=f"confirm_sched_delete_{date_str}_{delete_kind}_{delete_index}"):
+                            play_click_sound(delay=0)
+                            entries.pop(delete_index)
+                            st.session_state.schedule_delete_target = None
+                            st.session_state.schedule_edit_target = None
+                            st.rerun()
+                    with cancel_col:
+                        if st.button("やめる", use_container_width=True,
+                                     key=f"cancel_sched_delete_{date_str}_{delete_kind}_{delete_index}"):
+                            st.session_state.schedule_delete_target = None
+                            st.rerun()
 
         form_kind = st.session_state.get("schedule_form_open")
         if form_kind in ("planned", "actual"):
@@ -414,8 +514,8 @@ def render_schedule_and_events(date_str: str, editable: bool):
                 label_text = st.text_input("内容（なんでもOK）", key=f"sched_label_{date_str}_{form_kind}",
                                            placeholder="例：数学の宿題、読書、休憩 など")
                 color_pick = st.color_picker(
-                    "色", value="#4CAF50" if form_kind == "planned" else "#2196F3", key=f"sched_color_{date_str}_{form_kind}"
-                )
+                    "色", value="#4CAF50" if form_kind == "planned" else "#2196F3",
+                    key=f"sched_color_{date_str}_{form_kind}")
                 if st.button("➕ 追加する", type="primary", key=f"sched_add_{date_str}_{form_kind}"):
                     if not label_text.strip():
                         st.error("⚠️ 内容を入力してください。")
@@ -438,13 +538,37 @@ def render_schedule_and_events(date_str: str, editable: bool):
         for p, a in matches:
             st.success(f"🎉 おめでとう！！予定通りにできたね！！（{p['start']}〜{p['end']} {p['label']}）")
 
-    chart_col1, chart_col2, event_col = st.columns([1, 1, 2])
-    with chart_col1:
-        st.markdown("**📅 予定**")
-        st.markdown(render_day_bar_svg(day_schedule["planned"]), unsafe_allow_html=True)
-    with chart_col2:
-        st.markdown("**✅ 記録**")
-        st.markdown(render_day_bar_svg(day_schedule["actual"]), unsafe_allow_html=True)
+    chart_col1, chart_col2, event_col = st.columns([1, 1, 1.35])
+    for chart_col, kind, title, icon in [
+        (chart_col1, "planned", "📅 予定", "📅"),
+        (chart_col2, "actual", "✅ 記録", "✅"),
+    ]:
+        with chart_col:
+            st.markdown(f"**{title}**")
+            st.markdown(render_day_bar_svg(day_schedule[kind], bar_width=150, height=720), unsafe_allow_html=True)
+            if day_schedule[kind]:
+                st.markdown("##### 🖱️ 項目を押して編集・削除") if editable else None
+                for i, entry in enumerate(day_schedule[kind]):
+                    color = entry.get("color", "#4CAF50" if kind == "planned" else "#2196F3")
+                    button_label = f"{icon} {entry['start']}〜{entry['end']}　{entry.get('label', '')}"
+                    if editable:
+                        if st.button(button_label, use_container_width=True, key=f"schedule_entry_button_{date_str}_{kind}_{i}"):
+                            play_click_sound(delay=0)
+                            st.session_state.schedule_edit_target = {"date": date_str, "kind": kind, "index": i}
+                            st.session_state.schedule_delete_target = None
+                            st.rerun()
+                        # ボタンの左に色を表示する代わりに、直下に色チップを表示
+                        st.markdown(
+                            f'<div style="height:5px;background:{color};border-radius:4px;margin:-8px 0 6px 0;"></div>',
+                            unsafe_allow_html=True)
+                    else:
+                        st.markdown(
+                            f'<div style="border-left:8px solid {color};padding:6px 8px;margin:4px 0;">'
+                            f'<b>{entry["start"]}〜{entry["end"]}</b>　{entry.get("label", "")}</div>',
+                            unsafe_allow_html=True)
+            else:
+                st.caption("まだ登録されていません。")
+
     with event_col:
         st.markdown("**🎮 IPPO内のイベント記録**")
         events_today = get_ippo_events_for_date(date_str)
@@ -453,6 +577,7 @@ def render_schedule_and_events(date_str: str, editable: bool):
                 st.write(f"⏰ {event_time}　{event_label}")
         else:
             st.caption("この日はまだイベントの記録がありません。")
+
 
 
 # =====================================================
@@ -564,6 +689,10 @@ if "daily_schedule" not in st.session_state:
     st.session_state.daily_schedule = {}
 if "schedule_form_open" not in st.session_state:
     st.session_state.schedule_form_open = None
+if "schedule_edit_target" not in st.session_state:
+    st.session_state.schedule_edit_target = None
+if "schedule_delete_target" not in st.session_state:
+    st.session_state.schedule_delete_target = None
 
 COMPANIONS = {
     "cat": {"emoji": "🐱", "name": "ねこ"},

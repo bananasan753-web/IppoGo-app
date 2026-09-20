@@ -292,6 +292,20 @@ def render_candy_jar_svg(candies: list, capacity: int) -> str:
 # =====================================================
 # 📊 一日のスケジュール（予定／記録の帯グラフ）まわりの処理
 # =====================================================
+SCHEDULE_COLORS = {
+    "🔴 赤": "#F44336",
+    "🟠 オレンジ": "#FF9800",
+    "🟡 黄": "#FFC107",
+    "🟢 緑": "#4CAF50",
+    "🔵 青": "#2196F3",
+    "🟣 紫": "#9C27B0",
+    "🩷 ピンク": "#E91E63",
+    "🩵 水色": "#00BCD4",
+    "🟤 茶": "#795548",
+    "⚫ 黒": "#333333",
+}
+
+
 def time_to_minutes(hhmm) -> int:
     """'HH:MM' 文字列 または datetime.time を、0時からの経過分数に変換する"""
     if hasattr(hhmm, "hour"):
@@ -454,9 +468,18 @@ def render_schedule_and_events(date_str: str, editable: bool):
                     edit_label = st.text_input(
                         "内容（なんでもOK）", value=entry.get("label", ""),
                         key=f"edit_sched_label_{date_str}_{edit_kind}_{edit_index}")
-                    edit_color = st.color_picker(
-                        "色", value=entry.get("color", "#4CAF50" if edit_kind == "planned" else "#2196F3"),
+                    current_color = entry.get("color", "#4CAF50" if edit_kind == "planned" else "#2196F3")
+                    color_options = list(SCHEDULE_COLORS.keys())
+                    current_color_name = next(
+                        (name for name, hex_color in SCHEDULE_COLORS.items() if hex_color.lower() == str(current_color).lower()),
+                        color_options[3 if edit_kind == "planned" else 4]
+                    )
+                    edit_color_name = st.selectbox(
+                        "色（10色から選択）",
+                        options=color_options,
+                        index=color_options.index(current_color_name),
                         key=f"edit_sched_color_{date_str}_{edit_kind}_{edit_index}")
+                    edit_color = SCHEDULE_COLORS[edit_color_name]
 
                     save_col, delete_col, cancel_col = st.columns(3)
                     with save_col:
@@ -527,9 +550,14 @@ def render_schedule_and_events(date_str: str, editable: bool):
                     end_time = st.time_input("終了時刻", key=f"sched_end_{date_str}_{form_kind}")
                 label_text = st.text_input("内容（なんでもOK）", key=f"sched_label_{date_str}_{form_kind}",
                                            placeholder="例：数学の宿題、読書、休憩 など")
-                color_pick = st.color_picker(
-                    "色", value="#4CAF50" if form_kind == "planned" else "#2196F3",
+                color_options = list(SCHEDULE_COLORS.keys())
+                default_color_index = 3 if form_kind == "planned" else 4
+                color_pick_name = st.selectbox(
+                    "色（10色から選択）",
+                    options=color_options,
+                    index=default_color_index,
                     key=f"sched_color_{date_str}_{form_kind}")
+                color_pick = SCHEDULE_COLORS[color_pick_name]
                 if st.button("➕ 追加する", type="primary", key=f"sched_add_{date_str}_{form_kind}"):
                     if not label_text.strip():
                         st.error("⚠️ 内容を入力してください。")
@@ -546,11 +574,6 @@ def render_schedule_and_events(date_str: str, editable: bool):
                         day_schedule[form_kind].append(new_entry)
                         st.session_state.schedule_form_open = None
                         st.rerun()
-
-    matches = find_schedule_matches(day_schedule["planned"], day_schedule["actual"])
-    if matches:
-        for p, a in matches:
-            st.success(f"🎉 おめでとう！！予定通りにできたね！！（{p['start']}〜{p['end']} {p['label']}）")
 
     chart_col1, chart_col2, event_col = st.columns([1, 1, 1.35])
     for chart_col, kind, title, icon in [

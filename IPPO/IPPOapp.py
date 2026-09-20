@@ -59,10 +59,6 @@ SOUND_PATH = os.path.join(os.path.dirname(__file__), "sounds", "決定ボタン�
 ACHIEVE_SOUND_PATH = os.path.join(os.path.dirname(__file__), "sounds", "クイズ正解1.mp3")
 JAR_FULL_SOUND_PATH = os.path.join(os.path.dirname(__file__), "sounds", "歓声と拍手.mp3")
 
-# 追加効果音パス
-SOUND_A_PATH = r"C:\Users\banan\PycharmProjects\IPPO\sounds\自転車のベル.mp3"
-SOUND_B_PATH = r"C:\Users\banan\PycharmProjects\IPPO\sounds\決定ボタンを押す21.mp3"
-
 JAR_SIZE_LABELS = {30: "S", 50: "M", 100: "L"}
 
 
@@ -91,7 +87,7 @@ PERSISTENT_KEYS = [
     "calendar_notes",
     "sticker_type",
     "sticker_color",
-    "time_records",  # 時間記録ログ
+    "daily_schedule",  # 一日のスケジュール（予定／記録）
 ]
 
 PERSISTENT_DEFAULTS = {
@@ -112,7 +108,7 @@ PERSISTENT_DEFAULTS = {
     "calendar_notes": {},
     "sticker_type": "circle",
     "sticker_color": "赤",
-    "time_records": [],
+    "daily_schedule": {},
 }
 
 
@@ -125,8 +121,12 @@ def check_user_exists(uid: str) -> bool:
         return False
 
 
-def load_progress(uid):
-    """Supabaseから指定ユーザーのデータを読み込む"""
+def load_progress(uid) -> bool:
+    """
+    Supabaseから指定ユーザーのデータを読み込む。
+    成功したらTrue、データが見つからなかった／通信に失敗した場合はFalseを返す。
+    ★重要：失敗時に黙って進捗をリセットしない（誤ってセーブデータを上書きする事故を防ぐため）。
+    """
     try:
         response = supabase.table("user_data").select("*").eq("id", uid).execute()
         if response.data and len(response.data) > 0:
@@ -138,10 +138,11 @@ def load_progress(uid):
                     default_val = PERSISTENT_DEFAULTS[key]
                     st.session_state[key] = type(default_val)(default_val) if isinstance(default_val,
                                                                                          (list, dict)) else default_val
-        else:
-            reset_progress_in_memory()
+            return True
+        return False
     except Exception as e:
         st.error(f"データの読み込みに失敗しました: {e}")
+        return False
 
 
 def save_progress():
@@ -289,6 +290,172 @@ def render_candy_jar_svg(candies: list, capacity: int) -> str:
 
 
 # =====================================================
+# 📊 一日のスケジュール（予定／記録の帯グラフ）まわりの処理
+# =====================================================
+def time_to_minutes(hhmm) -> int:
+    """'HH:MM' 文字列 または datetime.time を、0時からの経過分数に変換する"""
+    if hasattr(hhmm, "hour"):
+        return hhmm.hour * 60 + hhmm.minute
+    h, m = hhmm.split(":")
+    return int(h) * 60 + int(m)
+
+
+def minutes_to_hhmm(total_minutes: int) -> str:
+    h = total_minutes // 60
+    m = total_minutes % 60
+    return f"{h:02d}:{m:02d}"
+
+
+def render_day_bar_svg(entries: list, bar_width: int = 70, height: int = 480) -> str:
+    """
+    24時間分の縦長の帯グラフ（0時始まり）をSVGで描画する。
+    entries: [{"start": "HH:MM", "end": "HH:MM", "label": str, "color": "#rrggbb"}, ...]
+    """
+    label_area = 42
+    total_width = bar_width + label_area
+    svg_parts = [
+        f'<rect x="{label_area}" y="0" width="{bar_width}" height="{height}" fill="#fafafa" stroke="#333" stroke-width="1.5" />'
+    ]
+    for h in range(0, 25):
+        y = height * h / 24
+        svg_parts.append(
+            f'<line x1="{label_area}" y1="{y:.1f}" x2="{label_area + bar_width}" y2="{y:.1f}" '
+            f'stroke="#ddd" stroke-width="1" />'
+        )
+        if h % 2 == 0:
+            svg_parts.append(
+                f'<text x="{label_area - 4}" y="{y + 3:.1f}" font-size="10" text-anchor="end">{h:02d}時</text>'
+            )
+    for e in entries:
+        start_min = time_to_minutes(e["start"])
+        end_min = time_to_minutes(e["end"])
+        y1 = height * start_min / (24 * 60)
+        y2 = height * end_min / (24 * 60)
+        seg_height = max(y2 - y1, 3)
+        color = e.get("color", "#4CAF50")
+        label = e.get("label", "")
+        tooltip = f"{e['start']}〜{e['end']} {label}".replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+        svg_parts.append(
+            f'<rect x="{label_area + 2}" y="{y1:.1f}" width="{bar_width - 4}" height="{seg_height:.1f}" '
+            f'fill="{color}" stroke="#ffffff" stroke-width="0.5" opacity="0.9">'
+            f'<title>{tooltip}</title></rect>'
+        )
+    return f'<svg viewBox="0 0 {total_width} {height}" width="{total_width}" height="{height}">' + "".join(
+        svg_parts) + "</svg>"
+
+
+def find_schedule_matches(planned: list, actual: list) -> list:
+    """予定と記録で、開始・終了時刻が完全に一致する組み合わせを探す"""
+    matches = []
+    for p in planned:
+        for a in actual:
+            if p["start"] == a["start"] and p["end"] == a["end"]:
+                matches.append((p, a))
+    return matches
+
+
+def get_ippo_events_for_date(date_str: str) -> list:
+    """その日のIPPO内イベント（お菓子・ランニング・目標達成など）を時刻順にまとめて返す"""
+    events = []
+    for c in st.session_state.get("all_candy_log", []):
+        if c["date"].startswith(date_str):
+            events.append((c["date"].split(" ")[1], f"{c.get('emoji', '🍬')} お菓子ゲット：{c.get('task', '')}"))
+    for r in st.session_state.get("course_run_log", []):
+        if r["date"].startswith(date_str):
+            events.append(
+                (r["date"].split(" ")[1], f"🏃 {r.get('course', 'ランニング')}：{r.get('km', 0)}km（{r.get('task', '')}）"))
+    for j in st.session_state.get("jar_complete_log", []):
+        if j["date"].startswith(date_str):
+            size_label_text = j.get("size_label", JAR_SIZE_LABELS.get(j.get("capacity"), "?"))
+            events.append((j["date"].split(" ")[1], f"🍯 お菓子のビン({size_label_text})完成"))
+    for v in st.session_state.get("course_complete_log", []):
+        if v["date"].startswith(date_str):
+            events.append((v["date"].split(" ")[1], f"🏁 『{v.get('course', 'コース')}』完走達成"))
+    for g in st.session_state.get("goal_complete_log", []):
+        if g["date"].startswith(date_str):
+            events.append((g["date"].split(" ")[1], f"🏆 『{g.get('title', '')}』目標達成"))
+    events.sort(key=lambda ev: ev[0])
+    return events
+
+
+def render_schedule_and_events(date_str: str, editable: bool):
+    """
+    指定した日の「予定／記録」帯グラフと、隣にIPPOイベントログを表示する。
+    editable=True の場合のみ、予定・記録の追加フォームを表示する（today専用ページで使用）。
+    editable=False の場合は閲覧のみ（カレンダー画面で使用）。
+    """
+    day_schedule = st.session_state.daily_schedule.setdefault(date_str, {"planned": [], "actual": []})
+
+    if editable:
+        col_plan_btn, col_record_btn = st.columns(2)
+        with col_plan_btn:
+            if st.button("📅 予定を立てる", use_container_width=True, key=f"open_plan_form_{date_str}"):
+                play_click_sound(delay=0)
+                st.session_state.schedule_form_open = "planned" if st.session_state.get(
+                    "schedule_form_open") != "planned" else None
+                st.rerun()
+        with col_record_btn:
+            if st.button("✅ 記録する", use_container_width=True, key=f"open_record_form_{date_str}"):
+                play_click_sound(delay=0)
+                st.session_state.schedule_form_open = "actual" if st.session_state.get(
+                    "schedule_form_open") != "actual" else None
+                st.rerun()
+
+        form_kind = st.session_state.get("schedule_form_open")
+        if form_kind in ("planned", "actual"):
+            form_title = "📅 予定を追加" if form_kind == "planned" else "✅ 記録を追加"
+            with st.container(border=True):
+                st.markdown(f"#### {form_title}")
+                col_start, col_end = st.columns(2)
+                with col_start:
+                    start_time = st.time_input("開始時刻", key=f"sched_start_{date_str}_{form_kind}")
+                with col_end:
+                    end_time = st.time_input("終了時刻", key=f"sched_end_{date_str}_{form_kind}")
+                label_text = st.text_input("内容（なんでもOK）", key=f"sched_label_{date_str}_{form_kind}",
+                                           placeholder="例：数学の宿題、読書、休憩 など")
+                color_pick = st.color_picker(
+                    "色", value="#4CAF50" if form_kind == "planned" else "#2196F3", key=f"sched_color_{date_str}_{form_kind}"
+                )
+                if st.button("➕ 追加する", type="primary", key=f"sched_add_{date_str}_{form_kind}"):
+                    if not label_text.strip():
+                        st.error("⚠️ 内容を入力してください。")
+                    elif time_to_minutes(start_time) >= time_to_minutes(end_time):
+                        st.error("⚠️ 終了時刻は開始時刻より後にしてください。")
+                    else:
+                        play_click_sound(delay=0)
+                        new_entry = {
+                            "start": start_time.strftime("%H:%M"),
+                            "end": end_time.strftime("%H:%M"),
+                            "label": label_text.strip(),
+                            "color": color_pick,
+                        }
+                        day_schedule[form_kind].append(new_entry)
+                        st.session_state.schedule_form_open = None
+                        st.rerun()
+
+    matches = find_schedule_matches(day_schedule["planned"], day_schedule["actual"])
+    if matches:
+        for p, a in matches:
+            st.success(f"🎉 おめでとう！！予定通りにできたね！！（{p['start']}〜{p['end']} {p['label']}）")
+
+    chart_col1, chart_col2, event_col = st.columns([1, 1, 2])
+    with chart_col1:
+        st.markdown("**📅 予定**")
+        st.markdown(render_day_bar_svg(day_schedule["planned"]), unsafe_allow_html=True)
+    with chart_col2:
+        st.markdown("**✅ 記録**")
+        st.markdown(render_day_bar_svg(day_schedule["actual"]), unsafe_allow_html=True)
+    with event_col:
+        st.markdown("**🎮 IPPO内のイベント記録**")
+        events_today = get_ippo_events_for_date(date_str)
+        if events_today:
+            for event_time, event_label in events_today:
+                st.write(f"⏰ {event_time}　{event_label}")
+        else:
+            st.caption("この日はまだイベントの記録がありません。")
+
+
+# =====================================================
 # 🔊 音声読み込み
 # =====================================================
 @st.cache_data
@@ -392,9 +559,11 @@ if "course_complete_log" not in st.session_state:
 if "active_course_key" not in st.session_state:
     st.session_state.active_course_key = "village"
 
-# 時間記録用セッション
-if "time_records" not in st.session_state:
-    st.session_state.time_records = []
+# 📊 一日のスケジュール（予定／記録）
+if "daily_schedule" not in st.session_state:
+    st.session_state.daily_schedule = {}
+if "schedule_form_open" not in st.session_state:
+    st.session_state.schedule_form_open = None
 
 COMPANIONS = {
     "cat": {"emoji": "🐱", "name": "ねこ"},
@@ -571,13 +740,25 @@ if st.session_state.page == "title":
             st.markdown("### 🆕 新しく始めるユーザー名を入力してください")
             input_name = st.text_input("ユーザー名（またはID）", key="input_user_name_new")
 
+            # ★修正①：すでに同じ名前のセーブデータがある場合は警告する
+            name_already_exists = bool(input_name.strip()) and check_user_exists(input_name.strip())
+            if name_already_exists:
+                st.warning("⚠️ その名前のセーブデータはすでにあります。このまま進むと上書きされて消えてしまいます。")
+
             col_ok, col_back = st.columns(2)
             with col_ok:
-                if st.button("決定してスタート", type="primary", use_container_width=True):
+                button_label = "⚠️ 上書きして始める" if name_already_exists else "決定してスタート"
+                if st.button(button_label, type="primary", use_container_width=True):
                     play_click_sound(delay=0)
                     if input_name.strip():
                         st.session_state.current_user = input_name.strip()
                         reset_progress_in_memory()
+                        if name_already_exists:
+                            # 上書きする場合は、Supabase側の古いレコードも削除してから真っさらにする
+                            try:
+                                supabase.table("user_data").delete().eq("id", st.session_state.current_user).execute()
+                            except Exception:
+                                pass
                         st.session_state.game_started = True
                         st.session_state.page = "menu_select"
                         st.session_state.login_step = "title"
@@ -624,12 +805,19 @@ if st.session_state.page == "title":
         with col_yes:
             if st.button("はい", type="primary", use_container_width=True):
                 play_click_sound(delay=0)
-                st.session_state.current_user = st.session_state.temp_user_id
-                load_progress(st.session_state.current_user)
-                st.session_state.game_started = True
-                st.session_state.page = "menu_select"
-                st.session_state.login_step = "title"
-                st.rerun()
+                # ★修正②：読み込みに失敗した場合は、進めずにその場でエラーを見せる
+                load_ok = load_progress(st.session_state.temp_user_id)
+                if load_ok:
+                    st.session_state.current_user = st.session_state.temp_user_id
+                    st.session_state.game_started = True
+                    st.session_state.page = "menu_select"
+                    st.session_state.login_step = "title"
+                    st.rerun()
+                else:
+                    st.error(
+                        "⚠️ データの読み込みに失敗しました。進捗を上書きしないよう、ここで止めています。"
+                        "少し時間をおいてから、もう一度お試しください。"
+                    )
 
         with col_no:
             if st.button("いいえ", use_container_width=True):
@@ -696,9 +884,9 @@ elif st.session_state.page == "menu_select":
             st.session_state.page = "stage_page"
             st.rerun()
     with col4:
-        if st.button("⏱️\n\n時間記録", use_container_width=True, key="menu_timer"):
+        if st.button("📊\n\n一日のスケジュール", use_container_width=True, key="menu_schedule"):
             play_click_sound()
-            st.session_state.page = "timer_page"
+            st.session_state.page = "schedule_page"
             st.rerun()
 
 # =====================================================
@@ -706,7 +894,7 @@ elif st.session_state.page == "menu_select":
 # =====================================================
 elif st.session_state.page in [
     "target_page", "calendar_page", "stage_page",
-    "candy_page", "running_page", "running_course_page", "timer_page"
+    "candy_page", "running_page", "running_course_page", "schedule_page"
 ]:
 
     # サイドバーメニュー
@@ -727,9 +915,9 @@ elif st.session_state.page in [
             play_click_sound()
             st.session_state.page = "stage_page"
             st.rerun()
-        if st.button("⏱️ 時間記録画面へ"):
+        if st.button("📊 一日のスケジュールへ"):
             play_click_sound()
-            st.session_state.page = "timer_page"
+            st.session_state.page = "schedule_page"
             st.rerun()
         st.write("---")
         if st.button("↩️ メニューセレクトに戻る"):
@@ -1083,7 +1271,6 @@ elif st.session_state.page in [
                                     v["date"].startswith(selected_date_str)]
         daily_goal_completions = [g for g in st.session_state.goal_complete_log if
                                   g["date"].startswith(selected_date_str)]
-        daily_timer_records = [tr for tr in st.session_state.time_records if tr["date"].startswith(selected_date_str)]
 
         sticker_line = get_sticker_preview(selected_date_str, limit=MAX_STICKERS_SHOWN, show_remainder=True)
         st.markdown(f"#### 🎨 この日のシール：{sticker_line if sticker_line else '（まだ貼られていません）'}")
@@ -1111,30 +1298,11 @@ elif st.session_state.page in [
 
         st.write("---")
 
-        if daily_timer_records:
-            for tr in daily_timer_records:
-                col_rec, col_del = st.columns([4, 1])
-                memo_part = f" ({tr['memo']})" if tr['memo'] else ""
-                with col_rec:
-                    st.info(f"⏰{tr['time_str']} 記録！{memo_part}")
-                with col_del:
-                    if st.button("🗑️ 削除", key=f"del_time_{tr['date']}_{tr['time_str']}_{tr['memo']}"):
-                        play_click_sound(delay=0)
-                        # 時間記録リストから削除
-                        st.session_state.time_records.remove(tr)
+        # 📊 その日のスケジュール（予定／記録の帯グラフ）を閲覧のみで表示
+        st.markdown("### 📊 その日のスケジュール")
+        render_schedule_and_events(selected_date_str, editable=False)
 
-                        # カレンダーメモ欄からも削除対象行を取り除く処理
-                        log_text_to_remove = f"⏰{tr['time_str']} 記録！({tr['memo']})"
-                        current_note = st.session_state.calendar_notes.get(selected_date_str, "")
-                        if current_note:
-                            lines = current_note.split("\n")
-                            lines = [line for line in lines if line.strip() != log_text_to_remove.strip()]
-                            new_note = "\n".join(lines).strip()
-                            if new_note:
-                                st.session_state.calendar_notes[selected_date_str] = new_note
-                            else:
-                                st.session_state.calendar_notes.pop(selected_date_str, None)
-                        st.rerun()
+        st.write("---")
 
         if daily_goal_completions:
             for g in daily_goal_completions:
@@ -1167,7 +1335,7 @@ elif st.session_state.page in [
                         st.write(f"**一緒に走った相棒：** 🐾 {run['companion']}")
 
         if not (
-                daily_candies or daily_jar_completions or daily_runs or daily_course_completions or daily_goal_completions or daily_timer_records):
+                daily_candies or daily_jar_completions or daily_runs or daily_course_completions or daily_goal_completions):
             st.info("この日の記録はありません")
 
     # --- ステージ画面 ---
@@ -1187,68 +1355,20 @@ elif st.session_state.page in [
                 st.session_state.page = "running_page"
                 st.rerun()
         with scol3:
-            if st.button("⏱️\n\n時間記録", use_container_width=True, key="stage_timer"):
+            if st.button("📊\n\n一日のスケジュール", use_container_width=True, key="stage_schedule"):
                 play_click_sound()
-                st.session_state.page = "timer_page"
+                st.session_state.page = "schedule_page"
                 st.rerun()
 
-    # --- 時間記録画面 ---
-    elif st.session_state.page == "timer_page":
-        st.title("⏱️ 時間記録")
-        st.write("取り組んだ時間と内容を入力して、カレンダーに同期・記録できます！")
+    # --- 一日のスケジュール画面 ---
+    elif st.session_state.page == "schedule_page":
+        st.title("📊 一日のスケジュール")
+        st.write("今日の「予定」と「記録」を、縦の帯グラフで見比べられます。0時からスタートの24時間表示です。")
 
-        with st.container(border=True):
-            st.markdown("### 📝 取り組み記録を入力")
+        today_str_jst = get_now_jst().strftime("%Y/%m/%d")
+        st.caption(f"📅 対象日：{datetime.strptime(today_str_jst, '%Y/%m/%d').strftime('%Y年%m月%d日')}（今日）")
 
-            col_hours, col_mins = st.columns(2)
-            with col_hours:
-                rec_hours = st.number_input("時間", min_value=0, max_value=24, value=0, step=1, key="input_rec_hours")
-            with col_mins:
-                rec_mins = st.number_input("分", min_value=0, max_value=59, value=30, step=1, key="input_rec_mins")
-
-            memo_text = st.text_input("内容（例：数学のワーク、読書、漢字ドリルなど）",
-                                      placeholder="何をしたか記入してください", key="input_rec_memo")
-
-            st.write("")
-            if st.button("💾 カレンダーに同期して記録する", type="primary", use_container_width=True):
-                if rec_hours == 0 and rec_mins == 0:
-                    st.warning("⚠️ 1分以上の時間を指定してください。")
-                elif not memo_text.strip():
-                    st.warning("⚠️ 内容を入力してください。")
-                else:
-                    play_click_sound(delay=0)
-                    now = get_now_jst()
-                    today_date_str = now.strftime("%Y/%m/%d")
-                    now_datetime_str = now.strftime("%Y/%m/%d %H:%M")
-
-                    # 時間表示文字列の作成 (例: 1時間30分 または 45分)
-                    if rec_hours > 0 and rec_mins > 0:
-                        formatted_time_record = f"{rec_hours}時間{rec_mins}分"
-                    elif rec_hours > 0:
-                        formatted_time_record = f"{rec_hours}時間"
-                    else:
-                        formatted_time_record = f"{rec_mins}分"
-
-                    memo_content = memo_text.strip()
-                    log_text = f"⏰{formatted_time_record} 記録！({memo_content})"
-
-                    record_entry = {
-                        "date": now_datetime_str,
-                        "time_str": formatted_time_record,
-                        "memo": memo_content,
-                    }
-
-                    st.session_state.time_records.append(record_entry)
-                    add_sticker_for_date(today_date_str)
-
-                    # カレンダーのメモ欄へ追記・同期
-                    if st.session_state.calendar_notes.get(today_date_str):
-                        st.session_state.calendar_notes[today_date_str] += f"\n{log_text}"
-                    else:
-                        st.session_state.calendar_notes[today_date_str] = log_text
-
-                    st.success(f"🎉 カレンダーに「{log_text}」を記録しました！")
-                    st.rerun()
+        render_schedule_and_events(today_str_jst, editable=True)
 
     # --- お菓子集めステージ ---
     elif st.session_state.page == "candy_page":

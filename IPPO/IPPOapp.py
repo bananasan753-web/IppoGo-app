@@ -320,6 +320,24 @@ def minutes_to_hhmm(total_minutes: int) -> str:
     return f"{h:02d}:{m:02d}"
 
 
+def schedule_time_options(step_minutes: int = 5) -> list:
+    """スケジュール入力用の時刻一覧。5分刻みでスクロール選択できる。"""
+    return [minutes_to_hhmm(m) for m in range(0, 24 * 60, step_minutes)]
+
+
+def schedule_time_selectbox(label: str, value: str, key: str) -> str:
+    """時刻をキーボード入力ではなく、スクロール式の選択欄から選ぶ。"""
+    options = schedule_time_options(5)
+    if value not in options:
+        value = options[0]
+    return st.selectbox(
+        label,
+        options=options,
+        index=options.index(value),
+        key=key,
+    )
+
+
 def render_day_bar_svg(entries: list, bar_width: int = 150, height: int = 720) -> str:
     """
     24時間分の縦長の帯グラフ（0時始まり）をSVGで描画する。
@@ -458,12 +476,12 @@ def render_schedule_and_events(date_str: str, editable: bool):
                     st.markdown(f"#### ✏️ {kind_label}を編集")
                     edit_col_start, edit_col_end = st.columns(2)
                     with edit_col_start:
-                        edit_start = st.time_input(
-                            "開始時刻", value=datetime.strptime(entry["start"], "%H:%M").time(),
+                        edit_start = schedule_time_selectbox(
+                            "開始時刻", entry["start"],
                             key=f"edit_sched_start_{date_str}_{edit_kind}_{edit_index}")
                     with edit_col_end:
-                        edit_end = st.time_input(
-                            "終了時刻", value=datetime.strptime(entry["end"], "%H:%M").time(),
+                        edit_end = schedule_time_selectbox(
+                            "終了時刻", entry["end"],
                             key=f"edit_sched_end_{date_str}_{edit_kind}_{edit_index}")
                     edit_label = st.text_input(
                         "内容（なんでもOK）", value=entry.get("label", ""),
@@ -492,8 +510,8 @@ def render_schedule_and_events(date_str: str, editable: bool):
                             else:
                                 play_click_sound(delay=0)
                                 entry.update({
-                                    "start": edit_start.strftime("%H:%M"),
-                                    "end": edit_end.strftime("%H:%M"),
+                                    "start": edit_start,
+                                    "end": edit_end,
                                     "label": edit_label.strip(),
                                     "color": edit_color,
                                 })
@@ -545,9 +563,13 @@ def render_schedule_and_events(date_str: str, editable: bool):
                 st.markdown(f"#### {form_title}")
                 col_start, col_end = st.columns(2)
                 with col_start:
-                    start_time = st.time_input("開始時刻", key=f"sched_start_{date_str}_{form_kind}")
+                    start_time = schedule_time_selectbox(
+                        "開始時刻", "09:00",
+                        key=f"sched_start_{date_str}_{form_kind}")
                 with col_end:
-                    end_time = st.time_input("終了時刻", key=f"sched_end_{date_str}_{form_kind}")
+                    end_time = schedule_time_selectbox(
+                        "終了時刻", "10:00",
+                        key=f"sched_end_{date_str}_{form_kind}")
                 label_text = st.text_input("内容（なんでもOK）", key=f"sched_label_{date_str}_{form_kind}",
                                            placeholder="例：数学の宿題、読書、休憩 など")
                 color_options = list(SCHEDULE_COLORS.keys())
@@ -566,8 +588,8 @@ def render_schedule_and_events(date_str: str, editable: bool):
                     else:
                         play_click_sound(delay=0)
                         new_entry = {
-                            "start": start_time.strftime("%H:%M"),
-                            "end": end_time.strftime("%H:%M"),
+                            "start": start_time,
+                            "end": end_time,
                             "label": label_text.strip(),
                             "color": color_pick,
                         }

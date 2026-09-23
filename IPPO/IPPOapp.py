@@ -1554,10 +1554,45 @@ elif st.session_state.page in [
         st.title("📊 一日のスケジュール")
         st.write("今日の「予定」と「記録」を、縦の帯グラフで見比べられます。0時からスタートの24時間表示です。")
 
-        today_str_jst = get_now_jst().strftime("%Y/%m/%d")
-        st.caption(f"📅 対象日：{datetime.strptime(today_str_jst, '%Y/%m/%d').strftime('%Y年%m月%d日')}（今日）")
+        today_dt = get_now_jst().date()
+        today_str_jst = today_dt.strftime("%Y/%m/%d")
+        tomorrow_dt = today_dt.fromordinal(today_dt.toordinal() + 1)
+        tomorrow_str_jst = tomorrow_dt.strftime("%Y/%m/%d")
 
-        render_schedule_and_events(today_str_jst, editable=True)
+        # 「今日」と「次の日の予定を立てる」を切り替える
+        if "schedule_view_date" not in st.session_state:
+            st.session_state.schedule_view_date = today_str_jst
+
+        view_date = st.session_state.schedule_view_date
+        is_tomorrow_mode = view_date == tomorrow_str_jst
+        view_label = "次の日の予定を立てる" if is_tomorrow_mode else "今日のスケジュール"
+
+        st.caption(
+            f"📅 対象日：{datetime.strptime(view_date, '%Y/%m/%d').strftime('%Y年%m月%d日')} "
+            f"{'（明日の予定）' if is_tomorrow_mode else '（今日）'}"
+        )
+
+        if not is_tomorrow_mode:
+            if st.button("📅 次の日の予定を立てる", type="primary", use_container_width=True,
+                         key="open_tomorrow_schedule"):
+                play_click_sound(delay=0)
+                st.session_state.schedule_view_date = tomorrow_str_jst
+                st.session_state.schedule_form_open = None
+                st.session_state.schedule_edit_target = None
+                st.session_state.schedule_delete_target = None
+                st.rerun()
+        else:
+            if st.button("⬅️ 今日のスケジュールに戻る", use_container_width=True,
+                         key="back_today_schedule"):
+                play_click_sound(delay=0)
+                st.session_state.schedule_view_date = today_str_jst
+                st.session_state.schedule_form_open = None
+                st.session_state.schedule_edit_target = None
+                st.session_state.schedule_delete_target = None
+                st.rerun()
+            st.info("💡 ここで「予定を立てる」から追加した予定は、そのまま次の日のスケジュールに保存されます。")
+
+        render_schedule_and_events(view_date, editable=True)
 
     # --- お菓子集めステージ ---
     elif st.session_state.page == "candy_page":

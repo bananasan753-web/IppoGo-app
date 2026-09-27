@@ -495,7 +495,7 @@ def render_schedule_clipboard(date_str: str):
                     st.rerun()
 
 
-def render_schedule_and_events(date_str: str, editable: bool):
+def render_schedule_and_events(date_str: str, editable: bool, clipboard_at_bottom: bool = False):
     """
     指定した日の「予定／記録」帯グラフと、隣にIPPOイベントログを表示する。
     editable=True の場合は、予定・記録の追加に加えて既存項目の編集・削除ができる。
@@ -503,7 +503,8 @@ def render_schedule_and_events(date_str: str, editable: bool):
     day_schedule = st.session_state.daily_schedule.setdefault(date_str, {"planned": [], "actual": []})
 
     if editable:
-        render_schedule_clipboard(date_str)
+        if not clipboard_at_bottom:
+            render_schedule_clipboard(date_str)
         col_plan_btn, col_record_btn = st.columns(2)
         with col_plan_btn:
             if st.button("📅 予定を立てる", use_container_width=True, key=f"open_plan_form_{date_str}"):
@@ -696,6 +697,10 @@ def render_schedule_and_events(date_str: str, editable: bool):
                 st.write(f"⏰ {event_time}　{event_label}")
         else:
             st.caption("この日はまだイベントの記録がありません。")
+
+    if editable and clipboard_at_bottom:
+        st.write("---")
+        render_schedule_clipboard(date_str)
 
 
 
@@ -1657,7 +1662,7 @@ elif st.session_state.page in [
                 st.rerun()
             st.info("💡 ここで「予定を立てる」から追加した予定は、そのまま次の日のスケジュールに保存されます。")
 
-        render_schedule_and_events(view_date, editable=True)
+        render_schedule_and_events(view_date, editable=True, clipboard_at_bottom=True)
 
     # --- お菓子集めステージ ---
     elif st.session_state.page == "candy_page":

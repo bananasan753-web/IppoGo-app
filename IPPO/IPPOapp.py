@@ -7,6 +7,7 @@ import os
 import time
 import calendar as cal_module
 import json
+import copy
 from supabase import create_client, Client
 
 # 日本標準時（JST）の定義
@@ -440,6 +441,60 @@ def get_ippo_events_for_date(date_str: str) -> list:
     return events
 
 
+def render_schedule_clipboard(date_str: str):
+    """予定だけをコピーし、別の日へ貼り付ける（記録はコピーしない）。"""
+    schedule = st.session_state.daily_schedule.setdefault(date_str, {"planned": [], "actual": []})
+    clipboard = st.session_state.get("schedule_clipboard")
+    with st.container(border=True):
+        st.markdown("#### 📋 予定のコピー・貼り付け")
+        col_copy, col_paste = st.columns(2)
+        with col_copy:
+            if st.button("📋 この日の予定をコピー", key=f"copy_schedule_{date_str}",
+                         use_container_width=True, disabled=not schedule["planned"]):
+                play_click_sound(delay=0)
+                st.session_state.schedule_clipboard = {
+                    "source_date": date_str,
+                    "planned": copy.deepcopy(schedule["planned"]),
+                }
+                st.rerun()
+        with col_paste:
+            if st.button("📥 コピーした予定を貼り付け", key=f"paste_schedule_{date_str}",
+                         use_container_width=True, disabled=not clipboard):
+                play_click_sound(delay=0)
+                st.session_state.schedule_paste_target = date_str
+                st.rerun()
+        if clipboard:
+            st.caption(f"コピー中：{clipboard['source_date']} の予定 {len(clipboard['planned'])} 件（記録は対象外）")
+        else:
+            st.caption("コピー元の日付で「この日の予定をコピー」を押してください。")
+
+        if st.session_state.get("schedule_paste_target") == date_str and clipboard:
+            st.warning(f"{date_str} に {len(clipboard['planned'])} 件の予定を貼り付けます。")
+            paste_mode = st.radio(
+                "貼り付け方法", ["既存の予定に追加", "既存の予定を置き換え"],
+                key=f"paste_mode_{date_str}",
+            )
+            if paste_mode == "既存の予定を置き換え" and schedule["planned"]:
+                st.warning("この日の既存の予定は消えます。実際の記録は残ります。")
+            confirm_col, cancel_col = st.columns(2)
+            with confirm_col:
+                if st.button("貼り付けを確定", type="primary", use_container_width=True,
+                             key=f"confirm_paste_{date_str}"):
+                    copied = copy.deepcopy(clipboard["planned"])
+                    if paste_mode == "既存の予定を置き換え":
+                        schedule["planned"] = copied
+                    else:
+                        schedule["planned"].extend(copied)
+                    st.session_state.schedule_paste_target = None
+                    save_progress()
+                    st.rerun()
+            with cancel_col:
+                if st.button("キャンセル", use_container_width=True,
+                             key=f"cancel_paste_{date_str}"):
+                    st.session_state.schedule_paste_target = None
+                    st.rerun()
+
+
 def render_schedule_and_events(date_str: str, editable: bool):
     """
     指定した日の「予定／記録」帯グラフと、隣にIPPOイベントログを表示する。
@@ -448,6 +503,7 @@ def render_schedule_and_events(date_str: str, editable: bool):
     day_schedule = st.session_state.daily_schedule.setdefault(date_str, {"planned": [], "actual": []})
 
     if editable:
+        render_schedule_clipboard(date_str)
         col_plan_btn, col_record_btn = st.columns(2)
         with col_plan_btn:
             if st.button("📅 予定を立てる", use_container_width=True, key=f"open_plan_form_{date_str}"):
@@ -516,6 +572,7 @@ def render_schedule_and_events(date_str: str, editable: bool):
                                     "color": edit_color,
                                 })
                                 st.session_state.schedule_edit_target = None
+                                save_progress()
                                 st.rerun()
                     with delete_col:
                         if st.button("🗑️ 削除", use_container_width=True,
@@ -549,6 +606,7 @@ def render_schedule_and_events(date_str: str, editable: bool):
                             entries.pop(delete_index)
                             st.session_state.schedule_delete_target = None
                             st.session_state.schedule_edit_target = None
+                            save_progress()
                             st.rerun()
                     with cancel_col:
                         if st.button("やめる", use_container_width=True,
@@ -595,6 +653,7 @@ def render_schedule_and_events(date_str: str, editable: bool):
                         }
                         day_schedule[form_kind].append(new_entry)
                         st.session_state.schedule_form_open = None
+                        save_progress()
                         st.rerun()
 
     chart_col1, chart_col2, event_col = st.columns([1, 1, 1.35])
@@ -1404,6 +1463,10 @@ elif st.session_state.page in [
                                      type="primary" if is_selected else "secondary"):
                             play_click_sound(delay=0)
                             st.session_state.selected_calendar_date = cell_date_str
+                            st.session_state.schedule_form_open = None
+                            st.session_state.schedule_edit_target = None
+                            st.session_state.schedule_delete_target = None
+                            st.session_state.schedule_paste_target = None
 
         st.write("---")
         selected_date_str = st.session_state.selected_calendar_date
@@ -1487,9 +1550,9 @@ elif st.session_state.page in [
 
         st.write("---")
 
-        # 📊 その日のスケジュール（予定／記録の帯グラフ）を閲覧のみで表示
+        # 📊 選択した日のスケジュールは過去の日付も編集可能
         st.markdown("### 📊 その日のスケジュール")
-        render_schedule_and_events(selected_date_str, editable=False)
+        render_schedule_and_events(selected_date_str, editable=True)
 
         st.write("---")
 
@@ -1552,7 +1615,7 @@ elif st.session_state.page in [
     # --- 一日のスケジュール画面 ---
     elif st.session_state.page == "schedule_page":
         st.title("📊 一日のスケジュール")
-        st.write("今日の「予定」と「記録」を、縦の帯グラフで見比べられます。0時からスタートの24時間表示です。")
+        st.write("「予定」と「記録」を縦の帯グラフで見比べられます。予定をコピーして明日へ貼り付けることもできます。")
 
         today_dt = get_now_jst().date()
         today_str_jst = today_dt.strftime("%Y/%m/%d")
@@ -1580,6 +1643,7 @@ elif st.session_state.page in [
                 st.session_state.schedule_form_open = None
                 st.session_state.schedule_edit_target = None
                 st.session_state.schedule_delete_target = None
+                st.session_state.schedule_paste_target = None
                 st.rerun()
         else:
             if st.button("⬅️ 今日のスケジュールに戻る", use_container_width=True,
@@ -1589,6 +1653,7 @@ elif st.session_state.page in [
                 st.session_state.schedule_form_open = None
                 st.session_state.schedule_edit_target = None
                 st.session_state.schedule_delete_target = None
+                st.session_state.schedule_paste_target = None
                 st.rerun()
             st.info("💡 ここで「予定を立てる」から追加した予定は、そのまま次の日のスケジュールに保存されます。")
 

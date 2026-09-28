@@ -1685,15 +1685,39 @@ elif st.session_state.page in [
     elif st.session_state.page == "candy_page":
         st.title("🍬 魔法のお菓子瓶ステージ")
 
-        st.markdown("### 🏺 まずは貯めるお菓子瓶のサイズを決めよう！")
-        jar_option = st.selectbox("どの瓶に貯める？", [30, 50, 100],
-                                  format_func=lambda x: f"小さめの瓶（{x}個入り）" if x == 30 else (
-                                      f"普通の瓶（{x}個入り）" if x == 50 else f"特大の瓶（{x}個入り）"))
-        st.session_state.jar_capacity = jar_option
+        # 選択した瓶の大きさは保存済みの jar_capacity を使用し、画面を開き直しても維持する。
+        jar_names = {30: "小さめの瓶", 50: "普通の瓶", 100: "特大の瓶"}
+        current_capacity = st.session_state.jar_capacity
+        if current_capacity not in jar_names:
+            current_capacity = 30
+            st.session_state.jar_capacity = current_capacity
+        st.markdown(f"### 🏺 挑戦中：{jar_names[current_capacity]}（{current_capacity}個入り）")
+        st.caption("選んだ瓶は完成後もそのまま！ 別の大きさにしたいときだけ変更できます。")
 
-        if jar_option != st.session_state.last_jar_capacity:
-            st.session_state.jar_full_sound_played = False
-            st.session_state.last_jar_capacity = jar_option
+        if st.button("⚙️ 瓶の大きさを変更する", key="open_jar_size_change"):
+            st.session_state.show_jar_size_change = not st.session_state.get("show_jar_size_change", False)
+        if st.session_state.get("show_jar_size_change", False):
+            with st.container(border=True):
+                jar_option = st.selectbox(
+                    "変更後の瓶の大きさ", [30, 50, 100],
+                    index=[30, 50, 100].index(current_capacity),
+                    format_func=lambda x: f"{jar_names[x]}（{x}個入り）",
+                    key="jar_size_change_choice",
+                )
+                st.info(f"今まで集めたお菓子 {len(st.session_state.jar_candies)} 個はそのまま引き継ぎます。")
+                change_col, cancel_col = st.columns(2)
+                with change_col:
+                    if st.button("この大きさに変更", type="primary", key="confirm_jar_size_change"):
+                        st.session_state.jar_capacity = jar_option
+                        st.session_state.last_jar_capacity = jar_option
+                        st.session_state.jar_full_sound_played = False
+                        st.session_state.show_jar_size_change = False
+                        save_progress()
+                        st.rerun()
+                with cancel_col:
+                    if st.button("キャンセル", key="cancel_jar_size_change"):
+                        st.session_state.show_jar_size_change = False
+                        st.rerun()
 
         st.write("---")
 
@@ -1770,6 +1794,7 @@ elif st.session_state.page in [
                     })
                     st.session_state.jar_candies = []
                     st.session_state.jar_full_sound_played = False
+                    save_progress()
 
             st.progress(min(current_count / capacity, 1.0))
 
@@ -1825,6 +1850,7 @@ elif st.session_state.page in [
                         if st.session_state.temp_candy_count <= 0:
                             st.session_state.show_candy_buttons = False
                             st.session_state.praise_message = ""
+                        save_progress()
                         st.rerun()
             else:
                 st.caption("クエストを達成すると、ここに飴ボタンが出現するよ！")

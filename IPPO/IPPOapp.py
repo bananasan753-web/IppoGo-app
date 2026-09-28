@@ -322,21 +322,38 @@ def minutes_to_hhmm(total_minutes: int) -> str:
 
 
 def schedule_time_options(step_minutes: int = 5) -> list:
-    """スケジュール入力用の時刻一覧。5分刻みでスクロール選択できる。"""
-    return [minutes_to_hhmm(m) for m in range(0, 24 * 60, step_minutes)]
+    """分の候補（通常は5分刻み）。"""
+    return list(range(0, 60, step_minutes))
 
 
 def schedule_time_selectbox(label: str, value: str, key: str) -> str:
-    """時刻をキーボード入力ではなく、スクロール式の選択欄から選ぶ。"""
-    options = schedule_time_options(5)
-    if value not in options:
-        value = options[0]
-    return st.selectbox(
-        label,
-        options=options,
-        index=options.index(value),
-        key=key,
-    )
+    """開始・終了時刻を「時」「分」の2つの選択欄で指定する。"""
+    try:
+        initial_hour, initial_minute = map(int, str(value).split(":")[:2])
+        if not (0 <= initial_hour <= 23 and 0 <= initial_minute <= 59):
+            raise ValueError("invalid time")
+    except (ValueError, TypeError):
+        initial_hour, initial_minute = 0, 0
+
+    # 過去に1分単位で登録した時刻も、編集時に失わないようにする。
+    minute_options = schedule_time_options(5)
+    if initial_minute not in minute_options:
+        minute_options = sorted(minute_options + [initial_minute])
+
+    st.markdown(f"**{label}**")
+    hour_col, minute_col = st.columns(2)
+    with hour_col:
+        selected_hour = st.selectbox(
+            "時", options=list(range(24)), index=initial_hour,
+            format_func=lambda hour: f"{hour:02d} 時", key=f"{key}_hour",
+        )
+    with minute_col:
+        selected_minute = st.selectbox(
+            "分", options=minute_options,
+            index=minute_options.index(initial_minute),
+            format_func=lambda minute: f"{minute:02d} 分", key=f"{key}_minute",
+        )
+    return f"{selected_hour:02d}:{selected_minute:02d}"
 
 
 def render_day_bar_svg(entries: list, bar_width: int = 150, height: int = 720) -> str:

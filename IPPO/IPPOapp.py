@@ -497,6 +497,7 @@ def render_schedule_clipboard(date_str: str):
             with confirm_col:
                 if st.button("貼り付けを確定", type="primary", use_container_width=True,
                              key=f"confirm_paste_{date_str}"):
+                    play_click_sound(delay=0)
                     copied = copy.deepcopy(clipboard["planned"])
                     if paste_mode == "既存の予定を置き換え":
                         schedule["planned"] = copied
@@ -508,6 +509,7 @@ def render_schedule_clipboard(date_str: str):
             with cancel_col:
                 if st.button("キャンセル", use_container_width=True,
                              key=f"cancel_paste_{date_str}"):
+                    play_click_sound(delay=0)
                     st.session_state.schedule_paste_target = None
                     st.rerun()
 
@@ -603,6 +605,7 @@ def render_schedule_and_events(date_str: str, editable: bool, clipboard_at_botto
                     with cancel_col:
                         if st.button("キャンセル", use_container_width=True,
                                      key=f"cancel_sched_edit_{date_str}_{edit_kind}_{edit_index}"):
+                            play_click_sound(delay=0)
                             st.session_state.schedule_edit_target = None
                             st.rerun()
 
@@ -629,6 +632,7 @@ def render_schedule_and_events(date_str: str, editable: bool, clipboard_at_botto
                     with cancel_col:
                         if st.button("やめる", use_container_width=True,
                                      key=f"cancel_sched_delete_{date_str}_{delete_kind}_{delete_index}"):
+                            play_click_sound(delay=0)
                             st.session_state.schedule_delete_target = None
                             st.rerun()
 
@@ -738,31 +742,34 @@ _achieve_sound_b64 = load_sound_base64(ACHIEVE_SOUND_PATH)
 _jar_full_sound_b64 = load_sound_base64(JAR_FULL_SOUND_PATH)
 
 
-def play_click_sound(delay: float = 1.2):
-    if _sound_b64 is None:
-        return
-    sound_html = f'<audio autoplay="true" style="display:none;"><source src="data:audio/mp3;base64,{_sound_b64}" type="audio/mp3"></audio>'
-    st.components.v1.html(sound_html, height=0)
-    if delay:
-        time.sleep(delay)
+def queue_sound(kind: str):
+    """再実行で消えないよう、次回描画する効果音を予約する。"""
+    st.session_state.pending_sound = kind
+
+
+def play_click_sound(delay: float = 0):
+    queue_sound("click")
 
 
 def play_achieve_sound(delay: float = 0):
-    if _achieve_sound_b64 is None:
-        return
-    sound_html = f'<audio autoplay="true" style="display:none;"><source src="data:audio/mp3;base64,{_achieve_sound_b64}" type="audio/mp3"></audio>'
-    st.components.v1.html(sound_html, height=0)
-    if delay:
-        time.sleep(delay)
+    queue_sound("achieve")
 
 
 def play_jar_full_sound(delay: float = 0):
-    if _jar_full_sound_b64 is None:
-        return
-    sound_html = f'<audio autoplay="true" style="display:none;"><source src="data:audio/mp3;base64,{_jar_full_sound_b64}" type="audio/mp3"></audio>'
-    st.components.v1.html(sound_html, height=0)
-    if delay:
-        time.sleep(delay)
+    queue_sound("jar_full")
+
+
+def render_pending_sound():
+    """ボタン押下後の再描画で音を鳴らす。"""
+    kind = st.session_state.pop("pending_sound", None)
+    audio = {"click": _sound_b64, "achieve": _achieve_sound_b64,
+             "jar_full": _jar_full_sound_b64}.get(kind)
+    if audio:
+        st.components.v1.html(
+            f'<audio autoplay playsinline style="display:none">'
+            f'<source src="data:audio/mpeg;base64,{audio}" type="audio/mpeg"></audio>',
+            height=0,
+        )
 
 
 # =====================================================
@@ -978,6 +985,8 @@ if "calendar_view_month" not in st.session_state:
     st.session_state.calendar_view_month = now_jst.month
 if "selected_calendar_date" not in st.session_state:
     st.session_state.selected_calendar_date = now_jst.strftime("%Y/%m/%d")
+
+render_pending_sound()
 
 # =====================================================
 # 2. 【タイトル画面】
@@ -1288,7 +1297,7 @@ elif st.session_state.page in [
                                 st.rerun()
                         else:
                             if st.button("🏆 最終目標を達成した！", type="primary", key=f"complete_target_{i}"):
-                                play_jar_full_sound()
+                                play_achieve_sound()
                                 target_data["completed"] = True
                                 now = get_now_jst()
                                 now_datetime_str = now.strftime("%Y/%m/%d %H:%M")
@@ -1695,6 +1704,7 @@ elif st.session_state.page in [
         st.caption("選んだ瓶は完成後もそのまま！ 別の大きさにしたいときだけ変更できます。")
 
         if st.button("⚙️ 瓶の大きさを変更する", key="open_jar_size_change"):
+            play_click_sound(delay=0)
             st.session_state.show_jar_size_change = not st.session_state.get("show_jar_size_change", False)
         if st.session_state.get("show_jar_size_change", False):
             with st.container(border=True):
@@ -1708,6 +1718,7 @@ elif st.session_state.page in [
                 change_col, cancel_col = st.columns(2)
                 with change_col:
                     if st.button("この大きさに変更", type="primary", key="confirm_jar_size_change"):
+                        play_click_sound(delay=0)
                         st.session_state.jar_capacity = jar_option
                         st.session_state.last_jar_capacity = jar_option
                         st.session_state.jar_full_sound_played = False
@@ -1716,6 +1727,7 @@ elif st.session_state.page in [
                         st.rerun()
                 with cancel_col:
                     if st.button("キャンセル", key="cancel_jar_size_change"):
+                        play_click_sound(delay=0)
                         st.session_state.show_jar_size_change = False
                         st.rerun()
 
@@ -1761,6 +1773,8 @@ elif st.session_state.page in [
                     st.session_state.temp_candy_count = chosen_candy_power
                     st.session_state.last_completed_task = f"【{selected_target_title} - {chosen_lv_key}】 {chosen_task_text}"
                     add_sticker_for_date(get_now_jst().strftime("%Y/%m/%d"))
+                    save_progress()
+                    st.rerun()
                 else:
                     st.error("⚠️ 達成する目標を上のメニューから選んでください！")
 
@@ -1779,22 +1793,11 @@ elif st.session_state.page in [
                 else:
                     st.markdown(render_candy_jar_svg(st.session_state.jar_candies, capacity), unsafe_allow_html=True)
 
-            if current_count >= capacity:
+            # 風船は瓶が完成した直後の一度だけ表示する。
+            if st.session_state.pop("jar_just_completed", False):
                 st.markdown("## 🎉 おめでとう！！°˖✧◝(⁰▿⁰)◜✧˖°")
+                st.success("お菓子の瓶がいっぱいになりました！ 次の瓶も同じ大きさで挑戦できるよ！")
                 st.balloons()
-                st.success(f"素晴らしい！！！{capacity}個のお菓子瓶が完全に満杯になりました！！！")
-                if not st.session_state.jar_full_sound_played:
-                    play_jar_full_sound()
-                    st.session_state.jar_full_sound_played = True
-                    st.session_state.jar_complete_log.append({
-                        "date": get_now_jst().strftime("%Y/%m/%d %H:%M"),
-                        "capacity": capacity,
-                        "size_label": JAR_SIZE_LABELS.get(capacity, "?"),
-                        "candies": st.session_state.jar_candies.copy(),
-                    })
-                    st.session_state.jar_candies = []
-                    st.session_state.jar_full_sound_played = False
-                    save_progress()
 
             st.progress(min(current_count / capacity, 1.0))
 
@@ -1831,7 +1834,6 @@ elif st.session_state.page in [
                 for candy in candies_spec:
                     if st.button(f"{candy['emoji']}\n\n{candy['label']}", use_container_width=True,
                                  key=f"btn_{candy['emoji']}"):
-                        play_click_sound()
                         current_time_str = get_now_jst().strftime("%Y/%m/%d %H:%M")
 
                         if len(st.session_state.jar_candies) < st.session_state.jar_capacity:
@@ -1842,14 +1844,27 @@ elif st.session_state.page in [
                             }
                             st.session_state.jar_candies.append(new_candy)
                             st.session_state.all_candy_log.append(new_candy)
-
-                        st.balloons()
-                        st.toast(f"{candy['emoji']} を瓶に入れたよ！やったね！")
-                        st.session_state.temp_candy_count -= 1
-
-                        if st.session_state.temp_candy_count <= 0:
-                            st.session_state.show_candy_buttons = False
-                            st.session_state.praise_message = ""
+                            if len(st.session_state.jar_candies) == st.session_state.jar_capacity:
+                                completed_capacity = st.session_state.jar_capacity
+                                st.session_state.jar_complete_log.append({
+                                    "date": current_time_str,
+                                    "capacity": completed_capacity,
+                                    "size_label": JAR_SIZE_LABELS.get(completed_capacity, "?"),
+                                    "candies": copy.deepcopy(st.session_state.jar_candies),
+                                })
+                                st.session_state.jar_candies = []
+                                st.session_state.jar_just_completed = True
+                                # 瓶の完成時はクリック音より歓声・拍手を優先。
+                                play_jar_full_sound()
+                            else:
+                                play_click_sound(delay=0)
+                            st.toast(f"{candy['emoji']} を瓶に入れたよ！")
+                            st.session_state.temp_candy_count -= 1
+                            if st.session_state.temp_candy_count <= 0:
+                                st.session_state.show_candy_buttons = False
+                                st.session_state.praise_message = ""
+                        else:
+                            st.warning("瓶がいっぱいです。")
                         save_progress()
                         st.rerun()
             else:

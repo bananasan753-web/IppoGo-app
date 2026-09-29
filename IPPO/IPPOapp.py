@@ -106,8 +106,8 @@ AQUA_TANK_LEVELS = [
 ]
 
 AQUA_FOOD = {
-    "normal": {"name": "通常餌", "emoji": "🫧", "price": 2, "feed_points": 1, "pack": 10},
-    "premium": {"name": "高級餌", "emoji": "✨", "price": 5, "feed_points": 3, "pack": 5},
+    "normal": {"name": "通常餌", "emoji": "🫧", "price": 2, "feed_points": 1, "pack": 3},
+    "premium": {"name": "高級餌", "emoji": "✨", "price": 5, "feed_points": 3, "pack": 3},
     "bundle": {"name": "みんなの餌の塊", "emoji": "🍙", "price": 8, "feed_points": 3, "pack": 1},
 }
 

@@ -249,6 +249,7 @@ PERSISTENT_KEYS = [
     "sticker_type",
     "sticker_color",
     "daily_schedule",  # 一日のスケジュール（予定／記録）
+    "schedule_templates",  # 自分用スケジュールテンプレート（最大5件）
     "aqua_points",
     "aqua_reward_queue",
     "aqua_fish",
@@ -278,6 +279,7 @@ PERSISTENT_DEFAULTS = {
     "sticker_type": "circle",
     "sticker_color": "赤",
     "daily_schedule": {},
+    "schedule_templates": [],
     "aqua_points": 0,
     "aqua_reward_queue": [],
     "aqua_fish": [],
@@ -688,6 +690,132 @@ def render_schedule_clipboard(date_str: str):
                     st.rerun()
 
 
+def render_schedule_templates(date_str: str):
+    """最大5件のテンプレートを編集し、選択日の予定・記録へ独立して貼り付ける。"""
+    templates = st.session_state.schedule_templates
+    day = st.session_state.daily_schedule.setdefault(date_str, {"planned": [], "actual": []})
+    with st.expander("🗂️ 自分だけの一日テンプレート（最大5つ）", expanded=False):
+        st.caption("いつもの一日の流れを保存して、好きな日の予定にも記録にも使えます。")
+        if len(templates) < 5:
+            with st.form(f"template_create_{date_str}"):
+                new_name = st.text_input("新しいテンプレート名", placeholder="例：平日の勉強日", key=f"template_new_name_{date_str}")
+                creation = st.radio("作り方", ["空のテンプレートを作る", "この日の予定から作る", "この日の記録から作る"], key=f"template_creation_{date_str}")
+                if st.form_submit_button("➕ テンプレートを作成"):
+                    if not new_name.strip():
+                        st.error("テンプレート名を入力してください。")
+                    elif len(templates) >= 5:
+                        st.warning("テンプレートは5つまでです。")
+                    else:
+                        source = {"空のテンプレートを作る": None, "この日の予定から作る": "planned", "この日の記録から作る": "actual"}[creation]
+                        entries = copy.deepcopy(day[source]) if source else []
+                        templates.append({"id": get_now_jst().strftime("%Y%m%d%H%M%S%f"), "name": new_name.strip(), "entries": entries})
+                        play_click_sound(delay=0)
+                        save_progress()
+                        st.rerun()
+        else:
+            st.info("5つ登録済みです。新しく作るには、不要なテンプレートを削除してください。")
+
+        if not templates:
+            st.caption("まだテンプレートはありません。")
+            return
+
+        names = [f"{i + 1}. {t['name']}（{len(t.get('entries', []))}件）" for i, t in enumerate(templates)]
+        chosen = st.selectbox("編集・貼り付けするテンプレート", range(len(templates)), format_func=lambda i: names[i], key=f"template_choose_{date_str}")
+        template = templates[chosen]
+        template_id = template.get("id", str(chosen))
+        entries = template.setdefault("entries", [])
+        with st.form(f"template_rename_{date_str}_{template_id}"):
+            renamed = st.text_input("テンプレート名を変更", value=template["name"])
+            if st.form_submit_button("名前を保存"):
+                if renamed.strip():
+                    template["name"] = renamed.strip()
+                    save_progress()
+                    st.rerun()
+                else:
+                    st.error("名前を入力してください。")
+
+        st.markdown("**🕒 テンプレートの内容**")
+        if not entries:
+            st.caption("まだ項目がありません。下のフォームから追加できます。")
+        for i, entry in enumerate(entries):
+            with st.expander(f"{entry['start']}〜{entry['end']}　{entry.get('label', '')}", expanded=False):
+                with st.form(f"template_edit_{date_str}_{template_id}_{i}"):
+                    label = st.text_input("内容", value=entry.get("label", ""))
+                    start = st.text_input("開始時刻（HH:MM）", value=entry["start"])
+                    end = st.text_input("終了時刻（HH:MM）", value=entry["end"])
+                    color_options = list(SCHEDULE_COLORS)
+                    current_color = entry.get("color", "#4CAF50")
+                    current_idx = next((j for j, name in enumerate(color_options) if SCHEDULE_COLORS[name] == current_color), 3)
+                    color_name = st.selectbox("色", color_options, index=current_idx)
+                    save_item = st.form_submit_button("💾 この項目を保存")
+                    delete_item = st.form_submit_button("🗑️ この項目を削除")
+                    if delete_item:
+                        entries.pop(i)
+                        save_progress()
+                        st.rerun()
+                    if save_item:
+                        if not label.strip() or not valid_template_time_range(start, end):
+                            st.error("内容と正しい時刻を入力してください（開始は終了より前）。")
+                        else:
+                            entries[i] = {"label": label.strip(), "start": start, "end": end, "color": SCHEDULE_COLORS[color_name]}
+                            entries.sort(key=lambda e: e["start"])
+                            save_progress()
+                            st.rerun()
+
+        with st.form(f"template_add_{date_str}_{template_id}"):
+            st.markdown("**➕ テンプレートに予定を追加**")
+            label = st.text_input("内容", placeholder="例：薬理の問題演習")
+            c1, c2 = st.columns(2)
+            with c1:
+                start = st.text_input("開始（HH:MM）", value="09:00")
+            with c2:
+                end = st.text_input("終了（HH:MM）", value="10:00")
+            color_name = st.selectbox("色", list(SCHEDULE_COLORS), index=3)
+            if st.form_submit_button("➕ 項目を追加"):
+                if not label.strip() or not valid_template_time_range(start, end):
+                    st.error("内容と正しい時刻を入力してください（開始は終了より前）。")
+                else:
+                    entries.append({"label": label.strip(), "start": start, "end": end, "color": SCHEDULE_COLORS[color_name]})
+                    entries.sort(key=lambda e: e["start"])
+                    save_progress()
+                    st.rerun()
+
+        st.divider()
+        st.markdown(f"**📥 『{template['name']}』を {date_str} に貼り付け**")
+        with st.form(f"template_paste_{date_str}_{template_id}"):
+            destination = st.radio("貼り付け先", ["📅 予定", "✅ 記録"], horizontal=True)
+            paste_mode = st.radio("貼り付け方法", ["既存の内容に追加", "既存の内容を置き換え"])
+            st.caption("置き換えを選ぶと、選んだ貼り付け先の内容だけが置き換わります。もう一方は残ります。")
+            if st.form_submit_button("📋 テンプレートを貼り付け", disabled=not entries):
+                key = "planned" if destination == "📅 予定" else "actual"
+                copied = copy.deepcopy(entries)
+                if paste_mode == "既存の内容を置き換え":
+                    day[key] = copied
+                else:
+                    day[key].extend(copied)
+                    day[key].sort(key=lambda e: e["start"])
+                play_click_sound(delay=0)
+                save_progress()
+                st.rerun()
+
+        with st.form(f"template_delete_{date_str}_{template_id}"):
+            delete_confirm = st.checkbox(f"『{template['name']}』を削除する")
+            if st.form_submit_button("🗑️ テンプレートを削除", disabled=not delete_confirm):
+                templates.pop(chosen)
+                save_progress()
+                st.rerun()
+
+
+def valid_template_time_range(start: str, end: str) -> bool:
+    """時刻がHH:MM形式かつ同一日内で開始＜終了か検証する。"""
+    try:
+        a = datetime.strptime(start, "%H:%M")
+        b = datetime.strptime(end, "%H:%M")
+        return a < b and len(start) == 5 and len(end) == 5
+    except (ValueError, TypeError):
+        return False
+
+
 def render_schedule_and_events(date_str: str, editable: bool, clipboard_at_bottom: bool = False):
     """
     指定した日の「予定／記録」帯グラフと、隣にIPPOイベントログを表示する。
@@ -894,6 +1022,9 @@ def render_schedule_and_events(date_str: str, editable: bool, clipboard_at_botto
     if editable and clipboard_at_bottom:
         st.write("---")
         render_schedule_clipboard(date_str)
+
+    if editable:
+        render_schedule_templates(date_str)
 
 
 

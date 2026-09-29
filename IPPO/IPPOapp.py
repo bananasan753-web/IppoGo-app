@@ -692,7 +692,10 @@ def render_schedule_clipboard(date_str: str):
 
 def render_schedule_templates(date_str: str):
     """最大5件のテンプレートを編集し、選択日の予定・記録へ独立して貼り付ける。"""
-    templates = st.session_state.schedule_templates
+    templates = st.session_state.setdefault("schedule_templates", [])
+    if templates is None:
+        templates = []
+        st.session_state.schedule_templates = templates
     day = st.session_state.daily_schedule.setdefault(date_str, {"planned": [], "actual": []})
     with st.expander("🗂️ 自分だけの一日テンプレート（最大5つ）", expanded=False):
         st.caption("いつもの一日の流れを保存して、好きな日の予定にも記録にも使えます。")
@@ -1135,6 +1138,8 @@ if "active_course_key" not in st.session_state:
 # 📊 一日のスケジュール（予定／記録）
 if "daily_schedule" not in st.session_state:
     st.session_state.daily_schedule = {}
+if "schedule_templates" not in st.session_state or st.session_state.schedule_templates is None:
+    st.session_state.schedule_templates = []
 if "schedule_form_open" not in st.session_state:
     st.session_state.schedule_form_open = None
 if "schedule_edit_target" not in st.session_state:

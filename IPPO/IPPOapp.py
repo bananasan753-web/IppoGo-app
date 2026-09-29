@@ -108,7 +108,7 @@ AQUA_TANK_LEVELS = [
 AQUA_FOOD = {
     "normal": {"name": "通常餌", "emoji": "🫧", "price": 2, "feed_points": 1, "pack": 10},
     "premium": {"name": "高級餌", "emoji": "✨", "price": 5, "feed_points": 3, "pack": 5},
-    "bundle": {"name": "みんなの餌の塊", "emoji": "🍙", "price": 8, "feed_points": 5, "pack": 1},
+    "bundle": {"name": "みんなの餌の塊", "emoji": "🍙", "price": 8, "feed_points": 3, "pack": 1},
 }
 
 
@@ -2243,7 +2243,7 @@ elif st.session_state.page in [
 
             st.write("---")
             st.markdown("#### 🍙 みんなの餌の塊")
-            st.caption("水槽にいるすべての魚に、1匹あたり5成長ポイントを一度にあげられます。")
+            st.caption("水槽にいるすべての魚に、1匹あたり3成長ポイントを一度にあげられます。")
             st.write(f"持っている餌の塊：**{bundle_stock}個**")
             if st.button("🍙 水槽の魚全員にあげる", disabled=bundle_stock == 0,
                          key="aqua_feed_bundle", use_container_width=True):

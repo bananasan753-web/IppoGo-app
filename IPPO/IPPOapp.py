@@ -207,6 +207,7 @@ PERSISTENT_KEYS = [
     "aqua_decorations",
     "aqua_food_inventory",
     "aqua_feed_log",
+    "aqua_goal_log",
 ]
 
 PERSISTENT_DEFAULTS = {
@@ -234,6 +235,7 @@ PERSISTENT_DEFAULTS = {
     "aqua_decorations": [],
     "aqua_food_inventory": {"normal": 0, "premium": 0},
     "aqua_feed_log": [],
+    "aqua_goal_log": [],
 }
 
 
@@ -1037,6 +1039,8 @@ if "aqua_food_inventory" not in st.session_state:
     st.session_state.aqua_food_inventory = {"normal": 0, "premium": 0}
 if "aqua_feed_log" not in st.session_state:
     st.session_state.aqua_feed_log = []
+if "aqua_goal_log" not in st.session_state:
+    st.session_state.aqua_goal_log = []
 
 STICKER_CIRCLE_COLORS = {
     "赤": "🔴", "橙": "🟠", "黄": "🟡", "緑": "🟢",
@@ -1273,7 +1277,7 @@ elif st.session_state.page == "menu_select":
     st.markdown("## 🎯 挑戦する項目を選んでください：")
     st.write("")
 
-    col1, col2, col3, col4, col5 = st.columns(5)
+    col1, col2, col3, col4 = st.columns(4)
     with col1:
         if st.button("🎯\n\n目標登録", use_container_width=True, key="menu_target"):
             play_click_sound()
@@ -1293,11 +1297,6 @@ elif st.session_state.page == "menu_select":
         if st.button("📊\n\n一日のスケジュール", use_container_width=True, key="menu_schedule"):
             play_click_sound()
             st.session_state.page = "schedule_page"
-            st.rerun()
-    with col5:
-        if st.button("🐠\n\n水族館", use_container_width=True, key="menu_aquarium"):
-            play_click_sound()
-            st.session_state.page = "aquarium_page"
             st.rerun()
 
 # =====================================================
@@ -1329,10 +1328,6 @@ elif st.session_state.page in [
         if st.button("📊 一日のスケジュールへ"):
             play_click_sound()
             st.session_state.page = "schedule_page"
-            st.rerun()
-        if st.button("🐠 水族館へ"):
-            play_click_sound()
-            st.session_state.page = "aquarium_page"
             st.rerun()
         st.write("---")
         if st.button("↩️ メニューセレクトに戻る"):
@@ -1762,26 +1757,21 @@ elif st.session_state.page in [
         st.title("⚔️ ステージセレクト")
         st.markdown("### 🎮 挑戦するステージを選んでください：")
         st.write("")
-        scol1, scol2, scol3, scol4 = st.columns(4)
+        scol1, scol2, scol3 = st.columns(3)
         with scol1:
             if st.button("🍬\n\nお菓子集め", use_container_width=True, key="stage_candy"):
                 play_click_sound()
                 st.session_state.page = "candy_page"
                 st.rerun()
         with scol2:
-            if st.button("🏃‍♂️\n\nランニング", use_container_width=True, key="stage_running"):
-                play_click_sound()
-                st.session_state.page = "running_page"
-                st.rerun()
-        with scol3:
-            if st.button("📊\n\n一日のスケジュール", use_container_width=True, key="stage_schedule"):
-                play_click_sound()
-                st.session_state.page = "schedule_page"
-                st.rerun()
-        with scol4:
             if st.button("🐠\n\n水族館", use_container_width=True, key="stage_aquarium"):
                 play_click_sound()
                 st.session_state.page = "aquarium_page"
+                st.rerun()
+        with scol3:
+            if st.button("🏃‍♂️\n\nランニング", use_container_width=True, key="stage_running"):
+                play_click_sound()
+                st.session_state.page = "running_page"
                 st.rerun()
 
     # --- 一日のスケジュール画面 ---
@@ -1910,7 +1900,6 @@ elif st.session_state.page in [
                     st.session_state.show_candy_buttons = True
                     st.session_state.temp_candy_count = chosen_candy_power
                     st.session_state.last_completed_task = f"【{selected_target_title} - {chosen_lv_key}】 {chosen_task_text}"
-                    add_aqua_reward(chosen_candy_power, "お菓子集め")
                     add_sticker_for_date(get_now_jst().strftime("%Y/%m/%d"))
                 else:
                     st.error("⚠️ 達成する目標を上のメニューから選んでください！")
@@ -2025,41 +2014,42 @@ elif st.session_state.page in [
             st.metric("🪸 飾り", len(st.session_state.aqua_decorations))
 
         st.write("---")
-        st.markdown("### 🔄 目標Lv.をアクアポイントに交換")
-        if st.session_state.aqua_reward_queue:
-            st.info("目標のLv.達成で交換券が貯まっています。Lv.1〜Lv.5は、それぞれ1回につき1アクアポイントです！")
-            reward_counts = {lv: 0 for lv in range(1, 6)}
-            for reward in st.session_state.aqua_reward_queue:
-                reward_counts[int(reward.get("level", 1))] += 1
-            cols = st.columns(5)
-            for lv, col in zip(range(1, 6), cols):
-                with col:
-                    st.write(f"**Lv.{lv}**")
-                    st.write(f"🎟️ {reward_counts[lv]}枚")
-                    if reward_counts[lv] and st.button(f"→ {reward_counts[lv]} AP", key=f"exchange_aqua_{lv}", use_container_width=True):
-                        play_click_sound(delay=0)
-                        keep = []
-                        exchanged = 0
-                        for reward in st.session_state.aqua_reward_queue:
-                            if int(reward.get("level", 1)) == lv and exchanged < reward_counts[lv]:
-                                exchanged += 1
-                            else:
-                                keep.append(reward)
-                        st.session_state.aqua_reward_queue = keep
-                        st.session_state.aqua_points += exchanged
-                        save_progress()
-                        st.success(f"Lv.{lv}の交換券 {exchanged}枚 → アクアポイント{exchanged}pt！")
-                        st.rerun()
-            if st.button("🎟️ 交換券をすべてAPに交換", type="primary", use_container_width=True, key="exchange_all_aqua"):
-                play_click_sound(delay=0)
-                exchanged = len(st.session_state.aqua_reward_queue)
-                st.session_state.aqua_points += exchanged
-                st.session_state.aqua_reward_queue = []
-                save_progress()
-                st.success(f"🎉 {exchanged}枚を交換して、アクアポイントを{exchanged}pt獲得！")
-                st.rerun()
+        st.subheader("🏆 達成した目標を選ぼう！")
+        st.caption("水族館ステージで達成した目標は、Lv.1〜Lv.5のどれでも1回につき1アクアポイント！ お菓子集め・ランニングの達成とは別々に記録します。")
+        if not st.session_state.target_list:
+            st.warning("⚠️ まだ目標が登録されていません！『目標登録』で目標を作ってね！")
         else:
-            st.caption("まだ交換できるLv.達成分がありません。目標の1歩を進めてみよう！")
+            aqua_target_titles = [t["title"] for t in st.session_state.target_list]
+            aqua_target_title = st.selectbox("🎯 どの目標を達成した？", aqua_target_titles, key="aqua_target_select")
+            aqua_target_data = next(t for t in st.session_state.target_list if t["title"] == aqua_target_title)
+            aqua_level_options = [f"{lv}: {task} (💧1アクアポイント)" for lv, task in aqua_target_data["tasks"].items()]
+            aqua_level_str = st.selectbox("⭐ どのレベルをクリアした？", aqua_level_options, key="aqua_level_select")
+            aqua_lv_key = aqua_level_str.split(":")[0]
+            aqua_task_text = aqua_target_data["tasks"][aqua_lv_key]
+            if st.button("➕ この1歩を達成した！", type="primary", key="aqua_achieve_button"):
+                play_achieve_sound()
+                st.session_state.aqua_points += 1
+                st.session_state.aqua_goal_log.append({
+                    "date": get_now_jst().strftime("%Y/%m/%d %H:%M"),
+                    "target": aqua_target_title,
+                    "level": aqua_lv_key,
+                    "task": aqua_task_text,
+                    "points": 1,
+                })
+                add_sticker_for_date(get_now_jst().strftime("%Y/%m/%d"))
+                save_progress()
+                st.success("🎉 目標達成！ 1アクアポイントを獲得したよ！")
+
+        # 旧バージョンで貯めた交換券は、既存ユーザーのポイントを失わないよう移行できる。
+        if st.session_state.aqua_reward_queue:
+            with st.expander("🎟️ 以前のバージョンで貯めた交換券"):
+                st.write(f"未交換：{len(st.session_state.aqua_reward_queue)}枚")
+                if st.button("以前の交換券をまとめて交換", key="aqua_legacy_exchange"):
+                    play_click_sound()
+                    st.session_state.aqua_points += len(st.session_state.aqua_reward_queue)
+                    st.session_state.aqua_reward_queue = []
+                    save_progress()
+                    st.rerun()
 
         st.write("---")
         shop_tab, gacha_tab, food_tab, decor_tab = st.tabs(["🐟 魚ショップ", "🎁 魚ガチャ", "🍚 餌ショップ", "🪸 水槽ショップ"])
@@ -2304,7 +2294,6 @@ elif st.session_state.page in [
 
                 course_task_text = selected_course_target_data["tasks"][course_chosen_lv_key]
                 companion_name = COMPANIONS[st.session_state.companion]["name"] if st.session_state.companion else None
-                add_aqua_reward(course_chosen_km, "ランニング")
                 st.session_state.course_run_log.append({
                     "date": get_now_jst().strftime("%Y/%m/%d %H:%M"),
                     "course": course["name"],

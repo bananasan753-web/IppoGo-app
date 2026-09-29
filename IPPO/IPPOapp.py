@@ -68,6 +68,118 @@ def jar_size_label(capacity: int) -> str:
 
 
 # =====================================================
+# 🐠 水族館ステージ
+# =====================================================
+AQUA_GACHA_FISH = [
+    {"id": "clownfish", "name": "カクレクマノミ", "emoji": "🐠", "rarity": "N"},
+    {"id": "blue_tang", "name": "ナンヨウハギ", "emoji": "🐟", "rarity": "N"},
+    {"id": "pufferfish", "name": "ハリセンボン", "emoji": "🐡", "rarity": "R"},
+    {"id": "seahorse", "name": "タツノオトシゴ", "emoji": "🦐", "rarity": "R"},
+    {"id": "angelfish", "name": "エンゼルフィッシュ", "emoji": "🐠", "rarity": "SR"},
+    {"id": "jellyfish", "name": "クラゲ", "emoji": "🪼", "rarity": "SR"},
+]
+
+AQUA_SHOP_FISH = [
+    {"id": "goldfish", "name": "金魚", "emoji": "🐟", "price": 8},
+    {"id": "koi", "name": "錦鯉", "emoji": "🐟", "price": 12},
+    {"id": "tropical", "name": "トロピカルフィッシュ", "emoji": "🐠", "price": 15},
+    {"id": "octopus", "name": "ミニタコ", "emoji": "🐙", "price": 18},
+]
+
+AQUA_DECORATIONS = [
+    {"id": "seaweed", "name": "ゆらゆら海藻", "emoji": "🌿", "price": 3, "score": 2},
+    {"id": "coral", "name": "カラフルサンゴ", "emoji": "🪸", "price": 5, "score": 3},
+    {"id": "pot", "name": "沈んだ壺", "emoji": "🏺", "price": 6, "score": 4},
+    {"id": "castle", "name": "海底のお城", "emoji": "🏰", "price": 10, "score": 7},
+    {"id": "treasure", "name": "宝箱", "emoji": "💎", "price": 12, "score": 8},
+]
+
+AQUA_TANK_LEVELS = [
+    {"level": 1, "required": 0, "name": "小さな水槽", "size": "60cm水槽"},
+    {"level": 2, "required": 10, "name": "にぎやかな水槽", "size": "90cm水槽"},
+    {"level": 3, "required": 25, "name": "大きな水槽", "size": "120cm水槽"},
+    {"level": 4, "required": 45, "name": "豪華な水族館", "size": "大型パノラマ水槽"},
+    {"level": 5, "required": 70, "name": "夢の大水族館", "size": "巨大パノラマ水槽"},
+]
+
+AQUA_FOOD = {
+    "normal": {"name": "通常餌", "emoji": "🫧", "price": 2, "feed_points": 1, "pack": 10},
+    "premium": {"name": "高級餌", "emoji": "✨", "price": 5, "feed_points": 3, "pack": 5},
+}
+
+
+def get_aqua_tank_score() -> int:
+    fish_score = len(st.session_state.get("aqua_fish", [])) * 5
+    decor_score = sum(d.get("score", 1) for d in st.session_state.get("aqua_decorations", []))
+    return fish_score + decor_score
+
+
+def get_aqua_tank_level() -> dict:
+    score = get_aqua_tank_score()
+    current = AQUA_TANK_LEVELS[0]
+    for level_data in AQUA_TANK_LEVELS:
+        if score >= level_data["required"]:
+            current = level_data
+    return current
+
+
+def add_aqua_reward(level: int, source: str):
+    """目標Lv.達成を水族館用の交換券として記録する。Lv.1～5は1回につき1アクアポイント。"""
+    st.session_state.aqua_reward_queue.append({
+        "level": level,
+        "source": source,
+        "date": get_now_jst().strftime("%Y/%m/%d %H:%M"),
+    })
+
+
+def render_aquarium_tank() -> str:
+    level_data = get_aqua_tank_level()
+    fish = st.session_state.get("aqua_fish", [])
+    decorations = st.session_state.get("aqua_decorations", [])
+    fish_html = "".join(
+        f'<span title="{f.get("name", "魚")} {f.get("size_mm", 10.0):.1f}mm" '
+        f'style="font-size:{max(28, min(70, 30 + f.get("size_mm", 10.0) * 0.7)):.0f}px; margin:8px;">'
+        f'{f.get("emoji", "🐟")}</span>' for f in fish
+    )
+    decor_html = "".join(
+        f'<span title="{d.get("name", "置物")}" style="font-size:38px; margin:5px;">{d.get("emoji", "🪸")}</span>'
+        for d in decorations
+    )
+    if not fish_html and not decor_html:
+        fish_html = '<span style="font-size:48px; opacity:.6;">🌊</span>'
+    tank_height = 280 + (level_data["level"] - 1) * 55
+    return f"""
+    <div style="border:4px solid #78c7e8; border-radius:24px; padding:18px; min-height:{tank_height}px;
+                background:linear-gradient(#c9f3ff 0%, #8dd8ef 48%, #3fa8c5 49%, #176b8a 100%);
+                box-shadow:inset 0 0 25px rgba(255,255,255,.65); text-align:center;">
+        <div style="font-weight:bold; color:#07506a; background:rgba(255,255,255,.72); border-radius:12px; padding:6px; display:inline-block;">
+            Lv.{level_data['level']} {level_data['name']} ／ {level_data['size']}
+        </div>
+        <div style="margin-top:80px;">{decor_html}{fish_html}</div>
+        <div style="margin-top:30px; color:white; font-weight:bold;">🐚 水槽の中を育てよう！ 🐚</div>
+    </div>
+    """
+
+
+def feed_selected_fish(fish_index: int, food_key: str) -> bool:
+    inventory = st.session_state.aqua_food_inventory
+    food = AQUA_FOOD[food_key]
+    if inventory.get(food_key, 0) <= 0 or not (0 <= fish_index < len(st.session_state.aqua_fish)):
+        return False
+    inventory[food_key] -= 1
+    fish = st.session_state.aqua_fish[fish_index]
+    fish["feed_points"] = fish.get("feed_points", 0) + food["feed_points"]
+    fish["size_mm"] = 10.0 + (fish["feed_points"] // 5) * 0.1
+    st.session_state.aqua_feed_log.append({
+        "date": get_now_jst().strftime("%Y/%m/%d %H:%M"),
+        "fish": fish.get("name", "魚"),
+        "food": food["name"],
+        "points": food["feed_points"],
+    })
+    return True
+
+
+# =====================================================
 # 💾 セーブデータ（Supabaseクラウド連携）
 # =====================================================
 PERSISTENT_KEYS = [
@@ -89,6 +201,12 @@ PERSISTENT_KEYS = [
     "sticker_type",
     "sticker_color",
     "daily_schedule",  # 一日のスケジュール（予定／記録）
+    "aqua_points",
+    "aqua_reward_queue",
+    "aqua_fish",
+    "aqua_decorations",
+    "aqua_food_inventory",
+    "aqua_feed_log",
 ]
 
 PERSISTENT_DEFAULTS = {
@@ -110,6 +228,12 @@ PERSISTENT_DEFAULTS = {
     "sticker_type": "circle",
     "sticker_color": "赤",
     "daily_schedule": {},
+    "aqua_points": 0,
+    "aqua_reward_queue": [],
+    "aqua_fish": [],
+    "aqua_decorations": [],
+    "aqua_food_inventory": {"normal": 0, "premium": 0},
+    "aqua_feed_log": [],
 }
 
 
@@ -497,7 +621,6 @@ def render_schedule_clipboard(date_str: str):
             with confirm_col:
                 if st.button("貼り付けを確定", type="primary", use_container_width=True,
                              key=f"confirm_paste_{date_str}"):
-                    play_click_sound(delay=0)
                     copied = copy.deepcopy(clipboard["planned"])
                     if paste_mode == "既存の予定を置き換え":
                         schedule["planned"] = copied
@@ -509,7 +632,6 @@ def render_schedule_clipboard(date_str: str):
             with cancel_col:
                 if st.button("キャンセル", use_container_width=True,
                              key=f"cancel_paste_{date_str}"):
-                    play_click_sound(delay=0)
                     st.session_state.schedule_paste_target = None
                     st.rerun()
 
@@ -605,7 +727,6 @@ def render_schedule_and_events(date_str: str, editable: bool, clipboard_at_botto
                     with cancel_col:
                         if st.button("キャンセル", use_container_width=True,
                                      key=f"cancel_sched_edit_{date_str}_{edit_kind}_{edit_index}"):
-                            play_click_sound(delay=0)
                             st.session_state.schedule_edit_target = None
                             st.rerun()
 
@@ -632,7 +753,6 @@ def render_schedule_and_events(date_str: str, editable: bool, clipboard_at_botto
                     with cancel_col:
                         if st.button("やめる", use_container_width=True,
                                      key=f"cancel_sched_delete_{date_str}_{delete_kind}_{delete_index}"):
-                            play_click_sound(delay=0)
                             st.session_state.schedule_delete_target = None
                             st.rerun()
 
@@ -742,34 +862,31 @@ _achieve_sound_b64 = load_sound_base64(ACHIEVE_SOUND_PATH)
 _jar_full_sound_b64 = load_sound_base64(JAR_FULL_SOUND_PATH)
 
 
-def queue_sound(kind: str):
-    """再実行で消えないよう、次回描画する効果音を予約する。"""
-    st.session_state.pending_sound = kind
-
-
-def play_click_sound(delay: float = 0):
-    queue_sound("click")
+def play_click_sound(delay: float = 1.2):
+    if _sound_b64 is None:
+        return
+    sound_html = f'<audio autoplay="true" style="display:none;"><source src="data:audio/mp3;base64,{_sound_b64}" type="audio/mp3"></audio>'
+    st.components.v1.html(sound_html, height=0)
+    if delay:
+        time.sleep(delay)
 
 
 def play_achieve_sound(delay: float = 0):
-    queue_sound("achieve")
+    if _achieve_sound_b64 is None:
+        return
+    sound_html = f'<audio autoplay="true" style="display:none;"><source src="data:audio/mp3;base64,{_achieve_sound_b64}" type="audio/mp3"></audio>'
+    st.components.v1.html(sound_html, height=0)
+    if delay:
+        time.sleep(delay)
 
 
 def play_jar_full_sound(delay: float = 0):
-    queue_sound("jar_full")
-
-
-def render_pending_sound():
-    """ボタン押下後の再描画で音を鳴らす。"""
-    kind = st.session_state.pop("pending_sound", None)
-    audio = {"click": _sound_b64, "achieve": _achieve_sound_b64,
-             "jar_full": _jar_full_sound_b64}.get(kind)
-    if audio:
-        st.components.v1.html(
-            f'<audio autoplay playsinline style="display:none">'
-            f'<source src="data:audio/mpeg;base64,{audio}" type="audio/mpeg"></audio>',
-            height=0,
-        )
+    if _jar_full_sound_b64 is None:
+        return
+    sound_html = f'<audio autoplay="true" style="display:none;"><source src="data:audio/mp3;base64,{_jar_full_sound_b64}" type="audio/mp3"></audio>'
+    st.components.v1.html(sound_html, height=0)
+    if delay:
+        time.sleep(delay)
 
 
 # =====================================================
@@ -908,6 +1025,18 @@ if "show_companion_picker" not in st.session_state:
     st.session_state.show_companion_picker = False
 if "goal_complete_log" not in st.session_state:
     st.session_state.goal_complete_log = []
+if "aqua_points" not in st.session_state:
+    st.session_state.aqua_points = 0
+if "aqua_reward_queue" not in st.session_state:
+    st.session_state.aqua_reward_queue = []
+if "aqua_fish" not in st.session_state:
+    st.session_state.aqua_fish = []
+if "aqua_decorations" not in st.session_state:
+    st.session_state.aqua_decorations = []
+if "aqua_food_inventory" not in st.session_state:
+    st.session_state.aqua_food_inventory = {"normal": 0, "premium": 0}
+if "aqua_feed_log" not in st.session_state:
+    st.session_state.aqua_feed_log = []
 
 STICKER_CIRCLE_COLORS = {
     "赤": "🔴", "橙": "🟠", "黄": "🟡", "緑": "🟢",
@@ -985,8 +1114,6 @@ if "calendar_view_month" not in st.session_state:
     st.session_state.calendar_view_month = now_jst.month
 if "selected_calendar_date" not in st.session_state:
     st.session_state.selected_calendar_date = now_jst.strftime("%Y/%m/%d")
-
-render_pending_sound()
 
 # =====================================================
 # 2. 【タイトル画面】
@@ -1146,7 +1273,7 @@ elif st.session_state.page == "menu_select":
     st.markdown("## 🎯 挑戦する項目を選んでください：")
     st.write("")
 
-    col1, col2, col3, col4 = st.columns(4)
+    col1, col2, col3, col4, col5 = st.columns(5)
     with col1:
         if st.button("🎯\n\n目標登録", use_container_width=True, key="menu_target"):
             play_click_sound()
@@ -1167,13 +1294,18 @@ elif st.session_state.page == "menu_select":
             play_click_sound()
             st.session_state.page = "schedule_page"
             st.rerun()
+    with col5:
+        if st.button("🐠\n\n水族館", use_container_width=True, key="menu_aquarium"):
+            play_click_sound()
+            st.session_state.page = "aquarium_page"
+            st.rerun()
 
 # =====================================================
 # 4. 【個別画面】
 # =====================================================
 elif st.session_state.page in [
     "target_page", "calendar_page", "stage_page",
-    "candy_page", "running_page", "running_course_page", "schedule_page"
+    "candy_page", "aquarium_page", "running_page", "running_course_page", "schedule_page"
 ]:
 
     # サイドバーメニュー
@@ -1197,6 +1329,10 @@ elif st.session_state.page in [
         if st.button("📊 一日のスケジュールへ"):
             play_click_sound()
             st.session_state.page = "schedule_page"
+            st.rerun()
+        if st.button("🐠 水族館へ"):
+            play_click_sound()
+            st.session_state.page = "aquarium_page"
             st.rerun()
         st.write("---")
         if st.button("↩️ メニューセレクトに戻る"):
@@ -1297,7 +1433,7 @@ elif st.session_state.page in [
                                 st.rerun()
                         else:
                             if st.button("🏆 最終目標を達成した！", type="primary", key=f"complete_target_{i}"):
-                                play_achieve_sound()
+                                play_achieve_sound(delay=0)
                                 target_data["completed"] = True
                                 now = get_now_jst()
                                 now_datetime_str = now.strftime("%Y/%m/%d %H:%M")
@@ -1626,7 +1762,7 @@ elif st.session_state.page in [
         st.title("⚔️ ステージセレクト")
         st.markdown("### 🎮 挑戦するステージを選んでください：")
         st.write("")
-        scol1, scol2, scol3 = st.columns(3)
+        scol1, scol2, scol3, scol4 = st.columns(4)
         with scol1:
             if st.button("🍬\n\nお菓子集め", use_container_width=True, key="stage_candy"):
                 play_click_sound()
@@ -1641,6 +1777,11 @@ elif st.session_state.page in [
             if st.button("📊\n\n一日のスケジュール", use_container_width=True, key="stage_schedule"):
                 play_click_sound()
                 st.session_state.page = "schedule_page"
+                st.rerun()
+        with scol4:
+            if st.button("🐠\n\n水族館", use_container_width=True, key="stage_aquarium"):
+                play_click_sound()
+                st.session_state.page = "aquarium_page"
                 st.rerun()
 
     # --- 一日のスケジュール画面 ---
@@ -1704,7 +1845,6 @@ elif st.session_state.page in [
         st.caption("選んだ瓶は完成後もそのまま！ 別の大きさにしたいときだけ変更できます。")
 
         if st.button("⚙️ 瓶の大きさを変更する", key="open_jar_size_change"):
-            play_click_sound(delay=0)
             st.session_state.show_jar_size_change = not st.session_state.get("show_jar_size_change", False)
         if st.session_state.get("show_jar_size_change", False):
             with st.container(border=True):
@@ -1718,7 +1858,6 @@ elif st.session_state.page in [
                 change_col, cancel_col = st.columns(2)
                 with change_col:
                     if st.button("この大きさに変更", type="primary", key="confirm_jar_size_change"):
-                        play_click_sound(delay=0)
                         st.session_state.jar_capacity = jar_option
                         st.session_state.last_jar_capacity = jar_option
                         st.session_state.jar_full_sound_played = False
@@ -1727,7 +1866,6 @@ elif st.session_state.page in [
                         st.rerun()
                 with cancel_col:
                     if st.button("キャンセル", key="cancel_jar_size_change"):
-                        play_click_sound(delay=0)
                         st.session_state.show_jar_size_change = False
                         st.rerun()
 
@@ -1772,9 +1910,8 @@ elif st.session_state.page in [
                     st.session_state.show_candy_buttons = True
                     st.session_state.temp_candy_count = chosen_candy_power
                     st.session_state.last_completed_task = f"【{selected_target_title} - {chosen_lv_key}】 {chosen_task_text}"
+                    add_aqua_reward(chosen_candy_power, "お菓子集め")
                     add_sticker_for_date(get_now_jst().strftime("%Y/%m/%d"))
-                    save_progress()
-                    st.rerun()
                 else:
                     st.error("⚠️ 達成する目標を上のメニューから選んでください！")
 
@@ -1793,11 +1930,22 @@ elif st.session_state.page in [
                 else:
                     st.markdown(render_candy_jar_svg(st.session_state.jar_candies, capacity), unsafe_allow_html=True)
 
-            # 風船は瓶が完成した直後の一度だけ表示する。
-            if st.session_state.pop("jar_just_completed", False):
+            if current_count >= capacity:
                 st.markdown("## 🎉 おめでとう！！°˖✧◝(⁰▿⁰)◜✧˖°")
-                st.success("お菓子の瓶がいっぱいになりました！ 次の瓶も同じ大きさで挑戦できるよ！")
                 st.balloons()
+                st.success(f"素晴らしい！！！{capacity}個のお菓子瓶が完全に満杯になりました！！！")
+                if not st.session_state.jar_full_sound_played:
+                    play_jar_full_sound()
+                    st.session_state.jar_full_sound_played = True
+                    st.session_state.jar_complete_log.append({
+                        "date": get_now_jst().strftime("%Y/%m/%d %H:%M"),
+                        "capacity": capacity,
+                        "size_label": JAR_SIZE_LABELS.get(capacity, "?"),
+                        "candies": st.session_state.jar_candies.copy(),
+                    })
+                    st.session_state.jar_candies = []
+                    st.session_state.jar_full_sound_played = False
+                    save_progress()
 
             st.progress(min(current_count / capacity, 1.0))
 
@@ -1834,6 +1982,7 @@ elif st.session_state.page in [
                 for candy in candies_spec:
                     if st.button(f"{candy['emoji']}\n\n{candy['label']}", use_container_width=True,
                                  key=f"btn_{candy['emoji']}"):
+                        play_click_sound()
                         current_time_str = get_now_jst().strftime("%Y/%m/%d %H:%M")
 
                         if len(st.session_state.jar_candies) < st.session_state.jar_capacity:
@@ -1844,31 +1993,185 @@ elif st.session_state.page in [
                             }
                             st.session_state.jar_candies.append(new_candy)
                             st.session_state.all_candy_log.append(new_candy)
-                            if len(st.session_state.jar_candies) == st.session_state.jar_capacity:
-                                completed_capacity = st.session_state.jar_capacity
-                                st.session_state.jar_complete_log.append({
-                                    "date": current_time_str,
-                                    "capacity": completed_capacity,
-                                    "size_label": JAR_SIZE_LABELS.get(completed_capacity, "?"),
-                                    "candies": copy.deepcopy(st.session_state.jar_candies),
-                                })
-                                st.session_state.jar_candies = []
-                                st.session_state.jar_just_completed = True
-                                # 瓶の完成時はクリック音より歓声・拍手を優先。
-                                play_jar_full_sound()
-                            else:
-                                play_click_sound(delay=0)
-                            st.toast(f"{candy['emoji']} を瓶に入れたよ！")
-                            st.session_state.temp_candy_count -= 1
-                            if st.session_state.temp_candy_count <= 0:
-                                st.session_state.show_candy_buttons = False
-                                st.session_state.praise_message = ""
-                        else:
-                            st.warning("瓶がいっぱいです。")
+
+                        st.toast(f"{candy['emoji']} を瓶に入れたよ！やったね！")
+                        st.session_state.temp_candy_count -= 1
+
+                        if st.session_state.temp_candy_count <= 0:
+                            st.session_state.show_candy_buttons = False
+                            st.session_state.praise_message = ""
                         save_progress()
                         st.rerun()
             else:
                 st.caption("クエストを達成すると、ここに飴ボタンが出現するよ！")
+
+    # --- 水族館ページ ---
+    elif st.session_state.page == "aquarium_page":
+        st.title("🐠 あなただけの水族館")
+        tank = get_aqua_tank_level()
+        tank_score = get_aqua_tank_score()
+        next_req = next((x["required"] for x in AQUA_TANK_LEVELS if x["level"] > tank["level"]), None)
+        next_text = "MAX" if next_req is None else f"あと {next_req - tank_score}ポイント"
+        st.markdown(f"### 🌊 水槽 Lv.{tank['level']}『{tank['name']}』")
+        st.caption(f"豪華度 {tank_score} ／ 次の水槽Lvまで：{next_text}")
+        st.markdown(render_aquarium_tank(), unsafe_allow_html=True)
+
+        stat1, stat2, stat3 = st.columns(3)
+        with stat1:
+            st.metric("💧 アクアポイント", st.session_state.aqua_points)
+        with stat2:
+            st.metric("🐟 飼っている魚", len(st.session_state.aqua_fish))
+        with stat3:
+            st.metric("🪸 飾り", len(st.session_state.aqua_decorations))
+
+        st.write("---")
+        st.markdown("### 🔄 目標Lv.をアクアポイントに交換")
+        if st.session_state.aqua_reward_queue:
+            st.info("目標のLv.達成で交換券が貯まっています。Lv.1〜Lv.5は、それぞれ1回につき1アクアポイントです！")
+            reward_counts = {lv: 0 for lv in range(1, 6)}
+            for reward in st.session_state.aqua_reward_queue:
+                reward_counts[int(reward.get("level", 1))] += 1
+            cols = st.columns(5)
+            for lv, col in zip(range(1, 6), cols):
+                with col:
+                    st.write(f"**Lv.{lv}**")
+                    st.write(f"🎟️ {reward_counts[lv]}枚")
+                    if reward_counts[lv] and st.button(f"→ {reward_counts[lv]} AP", key=f"exchange_aqua_{lv}", use_container_width=True):
+                        play_click_sound(delay=0)
+                        keep = []
+                        exchanged = 0
+                        for reward in st.session_state.aqua_reward_queue:
+                            if int(reward.get("level", 1)) == lv and exchanged < reward_counts[lv]:
+                                exchanged += 1
+                            else:
+                                keep.append(reward)
+                        st.session_state.aqua_reward_queue = keep
+                        st.session_state.aqua_points += exchanged
+                        save_progress()
+                        st.success(f"Lv.{lv}の交換券 {exchanged}枚 → アクアポイント{exchanged}pt！")
+                        st.rerun()
+            if st.button("🎟️ 交換券をすべてAPに交換", type="primary", use_container_width=True, key="exchange_all_aqua"):
+                play_click_sound(delay=0)
+                exchanged = len(st.session_state.aqua_reward_queue)
+                st.session_state.aqua_points += exchanged
+                st.session_state.aqua_reward_queue = []
+                save_progress()
+                st.success(f"🎉 {exchanged}枚を交換して、アクアポイントを{exchanged}pt獲得！")
+                st.rerun()
+        else:
+            st.caption("まだ交換できるLv.達成分がありません。目標の1歩を進めてみよう！")
+
+        st.write("---")
+        shop_tab, gacha_tab, food_tab, decor_tab = st.tabs(["🐟 魚ショップ", "🎁 魚ガチャ", "🍚 餌ショップ", "🪸 水槽ショップ"])
+
+        with shop_tab:
+            st.markdown("#### 🐟 ショップ限定の魚")
+            shop_cols = st.columns(2)
+            for idx, fish_data in enumerate(AQUA_SHOP_FISH):
+                with shop_cols[idx % 2]:
+                    st.markdown(f"### {fish_data['emoji']} {fish_data['name']}")
+                    st.write(f"💧 {fish_data['price']} AP")
+                    if st.button("購入する", key=f"buy_shop_fish_{fish_data['id']}", use_container_width=True):
+                        if st.session_state.aqua_points >= fish_data["price"]:
+                            play_click_sound(delay=0)
+                            st.session_state.aqua_points -= fish_data["price"]
+                            st.session_state.aqua_fish.append({"id": fish_data["id"], "name": fish_data["name"], "emoji": fish_data["emoji"], "feed_points": 0, "size_mm": 10.0})
+                            save_progress()
+                            st.success(f"{fish_data['emoji']} {fish_data['name']}が水槽に仲間入り！")
+                            st.rerun()
+                        else:
+                            st.warning("アクアポイントが足りません！")
+
+        with gacha_tab:
+            st.markdown("#### 🎁 ガチャ限定の魚")
+            st.write("1回 **5 AP**。ショップにはいない魚が出ます！")
+            if st.button("🎁 5 APでガチャを回す！", type="primary", use_container_width=True, key="aqua_gacha"):
+                if st.session_state.aqua_points >= 5:
+                    play_click_sound(delay=0)
+                    st.session_state.aqua_points -= 5
+                    got = random.choice(AQUA_GACHA_FISH)
+                    st.session_state.aqua_fish.append({"id": got["id"], "name": got["name"], "emoji": got["emoji"], "rarity": got["rarity"], "feed_points": 0, "size_mm": 10.0})
+                    save_progress()
+                    st.success(f"🎉 {got['rarity']}！ {got['emoji']} {got['name']}が出ました！")
+                    st.rerun()
+                else:
+                    st.warning("アクアポイントが足りません！")
+            st.caption("ガチャとショップでは魚の種類を分けています。")
+
+        with food_tab:
+            st.markdown("#### 🍚 魚を育てる餌")
+            food_cols = st.columns(2)
+            for idx, (food_key, food) in enumerate(AQUA_FOOD.items()):
+                with food_cols[idx]:
+                    st.markdown(f"### {food['emoji']} {food['name']}")
+                    st.write(f"{food['pack']}回分 ／ {food['price']} AP")
+                    st.write(f"1回の餌やりで **+{food['feed_points']}成長ポイント**")
+                    if st.button("購入する", key=f"buy_food_{food_key}", use_container_width=True):
+                        if st.session_state.aqua_points >= food["price"]:
+                            play_click_sound(delay=0)
+                            st.session_state.aqua_points -= food["price"]
+                            st.session_state.aqua_food_inventory[food_key] = st.session_state.aqua_food_inventory.get(food_key, 0) + food["pack"]
+                            save_progress()
+                            st.success(f"{food['name']}を{food['pack']}回分購入しました！")
+                            st.rerun()
+                        else:
+                            st.warning("アクアポイントが足りません！")
+            st.write(f"通常餌：{st.session_state.aqua_food_inventory.get('normal', 0)}回　／　高級餌：{st.session_state.aqua_food_inventory.get('premium', 0)}回")
+
+        with decor_tab:
+            st.markdown("#### 🪸 水槽の飾り")
+            decor_cols = st.columns(2)
+            for idx, decor in enumerate(AQUA_DECORATIONS):
+                with decor_cols[idx % 2]:
+                    st.markdown(f"### {decor['emoji']} {decor['name']}")
+                    st.write(f"{decor['price']} AP ／ 豪華度 +{decor['score']}")
+                    if st.button("飾る", key=f"buy_decor_{decor['id']}", use_container_width=True):
+                        if st.session_state.aqua_points >= decor["price"]:
+                            play_click_sound(delay=0)
+                            st.session_state.aqua_points -= decor["price"]
+                            st.session_state.aqua_decorations.append({"id": decor["id"], "name": decor["name"], "emoji": decor["emoji"], "score": decor["score"]})
+                            save_progress()
+                            st.success(f"{decor['emoji']} {decor['name']}を水槽に置きました！")
+                            st.rerun()
+                        else:
+                            st.warning("アクアポイントが足りません！")
+
+        st.write("---")
+        st.markdown("### 🍚 餌やりタイム")
+        if not st.session_state.aqua_fish:
+            st.info("まずはショップかガチャで魚を迎えよう！")
+        else:
+            fish_cols = st.columns(min(3, len(st.session_state.aqua_fish)))
+            for i, fish in enumerate(st.session_state.aqua_fish):
+                with fish_cols[i % len(fish_cols)]:
+                    st.markdown(f"### {fish['emoji']} {fish['name']}")
+                    st.write(f"サイズ：**{fish.get('size_mm', 10.0):.1f} mm**")
+                    st.progress(min((fish.get('feed_points', 0) % 5) / 5, 1.0), text=f"成長：{fish.get('feed_points', 0) % 5}/5 pt")
+                    food_cols = st.columns(2)
+                    with food_cols[0]:
+                        if st.button(f"通常餌 ({st.session_state.aqua_food_inventory.get('normal', 0)})", key=f"feed_normal_{i}", use_container_width=True):
+                            if feed_selected_fish(i, "normal"):
+                                play_click_sound(delay=0)
+                                save_progress()
+                                st.toast(f"{fish['emoji']} {fish['name']}に通常餌！ +1成長ポイント")
+                                st.rerun()
+                            else:
+                                st.warning("通常餌がありません！")
+                    with food_cols[1]:
+                        if st.button(f"高級餌 ({st.session_state.aqua_food_inventory.get('premium', 0)})", key=f"feed_premium_{i}", use_container_width=True):
+                            if feed_selected_fish(i, "premium"):
+                                play_click_sound(delay=0)
+                                save_progress()
+                                st.toast(f"✨ {fish['name']}に高級餌！ +3成長ポイント")
+                                st.rerun()
+                            else:
+                                st.warning("高級餌がありません！")
+
+        st.write("---")
+        st.markdown("### 📈 水槽レベルアップ条件")
+        for level_data in AQUA_TANK_LEVELS:
+            status = "✅ 到達" if tank_score >= level_data["required"] else f"あと {level_data['required'] - tank_score}"
+            st.write(f"**Lv.{level_data['level']} {level_data['name']}**：豪華度 {level_data['required']} → {status}")
 
     # --- ランニングページ ---
     elif st.session_state.page == "running_page":
@@ -2001,6 +2304,7 @@ elif st.session_state.page in [
 
                 course_task_text = selected_course_target_data["tasks"][course_chosen_lv_key]
                 companion_name = COMPANIONS[st.session_state.companion]["name"] if st.session_state.companion else None
+                add_aqua_reward(course_chosen_km, "ランニング")
                 st.session_state.course_run_log.append({
                     "date": get_now_jst().strftime("%Y/%m/%d %H:%M"),
                     "course": course["name"],

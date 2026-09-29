@@ -96,10 +96,10 @@ AQUA_DECORATIONS = [
 
 AQUA_TANK_LEVELS = [
     {"level": 1, "required": 0, "name": "小さな水槽", "size": "60cm水槽"},
-    {"level": 2, "required": 10, "name": "にぎやかな水槽", "size": "90cm水槽"},
-    {"level": 3, "required": 25, "name": "大きな水槽", "size": "120cm水槽"},
-    {"level": 4, "required": 45, "name": "豪華な水族館", "size": "大型パノラマ水槽"},
-    {"level": 5, "required": 70, "name": "夢の大水族館", "size": "巨大パノラマ水槽"},
+    {"level": 2, "required": 35, "name": "にぎやかな水槽", "size": "90cm水槽"},
+    {"level": 3, "required": 90, "name": "大きな水槽", "size": "120cm水槽"},
+    {"level": 4, "required": 180, "name": "豪華な水族館", "size": "大型パノラマ水槽"},
+    {"level": 5, "required": 320, "name": "夢の大水族館", "size": "巨大パノラマ水槽"},
 ]
 
 AQUA_FOOD = {
@@ -111,7 +111,10 @@ AQUA_FOOD = {
 def get_aqua_tank_score() -> int:
     fish_score = len(st.session_state.get("aqua_fish", [])) * 5
     decor_score = sum(d.get("score", 1) for d in st.session_state.get("aqua_decorations", []))
-    return fish_score + decor_score
+    # 初期体長10mm（1cm）は成長による豪華度0。2cmで+3、3cmで+6…
+    growth_score = sum(max(0, (int(round(f.get("size_mm", 10.0) * 10)) - 100) // 100) * 3
+                       for f in st.session_state.get("aqua_fish", []))
+    return fish_score + decor_score + growth_score
 
 
 def get_aqua_tank_level() -> dict:
@@ -123,8 +126,32 @@ def get_aqua_tank_level() -> dict:
     return current
 
 
+def sync_aqua_tank_history():
+    """達成した水槽レベルを一度だけ記録する。過去の到達日は推測しない。"""
+    history = st.session_state.get("aqua_tank_history")
+    score = get_aqua_tank_score()
+    if history is None:
+        # 旧データ移行時、既に到達済みのLvは日付不明として保持する。
+        history = {str(entry["level"]): None for entry in AQUA_TANK_LEVELS
+                   if score >= entry["required"]}
+        if not st.session_state.get("aqua_fish") and not st.session_state.get("aqua_decorations"):
+            history["1"] = get_now_jst().strftime("%Y/%m/%d")
+        st.session_state.aqua_tank_history = history
+        save_progress()
+    else:
+        changed = False
+        for entry in AQUA_TANK_LEVELS:
+            key = str(entry["level"])
+            if score >= entry["required"] and key not in history:
+                history[key] = get_now_jst().strftime("%Y/%m/%d")
+                changed = True
+        if changed:
+            save_progress()
+    return history
+
+
 def add_aqua_reward(level: int, source: str):
-    """目標Lv.達成を水族館用の交換券として記録する。Lv.1～5は1回につき1アクアポイント。"""
+    """旧バージョン互換：目標Lv.達成を交換券として記録する。"""
     st.session_state.aqua_reward_queue.append({
         "level": level,
         "source": source,
@@ -208,6 +235,7 @@ PERSISTENT_KEYS = [
     "aqua_food_inventory",
     "aqua_feed_log",
     "aqua_goal_log",
+    "aqua_tank_history",
 ]
 
 PERSISTENT_DEFAULTS = {
@@ -236,6 +264,7 @@ PERSISTENT_DEFAULTS = {
     "aqua_food_inventory": {"normal": 0, "premium": 0},
     "aqua_feed_log": [],
     "aqua_goal_log": [],
+    "aqua_tank_history": None,
 }
 
 
@@ -1041,6 +1070,8 @@ if "aqua_feed_log" not in st.session_state:
     st.session_state.aqua_feed_log = []
 if "aqua_goal_log" not in st.session_state:
     st.session_state.aqua_goal_log = []
+if "aqua_tank_history" not in st.session_state:
+    st.session_state.aqua_tank_history = None
 
 STICKER_CIRCLE_COLORS = {
     "赤": "🔴", "橙": "🟠", "黄": "🟡", "緑": "🟢",
@@ -1999,6 +2030,7 @@ elif st.session_state.page in [
         st.title("🐠 あなただけの水族館")
         tank = get_aqua_tank_level()
         tank_score = get_aqua_tank_score()
+        tank_history = sync_aqua_tank_history()
         next_req = next((x["required"] for x in AQUA_TANK_LEVELS if x["level"] > tank["level"]), None)
         next_text = "MAX" if next_req is None else f"あと {next_req - tank_score}ポイント"
         st.markdown(f"### 🌊 水槽 Lv.{tank['level']}『{tank['name']}』")
@@ -2015,38 +2047,39 @@ elif st.session_state.page in [
 
         st.write("---")
         st.subheader("🏆 達成した目標を選ぼう！")
-        st.caption("水族館ステージで達成した目標は、Lv.1〜Lv.5のどれでも1回につき1アクアポイント！ お菓子集め・ランニングの達成とは別々に記録します。")
+        st.caption("水族館ステージでは達成した目標のLvと同じ数のアクアポイントを獲得！ お菓子集め・ランニングとは別々に記録します。")
         if not st.session_state.target_list:
             st.warning("⚠️ まだ目標が登録されていません！『目標登録』で目標を作ってね！")
         else:
             aqua_target_titles = [t["title"] for t in st.session_state.target_list]
             aqua_target_title = st.selectbox("🎯 どの目標を達成した？", aqua_target_titles, key="aqua_target_select")
             aqua_target_data = next(t for t in st.session_state.target_list if t["title"] == aqua_target_title)
-            aqua_level_options = [f"{lv}: {task} (💧1アクアポイント)" for lv, task in aqua_target_data["tasks"].items()]
+            aqua_level_options = [f"{lv}: {task} (💧{int(lv.replace('Lv.', '').replace('Lv', ''))}アクアポイント)" for lv, task in aqua_target_data["tasks"].items()]
             aqua_level_str = st.selectbox("⭐ どのレベルをクリアした？", aqua_level_options, key="aqua_level_select")
             aqua_lv_key = aqua_level_str.split(":")[0]
             aqua_task_text = aqua_target_data["tasks"][aqua_lv_key]
             if st.button("➕ この1歩を達成した！", type="primary", key="aqua_achieve_button"):
                 play_achieve_sound()
-                st.session_state.aqua_points += 1
+                earned_ap = int(aqua_lv_key.replace("Lv.", "").replace("Lv", ""))
+                st.session_state.aqua_points += earned_ap
                 st.session_state.aqua_goal_log.append({
                     "date": get_now_jst().strftime("%Y/%m/%d %H:%M"),
                     "target": aqua_target_title,
                     "level": aqua_lv_key,
                     "task": aqua_task_text,
-                    "points": 1,
+                    "points": earned_ap,
                 })
                 add_sticker_for_date(get_now_jst().strftime("%Y/%m/%d"))
                 save_progress()
-                st.success("🎉 目標達成！ 1アクアポイントを獲得したよ！")
+                st.success(f"🎉 目標達成！ {earned_ap}アクアポイントを獲得したよ！")
 
         # 旧バージョンで貯めた交換券は、既存ユーザーのポイントを失わないよう移行できる。
         if st.session_state.aqua_reward_queue:
             with st.expander("🎟️ 以前のバージョンで貯めた交換券"):
-                st.write(f"未交換：{len(st.session_state.aqua_reward_queue)}枚")
+                st.write(f"未交換：{len(st.session_state.aqua_reward_queue)}枚（合計 {sum(int(ticket.get('level', 1)) for ticket in st.session_state.aqua_reward_queue)} AP）")
                 if st.button("以前の交換券をまとめて交換", key="aqua_legacy_exchange"):
                     play_click_sound()
-                    st.session_state.aqua_points += len(st.session_state.aqua_reward_queue)
+                    st.session_state.aqua_points += sum(int(ticket.get("level", 1)) for ticket in st.session_state.aqua_reward_queue)
                     st.session_state.aqua_reward_queue = []
                     save_progress()
                     st.rerun()
@@ -2066,6 +2099,7 @@ elif st.session_state.page in [
                             play_click_sound(delay=0)
                             st.session_state.aqua_points -= fish_data["price"]
                             st.session_state.aqua_fish.append({"id": fish_data["id"], "name": fish_data["name"], "emoji": fish_data["emoji"], "feed_points": 0, "size_mm": 10.0})
+                            sync_aqua_tank_history()
                             save_progress()
                             st.success(f"{fish_data['emoji']} {fish_data['name']}が水槽に仲間入り！")
                             st.rerun()
@@ -2081,6 +2115,7 @@ elif st.session_state.page in [
                     st.session_state.aqua_points -= 5
                     got = random.choice(AQUA_GACHA_FISH)
                     st.session_state.aqua_fish.append({"id": got["id"], "name": got["name"], "emoji": got["emoji"], "rarity": got["rarity"], "feed_points": 0, "size_mm": 10.0})
+                    sync_aqua_tank_history()
                     save_progress()
                     st.success(f"🎉 {got['rarity']}！ {got['emoji']} {got['name']}が出ました！")
                     st.rerun()
@@ -2120,6 +2155,7 @@ elif st.session_state.page in [
                             play_click_sound(delay=0)
                             st.session_state.aqua_points -= decor["price"]
                             st.session_state.aqua_decorations.append({"id": decor["id"], "name": decor["name"], "emoji": decor["emoji"], "score": decor["score"]})
+                            sync_aqua_tank_history()
                             save_progress()
                             st.success(f"{decor['emoji']} {decor['name']}を水槽に置きました！")
                             st.rerun()
@@ -2141,6 +2177,7 @@ elif st.session_state.page in [
                     with food_cols[0]:
                         if st.button(f"通常餌 ({st.session_state.aqua_food_inventory.get('normal', 0)})", key=f"feed_normal_{i}", use_container_width=True):
                             if feed_selected_fish(i, "normal"):
+                                sync_aqua_tank_history()
                                 play_click_sound(delay=0)
                                 save_progress()
                                 st.toast(f"{fish['emoji']} {fish['name']}に通常餌！ +1成長ポイント")
@@ -2150,6 +2187,7 @@ elif st.session_state.page in [
                     with food_cols[1]:
                         if st.button(f"高級餌 ({st.session_state.aqua_food_inventory.get('premium', 0)})", key=f"feed_premium_{i}", use_container_width=True):
                             if feed_selected_fish(i, "premium"):
+                                sync_aqua_tank_history()
                                 play_click_sound(delay=0)
                                 save_progress()
                                 st.toast(f"✨ {fish['name']}に高級餌！ +3成長ポイント")
@@ -2159,9 +2197,19 @@ elif st.session_state.page in [
 
         st.write("---")
         st.markdown("### 📈 水槽レベルアップ条件")
+        st.caption("豪華度＝魚1匹につき+5 ＋ 初期1cmから成長して2cm、3cm…に達するごとに+3 ＋ 飾りの豪華度。初期1cmの成長ボーナスは0です。")
+        # 達成済みのレベルと、現在のレベルの一つ上だけ公開する。
         for level_data in AQUA_TANK_LEVELS:
-            status = "✅ 到達" if tank_score >= level_data["required"] else f"あと {level_data['required'] - tank_score}"
-            st.write(f"**Lv.{level_data['level']} {level_data['name']}**：豪華度 {level_data['required']} → {status}")
+            level = level_data["level"]
+            if level <= tank["level"]:
+                achieved = tank_history.get(str(level))
+                date_text = f"達成日：{achieved}" if achieved else "達成日：記録なし（旧データ）"
+                st.write(f"✅ **Lv.{level} {level_data['name']}**：豪華度 {level_data['required']} ／ {date_text}")
+            elif level == tank["level"] + 1:
+                remaining = max(0, level_data["required"] - tank_score)
+                st.info(f"🔓 次の水槽 **Lv.{level} {level_data['name']}**：豪華度 {level_data['required']} 必要（あと {remaining}）")
+        if tank["level"] == AQUA_TANK_LEVELS[-1]["level"]:
+            st.success("🏆 最高レベルに到達！")
 
     # --- ランニングページ ---
     elif st.session_state.page == "running_page":

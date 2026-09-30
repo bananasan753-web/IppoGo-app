@@ -1,0 +1,112 @@
+[
+  {
+    "id": "clownfish",
+    "name": "カクレクマノミ",
+    "emoji": "🐠",
+    "stars": 1,
+    "gacha": true,
+    "weight": 35,
+    "shop": false,
+    "price": 0,
+    "image": ""
+  },
+  {
+    "id": "blue_tang",
+    "name": "ナンヨウハギ",
+    "emoji": "🐟",
+    "stars": 2,
+    "gacha": true,
+    "weight": 28,
+    "shop": false,
+    "price": 0,
+    "image": ""
+  },
+  {
+    "id": "pufferfish",
+    "name": "ハリセンボン",
+    "emoji": "🐡",
+    "stars": 3,
+    "gacha": true,
+    "weight": 20,
+    "shop": false,
+    "price": 0,
+    "image": ""
+  },
+  {
+    "id": "seahorse",
+    "name": "タツノオトシゴ",
+    "emoji": "🐠",
+    "stars": 3,
+    "gacha": true,
+    "weight": 20,
+    "shop": false,
+    "price": 0,
+    "image": ""
+  },
+  {
+    "id": "angelfish",
+    "name": "エンゼルフィッシュ",
+    "emoji": "🐠",
+    "stars": 4,
+    "gacha": true,
+    "weight": 12,
+    "shop": false,
+    "price": 0,
+    "image": ""
+  },
+  {
+    "id": "jellyfish",
+    "name": "クラゲ",
+    "emoji": "🪼",
+    "stars": 5,
+    "gacha": true,
+    "weight": 5,
+    "shop": false,
+    "price": 0,
+    "image": ""
+  },
+  {
+    "id": "goldfish",
+    "name": "金魚",
+    "emoji": "🐟",
+    "stars": 1,
+    "gacha": false,
+    "weight": 0,
+    "shop": true,
+    "price": 8,
+    "image": ""
+  },
+  {
+    "id": "koi",
+    "name": "錦鯉",
+    "emoji": "🐟",
+    "stars": 2,
+    "gacha": false,
+    "weight": 0,
+    "shop": true,
+    "price": 12,
+    "image": ""
+  },
+  {
+    "id": "tropical",
+    "name": "トロピカルフィッシュ",
+    "emoji": "🐠",
+    "stars": 3,
+    "gacha": false,
+    "weight": 0,
+    "shop": true,
+    "price": 15,
+    "image": ""
+  },
+  {
+    "id": "octopus",
+    "name": "ミニタコ",
+    "emoji": "🐙",
+    "stars": 4,
+    "gacha": false,
+    "weight": 0,
+    "shop": true,
+    "price": 18,
+    "image": ""
+  }
+]

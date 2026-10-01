@@ -95,7 +95,9 @@ AQUA_SHOP_FISH = [
 ]
 
 # 1cmからさらに1cm育つたびに獲得する豪華度
-AQUA_GROWTH_BONUS = {1: 3, 2: 4, 3: 5, 4: 6, 5: 8}
+# 2.0cm、3.0cm、4.0cm…に到達するたび、その魚の☆数ぶん豪華度を加算。
+# 初期1.0cmには成長による豪華度ボーナスはない。
+AQUA_GROWTH_BONUS = {1: 1, 2: 2, 3: 3, 4: 4, 5: 5}
 
 AQUA_DECORATIONS = [
     {"id": "seaweed", "name": "ゆらゆら海藻", "emoji": "🌿", "price": 3, "score": 2},
@@ -178,11 +180,16 @@ def obtain_aqua_fish(species: dict) -> tuple[bool, int]:
 
 
 def give_fish_food(fish_index: int, food_key: str, count: int = 1):
-    """在庫の操作は呼び出し側で一括検証後に行う。"""
+    """餌の成長ポイントを加算し、5ポイントごとに0.1cm成長させる。"""
     fish = st.session_state.aqua_fish[fish_index]
     points = AQUA_FOOD[food_key]["feed_points"] * count
     fish["feed_points"] = fish.get("feed_points", 0) + points
-    fish["size_mm"] = 10.0 + (fish["feed_points"] // 5) * 0.1
+
+    # 5成長ポイント = 0.1cm。
+    # 初期値は1.0cmなので、最初の5ポイントで1.1cmになる。
+    growth_steps = fish["feed_points"] // 5
+    fish["size_mm"] = round(10.0 + growth_steps * 1.0, 1)
+
     st.session_state.aqua_feed_log.append({
         "date": get_now_jst().strftime("%Y/%m/%d %H:%M"),
         "fish": fish_display_name(fish), "food": AQUA_FOOD[food_key]["name"],
@@ -193,10 +200,17 @@ def give_fish_food(fish_index: int, food_key: str, count: int = 1):
 def get_aqua_tank_score() -> int:
     fish_score = len(st.session_state.get("aqua_fish", [])) * 5
     decor_score = sum(d.get("score", 1) for d in st.session_state.get("aqua_decorations", []))
-    # 初期の1cmには成長加点なし。魚の星に応じて2cm以降を加点する。
-    growth_score = sum(max(0, int(round(f.get("size_mm", 10.0) * 10)) // 100 - 1)
-                       * AQUA_GROWTH_BONUS.get(get_fish_stars(f), 3)
-                       for f in st.session_state.get("aqua_fish", []))
+
+    # 初期1.0cmは成長ボーナス0。
+    # 2.0cmに到達すると1回、3.0cmに到達するとさらに1回…というように、
+    # 「整数cmに到達した回数」×「その魚の☆数」を加算する。
+    growth_score = 0
+    for fish in st.session_state.get("aqua_fish", []):
+        size_mm = max(10, int(round(float(fish.get("size_mm", 10.0)))))
+        reached_cm = max(0, size_mm // 10 - 1)  # 1cm→0、2cm→1、3cm→2…
+        stars = get_fish_stars(fish)
+        growth_score += reached_cm * AQUA_GROWTH_BONUS.get(stars, stars)
+
     return fish_score + decor_score + growth_score + st.session_state.get("aqua_duplicate_bonus", 0)
 
 
@@ -689,6 +703,15 @@ def get_ippo_events_for_date(date_str: str) -> list:
     for g in st.session_state.get("goal_complete_log", []):
         if g["date"].startswith(date_str):
             events.append((g["date"].split(" ")[1], f"🏆 『{g.get('title', '')}』目標達成"))
+    # 水族館側で達成した目標も、お菓子集めと同じようにイベント記録へ表示する
+    for ag in st.session_state.get("aqua_goal_log", []):
+        if ag["date"].startswith(date_str):
+            level = ag.get("level", "")
+            points = ag.get("points", 0)
+            events.append((
+                ag["date"].split(" ")[1],
+                f"🐠 『{ag.get('target', '')}』{level}目標達成（💧{points}アクアポイント）"
+            ))
     events.sort(key=lambda ev: ev[0])
     return events
 

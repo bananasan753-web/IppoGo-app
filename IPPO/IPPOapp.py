@@ -34,6 +34,13 @@ st.markdown("""
         margin: 4px;
         cursor: pointer;
     }
+    .aqua-growth-message { text-align:center; font-size:30px; font-weight:800; margin:14px 0; animation:aqua-pop .55s ease-out; }
+    .aqua-milestone { position:relative; overflow:hidden; text-align:center; padding:18px 8px 8px; border-radius:18px; background:linear-gradient(180deg, rgba(225,247,255,.9), rgba(255,255,255,.7)); margin:12px 0; }
+    .aqua-milestone-title { position:relative; z-index:2; font-size:30px; font-weight:900; margin:4px 0 12px; animation:aqua-pop .6s ease-out; }
+    .aqua-fish-burst { position:relative; height:150px; overflow:hidden; }
+    .aqua-fish-burst span { position:absolute; bottom:-60px; font-size:30px; animation:aqua-rise 2.2s ease-out forwards; animation-delay:var(--delay); left:var(--left); }
+    @keyframes aqua-rise { 0% { transform:translateY(0) rotate(0deg); opacity:0; } 12% { opacity:1; } 100% { transform:translateY(-220px) rotate(var(--rotate)); opacity:0; } }
+    @keyframes aqua-pop { 0% { transform:scale(.7); opacity:0; } 70% { transform:scale(1.08); opacity:1; } 100% { transform:scale(1); opacity:1; } }
     </style>
     """, unsafe_allow_html=True)
 
@@ -182,6 +189,7 @@ def obtain_aqua_fish(species: dict) -> tuple[bool, int]:
 def give_fish_food(fish_index: int, food_key: str, count: int = 1):
     """餌の成長ポイントを加算し、5ポイントごとに0.1cm成長させる。"""
     fish = st.session_state.aqua_fish[fish_index]
+    old_size_mm = float(fish.get("size_mm", 10.0))
     points = AQUA_FOOD[food_key]["feed_points"] * count
     fish["feed_points"] = fish.get("feed_points", 0) + points
 
@@ -189,12 +197,44 @@ def give_fish_food(fish_index: int, food_key: str, count: int = 1):
     # 初期値は1.0cmなので、最初の5ポイントで1.1cmになる。
     growth_steps = fish["feed_points"] // 5
     fish["size_mm"] = round(10.0 + growth_steps * 1.0, 1)
+    queue_aqua_growth_notification(fish, old_size_mm, fish["size_mm"])
 
     st.session_state.aqua_feed_log.append({
         "date": get_now_jst().strftime("%Y/%m/%d %H:%M"),
         "fish": fish_display_name(fish), "food": AQUA_FOOD[food_key]["name"],
         "count": count, "points": points,
     })
+
+
+def queue_aqua_growth_notification(fish: dict, old_size_mm: float, new_size_mm: float):
+    """魚の成長演出をキューに入れる。1cm刻みの到達時は特別演出も付ける。"""
+    old_cm = old_size_mm / 10.0
+    new_cm = new_size_mm / 10.0
+    if new_cm <= old_cm:
+        return
+    queue = st.session_state.setdefault("aqua_growth_notifications", [])
+    name = fish_display_name(fish)
+    queue.append({"type":"growth", "name":name, "cm":new_cm})
+    first_milestone = max(2, int(old_cm) + 1)
+    last_milestone = int(new_cm)
+    for cm in range(first_milestone, last_milestone + 1):
+        if old_cm < cm <= new_cm:
+            queue.append({"type":"milestone", "name":name, "cm":cm, "emoji":fish.get("emoji","🐟")})
+
+def render_aqua_growth_notifications():
+    """餌やり直後の成長メッセージと、整数cm到達時の魚吹き上がり演出を表示する。"""
+    queue = st.session_state.get("aqua_growth_notifications", [])
+    if not queue:
+        return
+    for notice in queue:
+        if notice.get("type") == "growth":
+            st.markdown(f'<div class="aqua-growth-message">🐠 {html.escape(notice["name"])}が成長したよ！</div>', unsafe_allow_html=True)
+        elif notice.get("type") == "milestone":
+            emoji = html.escape(notice.get("emoji", "🐟"))
+            burst = "".join(f'<span style="--left:{(i*17+3)%97}%; --delay:{(i%9)*0.08:.2f}s; --rotate:{(-18+(i*13)%37)}deg">{emoji}</span>' for i in range(28))
+            message = f'<div class="aqua-milestone"><div class="aqua-milestone-title">🎉 {html.escape(notice["name"])}が {notice["cm"]}cm にまで成長した！！おめでとう！！ 🎉</div><div class="aqua-fish-burst">{burst}</div></div>'
+            st.markdown(message, unsafe_allow_html=True)
+    st.session_state.aqua_growth_notifications = []
 
 
 def get_aqua_tank_score() -> int:
@@ -2273,6 +2313,7 @@ elif st.session_state.page in [
         next_text = "MAX" if next_req is None else f"あと {next_req - tank_score}ポイント"
         st.markdown(f"### 🌊 水槽 Lv.{tank['level']}『{tank['name']}』")
         st.caption(f"豪華度 {tank_score} ／ 次の水槽Lvまで：{next_text}")
+        render_aqua_growth_notifications()
         st.caption("🌊 展示水槽（魚一覧で展示・非展示を切り替えられます）")
         st.markdown(render_aquarium_tank(), unsafe_allow_html=True)
 

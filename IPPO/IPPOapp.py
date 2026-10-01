@@ -222,18 +222,41 @@ def queue_aqua_growth_notification(fish: dict, old_size_mm: float, new_size_mm: 
             queue.append({"type":"milestone", "name":name, "cm":cm, "emoji":fish.get("emoji","🐟")})
 
 def render_aqua_growth_notifications():
-    """餌やり直後の成長メッセージと、整数cm到達時の魚吹き上がり演出を表示する。"""
+    """餌やり欄に魚の成長メッセージを表示し、成長に応じた効果音を鳴らす。"""
     queue = st.session_state.get("aqua_growth_notifications", [])
     if not queue:
         return
+
+    # 0.1cm成長ごとに正解音、整数cm到達時には歓声と拍手を鳴らす。
+    # 1cm到達時は「0.1cm成長」の通知も同時に存在するため、両方を順番に再生する。
+    has_small_growth = any(notice.get("type") == "growth" for notice in queue)
+    has_milestone = any(notice.get("type") == "milestone" for notice in queue)
+
+    if has_small_growth:
+        play_achieve_sound(delay=0)
+    if has_milestone:
+        play_jar_full_sound(delay=0)
+
     for notice in queue:
         if notice.get("type") == "growth":
-            st.markdown(f'<div class="aqua-growth-message">🐠 {html.escape(notice["name"])}が成長したよ！</div>', unsafe_allow_html=True)
+            st.markdown(
+                f'<div class="aqua-growth-message">🐠 {html.escape(notice["name"])}が成長したよ！</div>',
+                unsafe_allow_html=True,
+            )
         elif notice.get("type") == "milestone":
             emoji = html.escape(notice.get("emoji", "🐟"))
-            burst = "".join(f'<span style="--left:{(i*17+3)%97}%; --delay:{(i%9)*0.08:.2f}s; --rotate:{(-18+(i*13)%37)}deg">{emoji}</span>' for i in range(28))
-            message = f'<div class="aqua-milestone"><div class="aqua-milestone-title">🎉 {html.escape(notice["name"])}が {notice["cm"]}cm にまで成長した！！おめでとう！！ 🎉</div><div class="aqua-fish-burst">{burst}</div></div>'
+            burst = "".join(
+                f'<span style="--left:{(i*17+3)%97}%; --delay:{(i%9)*0.08:.2f}s; --rotate:{(-18+(i*13)%37)}deg">{emoji}</span>'
+                for i in range(28)
+            )
+            message = (
+                f'<div class="aqua-milestone">'
+                f'<div class="aqua-milestone-title">🎉 {html.escape(notice["name"])}が {notice["cm"]}cm にまで成長した！！おめでとう！！ 🎉</div>'
+                f'<div class="aqua-fish-burst">{burst}</div></div>'
+            )
             st.markdown(message, unsafe_allow_html=True)
+
+    # 表示・効果音ともに一度だけ。
     st.session_state.aqua_growth_notifications = []
 
 
@@ -2313,7 +2336,6 @@ elif st.session_state.page in [
         next_text = "MAX" if next_req is None else f"あと {next_req - tank_score}ポイント"
         st.markdown(f"### 🌊 水槽 Lv.{tank['level']}『{tank['name']}』")
         st.caption(f"豪華度 {tank_score} ／ 次の水槽Lvまで：{next_text}")
-        render_aqua_growth_notifications()
         st.caption("🌊 展示水槽（魚一覧で展示・非展示を切り替えられます）")
         st.markdown(render_aquarium_tank(), unsafe_allow_html=True)
 
@@ -2456,6 +2478,8 @@ elif st.session_state.page in [
 
         st.write("---")
         st.markdown("### 🐟 GETした魚一覧・餌やり")
+        # 魚の成長通知はここ（餌やり欄）に表示する。
+        render_aqua_growth_notifications()
         if not st.session_state.aqua_fish:
             st.info("まずはショップかガチャで魚を迎えよう！")
         else:

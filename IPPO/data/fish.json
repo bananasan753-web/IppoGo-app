@@ -108,5 +108,115 @@
     "shop": true,
     "price": 18,
     "image": ""
+  },
+  {
+    "id": "sardine",
+    "name": "イワシ",
+    "emoji": "🐟",
+    "stars": 1,
+    "gacha": true,
+    "weight": 25,
+    "shop": false,
+    "price": 0,
+    "image": ""
+  },
+  {
+    "id": "garden_eel",
+    "name": "チンアナゴ",
+    "emoji": "🐟",
+    "stars": 2,
+    "gacha": true,
+    "weight": 18,
+    "shop": false,
+    "price": 0,
+    "image": ""
+  },
+  {
+    "id": "sunfish",
+    "name": "マンボウ",
+    "emoji": "🐟",
+    "stars": 2,
+    "gacha": true,
+    "weight": 16,
+    "shop": false,
+    "price": 0,
+    "image": ""
+  },
+  {
+    "id": "stingray",
+    "name": "アカエイ",
+    "emoji": "🦈",
+    "stars": 3,
+    "gacha": true,
+    "weight": 14,
+    "shop": false,
+    "price": 0,
+    "image": ""
+  },
+  {
+    "id": "sea_turtle",
+    "name": "ウミガメ",
+    "emoji": "🐢",
+    "stars": 3,
+    "gacha": true,
+    "weight": 12,
+    "shop": false,
+    "price": 0,
+    "image": ""
+  },
+  {
+    "id": "lionfish",
+    "name": "ミノカサゴ",
+    "emoji": "🐠",
+    "stars": 4,
+    "gacha": true,
+    "weight": 9,
+    "shop": false,
+    "price": 0,
+    "image": ""
+  },
+  {
+    "id": "shark",
+    "name": "サメ",
+    "emoji": "🦈",
+    "stars": 4,
+    "gacha": true,
+    "weight": 7,
+    "shop": false,
+    "price": 0,
+    "image": ""
+  },
+  {
+    "id": "whale_shark",
+    "name": "ジンベエザメ",
+    "emoji": "🦈",
+    "stars": 5,
+    "gacha": true,
+    "weight": 4,
+    "shop": false,
+    "price": 0,
+    "image": ""
+  },
+  {
+    "id": "oarfish",
+    "name": "リュウグウノツカイ",
+    "emoji": "🐟",
+    "stars": 5,
+    "gacha": true,
+    "weight": 3,
+    "shop": false,
+    "price": 0,
+    "image": ""
+  },
+  {
+    "id": "coelacanth",
+    "name": "シーラカンス",
+    "emoji": "🐟",
+    "stars": 5,
+    "gacha": true,
+    "weight": 2,
+    "shop": false,
+    "price": 0,
+    "image": ""
   }
 ]

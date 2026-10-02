@@ -736,6 +736,19 @@ def render_day_bar_svg(entries: list, bar_width: int = 150, height: int = 720) -
 
 
 
+def sort_schedule_entries(entries: list) -> list:
+    """予定・記録を開始時刻の早い順に並べる。
+
+    同じ開始時刻の場合は終了時刻、さらに内容の順で安定して並べる。
+    """
+    entries.sort(key=lambda e: (
+        time_to_minutes(e.get("start", "00:00")),
+        time_to_minutes(e.get("end", "00:00")),
+        str(e.get("label", "")),
+    ))
+    return entries
+
+
 def find_schedule_matches(planned: list, actual: list) -> list:
     """予定と記録で、開始・終了時刻が完全に一致する組み合わせを探す"""
     matches = []
@@ -968,6 +981,8 @@ def render_schedule_and_events(date_str: str, editable: bool, clipboard_at_botto
     editable=True の場合は、予定・記録の追加に加えて既存項目の編集・削除ができる。
     """
     day_schedule = st.session_state.daily_schedule.setdefault(date_str, {"planned": [], "actual": []})
+    # 既存データも含め、予定は常に開始時刻順で表示する。
+    sort_schedule_entries(day_schedule.setdefault("planned", []))
 
     if editable:
         if not clipboard_at_bottom:
@@ -1039,6 +1054,7 @@ def render_schedule_and_events(date_str: str, editable: bool, clipboard_at_botto
                                     "label": edit_label.strip(),
                                     "color": edit_color,
                                 })
+                                sort_schedule_entries(entries)
                                 st.session_state.schedule_edit_target = None
                                 save_progress()
                                 st.rerun()
@@ -1120,6 +1136,8 @@ def render_schedule_and_events(date_str: str, editable: bool, clipboard_at_botto
                             "color": color_pick,
                         }
                         day_schedule[form_kind].append(new_entry)
+                        if form_kind == "planned":
+                            sort_schedule_entries(day_schedule["planned"])
                         st.session_state.schedule_form_open = None
                         save_progress()
                         st.rerun()

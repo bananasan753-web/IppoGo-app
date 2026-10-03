@@ -67,6 +67,9 @@ except Exception as e:
 SOUND_PATH = os.path.join(os.path.dirname(__file__), "sounds", "決定ボタンを押す23.mp3")
 ACHIEVE_SOUND_PATH = os.path.join(os.path.dirname(__file__), "sounds", "クイズ正解1.mp3")
 JAR_FULL_SOUND_PATH = os.path.join(os.path.dirname(__file__), "sounds", "歓声と拍手.mp3")
+AQUA_POINT_SOUND_PATH = os.path.join(os.path.dirname(__file__), "sounds", "パパッ.mp3")
+AQUA_GACHA_LOW_SOUND_PATH = os.path.join(os.path.dirname(__file__), "sounds", "ペタッ.mp3")
+AQUA_GACHA_THREE_SOUND_PATH = os.path.join(os.path.dirname(__file__), "sounds", "きらーん1.mp3")
 
 JAR_SIZE_LABELS = {30: "S", 50: "M", 100: "L"}
 
@@ -736,19 +739,6 @@ def render_day_bar_svg(entries: list, bar_width: int = 150, height: int = 720) -
 
 
 
-def sort_schedule_entries(entries: list) -> list:
-    """予定・記録を開始時刻の早い順に並べる。
-
-    同じ開始時刻の場合は終了時刻、さらに内容の順で安定して並べる。
-    """
-    entries.sort(key=lambda e: (
-        time_to_minutes(e.get("start", "00:00")),
-        time_to_minutes(e.get("end", "00:00")),
-        str(e.get("label", "")),
-    ))
-    return entries
-
-
 def find_schedule_matches(planned: list, actual: list) -> list:
     """予定と記録で、開始・終了時刻が完全に一致する組み合わせを探す"""
     matches = []
@@ -981,8 +971,6 @@ def render_schedule_and_events(date_str: str, editable: bool, clipboard_at_botto
     editable=True の場合は、予定・記録の追加に加えて既存項目の編集・削除ができる。
     """
     day_schedule = st.session_state.daily_schedule.setdefault(date_str, {"planned": [], "actual": []})
-    # 既存データも含め、予定は常に開始時刻順で表示する。
-    sort_schedule_entries(day_schedule.setdefault("planned", []))
 
     if editable:
         if not clipboard_at_bottom:
@@ -1054,7 +1042,6 @@ def render_schedule_and_events(date_str: str, editable: bool, clipboard_at_botto
                                     "label": edit_label.strip(),
                                     "color": edit_color,
                                 })
-                                sort_schedule_entries(entries)
                                 st.session_state.schedule_edit_target = None
                                 save_progress()
                                 st.rerun()
@@ -1136,8 +1123,6 @@ def render_schedule_and_events(date_str: str, editable: bool, clipboard_at_botto
                             "color": color_pick,
                         }
                         day_schedule[form_kind].append(new_entry)
-                        if form_kind == "planned":
-                            sort_schedule_entries(day_schedule["planned"])
                         st.session_state.schedule_form_open = None
                         save_progress()
                         st.rerun()
@@ -1207,6 +1192,9 @@ def load_sound_base64(path: str):
 _sound_b64 = load_sound_base64(SOUND_PATH)
 _achieve_sound_b64 = load_sound_base64(ACHIEVE_SOUND_PATH)
 _jar_full_sound_b64 = load_sound_base64(JAR_FULL_SOUND_PATH)
+_aqua_point_sound_b64 = load_sound_base64(AQUA_POINT_SOUND_PATH)
+_aqua_gacha_low_sound_b64 = load_sound_base64(AQUA_GACHA_LOW_SOUND_PATH)
+_aqua_gacha_three_sound_b64 = load_sound_base64(AQUA_GACHA_THREE_SOUND_PATH)
 
 
 def play_click_sound(delay: float = 1.2):
@@ -1231,6 +1219,27 @@ def play_jar_full_sound(delay: float = 0):
     if _jar_full_sound_b64 is None:
         return
     sound_html = f'<audio autoplay="true" style="display:none;"><source src="data:audio/mp3;base64,{_jar_full_sound_b64}" type="audio/mp3"></audio>'
+    st.components.v1.html(sound_html, height=0)
+    if delay:
+        time.sleep(delay)
+
+
+def play_aqua_point_sound(delay: float = 0):
+    """アクアポイント獲得時の効果音。"""
+    if _aqua_point_sound_b64 is None:
+        return
+    sound_html = f'<audio autoplay="true" style="display:none;"><source src="data:audio/mp3;base64,{_aqua_point_sound_b64}" type="audio/mp3"></audio>'
+    st.components.v1.html(sound_html, height=0)
+    if delay:
+        time.sleep(delay)
+
+
+def play_aqua_gacha_sound(stars: int, delay: float = 0):
+    """ガチャの☆数に応じた効果音。☆1〜2=ペタッ、☆3=きらーん1。"""
+    sound_b64 = _aqua_gacha_low_sound_b64 if stars <= 2 else _aqua_gacha_three_sound_b64
+    if sound_b64 is None:
+        return
+    sound_html = f'<audio autoplay="true" style="display:none;"><source src="data:audio/mp3;base64,{sound_b64}" type="audio/mp3"></audio>'
     st.components.v1.html(sound_html, height=0)
     if delay:
         time.sleep(delay)
@@ -2382,6 +2391,7 @@ elif st.session_state.page in [
                 play_achieve_sound()
                 earned_ap = int(aqua_lv_key.replace("Lv.", "").replace("Lv", ""))
                 st.session_state.aqua_points += earned_ap
+                play_aqua_point_sound(delay=0)
                 st.session_state.aqua_goal_log.append({
                     "date": get_now_jst().strftime("%Y/%m/%d %H:%M"),
                     "target": aqua_target_title,
@@ -2400,6 +2410,7 @@ elif st.session_state.page in [
                 if st.button("以前の交換券をまとめて交換", key="aqua_legacy_exchange"):
                     play_click_sound()
                     st.session_state.aqua_points += sum(int(ticket.get("level", 1)) for ticket in st.session_state.aqua_reward_queue)
+                    play_aqua_point_sound(delay=0)
                     st.session_state.aqua_reward_queue = []
                     save_progress()
                     st.rerun()
@@ -2434,9 +2445,9 @@ elif st.session_state.page in [
             st.write("1回 **5 AP**。ショップにはいない魚が出ます！")
             if st.button("🎁 5 APでガチャを回す！", type="primary", use_container_width=True, key="aqua_gacha"):
                 if st.session_state.aqua_points >= 5:
-                    play_click_sound(delay=0)
                     st.session_state.aqua_points -= 5
                     got = random.choices(AQUA_GACHA_FISH, weights=[f["weight"] for f in AQUA_GACHA_FISH], k=1)[0]
+                    play_aqua_gacha_sound(get_fish_stars(got), delay=0)
                     obtained, bonus = obtain_aqua_fish(got)
                     sync_aqua_tank_history()
                     save_progress()
@@ -2523,34 +2534,92 @@ elif st.session_state.page in [
                             fish["display"] = show
                             save_progress()
                     st.caption("この種類は最大5匹まで所持できます。")
-            st.markdown("#### 🍚 どの魚に餌をあげる？")
-            fish_indices = st.multiselect(
-                "餌をあげる魚を選んでね（複数選択OK・非展示の魚も選択可）",
-                options=list(range(len(fish_list))),
-                format_func=lambda i: f"{fish_list[i]['emoji']} {fish_display_name(fish_list[i])} "
-                                      f"({'☆' * get_fish_stars(fish_list[i])})",
-                key="aqua_feed_fish_choices",
-            )
-            st.caption("選んだ魚それぞれに、指定した数の餌をあげます。")
+            st.markdown("#### 🍚 餌やり")
+            st.info("💡 魚を選んで餌を1個ずつあげられます。複数の魚にまとめてあげたいときは、下の「まとめて餌やり」を使ってください。")
+
             normal_stock = st.session_state.aqua_food_inventory.get("normal", 0)
             premium_stock = st.session_state.aqua_food_inventory.get("premium", 0)
-            bundle_stock = st.session_state.aqua_food_inventory.get("bundle", 0)
-            grand_bundle_stock = st.session_state.aqua_food_inventory.get("grand_bundle", 0)
+
+            # 魚ごとの個別餌やり：まずこちらを表示して、操作を分かりやすくする。
+            st.markdown("##### 🐟 魚を選んで餌をあげる")
+            for i, fish in enumerate(fish_list):
+                stars = get_fish_stars(fish)
+                size_cm = fish.get('size_mm', 10.0) / 10
+                progress = fish.get('feed_points', 0) % 5
+                st.markdown(
+                    f"**{fish_display_name(fish)}**　{'☆' * stars}　"
+                    f"現在 **{size_cm:.1f}cm**　（次の0.1cmまで {progress}/5pt）"
+                )
+                feed_col1, feed_col2, feed_col3 = st.columns([2, 2, 2])
+                with feed_col1:
+                    if st.button(
+                        f"🫧 通常餌をあげる（残り {normal_stock}）",
+                        disabled=normal_stock <= 0,
+                        key=f"aqua_feed_one_normal_{i}",
+                        use_container_width=True,
+                    ):
+                        play_click_sound(delay=0)
+                        st.session_state.aqua_food_inventory["normal"] -= 1
+                        give_fish_food(i, "normal")
+                        sync_aqua_tank_history()
+                        save_progress()
+                        st.rerun()
+                with feed_col2:
+                    if st.button(
+                        f"✨ 高級餌をあげる（残り {premium_stock}）",
+                        disabled=premium_stock <= 0,
+                        key=f"aqua_feed_one_premium_{i}",
+                        use_container_width=True,
+                    ):
+                        play_click_sound(delay=0)
+                        st.session_state.aqua_food_inventory["premium"] -= 1
+                        give_fish_food(i, "premium")
+                        sync_aqua_tank_history()
+                        save_progress()
+                        st.rerun()
+                with feed_col3:
+                    st.write(f"成長ポイント：**{fish.get('feed_points', 0) % 5}/5**")
+
+            st.markdown("##### 👥 複数の魚にまとめて餌をあげる")
+            fish_indices = st.multiselect(
+                "① 餌をあげる魚を選ぶ",
+                options=list(range(len(fish_list))),
+                format_func=lambda i: f"{fish_list[i]['emoji']} {fish_display_name(fish_list[i])}（{'☆' * get_fish_stars(fish_list[i])}・{fish_list[i].get('size_mm', 10.0) / 10:.1f}cm）",
+                key="aqua_feed_fish_choices",
+            )
+            st.caption("② 選んだ魚1匹あたりに、何個あげるか指定します。")
             col_n, col_p = st.columns(2)
             with col_n:
-                normal_count = st.number_input("🫧 通常餌（1匹あたり）", min_value=0,
-                                               max_value=normal_stock, value=0, step=1,
-                                               key="aqua_feed_normal_count")
+                normal_count = st.number_input(
+                    "🫧 通常餌（1匹あたり）",
+                    min_value=0,
+                    max_value=normal_stock,
+                    value=0,
+                    step=1,
+                    key="aqua_feed_normal_count",
+                )
             with col_p:
-                premium_count = st.number_input("✨ 高級餌（1匹あたり）", min_value=0,
-                                                max_value=premium_stock, value=0, step=1,
-                                                key="aqua_feed_premium_count")
+                premium_count = st.number_input(
+                    "✨ 高級餌（1匹あたり）",
+                    min_value=0,
+                    max_value=premium_stock,
+                    value=0,
+                    step=1,
+                    key="aqua_feed_premium_count",
+                )
             needed_normal = len(fish_indices) * normal_count
             needed_premium = len(fish_indices) * premium_count
-            st.write(f"必要な餌：通常 {needed_normal}/{normal_stock}、高級 {needed_premium}/{premium_stock}")
-            if st.button("🐟 選んだ魚にまとめて餌をあげる", type="primary",
-                         disabled=not fish_indices or (normal_count + premium_count == 0),
-                         key="aqua_feed_selected"):
+            if fish_indices:
+                st.write(f"③ 必要な餌：通常 **{needed_normal}個** ／ 高級 **{needed_premium}個**")
+            else:
+                st.caption("魚を選ぶと必要な餌の数が表示されます。")
+            if st.button(
+                "🐟 選んだ魚にまとめて餌をあげる",
+                type="primary",
+                disabled=not fish_indices or (normal_count + premium_count == 0),
+                key="aqua_feed_selected",
+                use_container_width=True,
+            ):
                 if needed_normal > normal_stock or needed_premium > premium_stock:
                     st.warning("選んだ魚の数に対して餌が足りません。数を調整してね！")
                 else:

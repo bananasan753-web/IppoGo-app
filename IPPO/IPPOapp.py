@@ -2388,7 +2388,6 @@ elif st.session_state.page in [
             aqua_lv_key = aqua_level_str.split(":")[0]
             aqua_task_text = aqua_target_data["tasks"][aqua_lv_key]
             if st.button("➕ この1歩を達成した！", type="primary", key="aqua_achieve_button"):
-                play_achieve_sound()
                 earned_ap = int(aqua_lv_key.replace("Lv.", "").replace("Lv", ""))
                 st.session_state.aqua_points += earned_ap
                 play_aqua_point_sound(delay=0)
@@ -2408,7 +2407,6 @@ elif st.session_state.page in [
             with st.expander("🎟️ 以前のバージョンで貯めた交換券"):
                 st.write(f"未交換：{len(st.session_state.aqua_reward_queue)}枚（合計 {sum(int(ticket.get('level', 1)) for ticket in st.session_state.aqua_reward_queue)} AP）")
                 if st.button("以前の交換券をまとめて交換", key="aqua_legacy_exchange"):
-                    play_click_sound()
                     st.session_state.aqua_points += sum(int(ticket.get("level", 1)) for ticket in st.session_state.aqua_reward_queue)
                     play_aqua_point_sound(delay=0)
                     st.session_state.aqua_reward_queue = []
@@ -2427,7 +2425,6 @@ elif st.session_state.page in [
                     st.write(f"💧 {fish_data['price']} AP")
                     if st.button("購入する", key=f"buy_shop_fish_{fish_data['id']}", use_container_width=True):
                         if st.session_state.aqua_points >= fish_data["price"]:
-                            play_click_sound(delay=0)
                             st.session_state.aqua_points -= fish_data["price"]
                             obtained, bonus = obtain_aqua_fish(fish_data)
                             sync_aqua_tank_history()
@@ -2476,7 +2473,6 @@ elif st.session_state.page in [
                         st.write(f"1回の餌やりで **+{food['feed_points']}成長ポイント**")
                     if st.button("購入する", key=f"buy_food_{food_key}", use_container_width=True):
                         if st.session_state.aqua_points >= food["price"]:
-                            play_click_sound(delay=0)
                             st.session_state.aqua_points -= food["price"]
                             st.session_state.aqua_food_inventory[food_key] = st.session_state.aqua_food_inventory.get(food_key, 0) + food["pack"]
                             save_progress()
@@ -2495,7 +2491,6 @@ elif st.session_state.page in [
                     st.write(f"{decor['price']} AP ／ 豪華度 +{decor['score']}")
                     if st.button("飾る", key=f"buy_decor_{decor['id']}", use_container_width=True):
                         if st.session_state.aqua_points >= decor["price"]:
-                            play_click_sound(delay=0)
                             st.session_state.aqua_points -= decor["price"]
                             st.session_state.aqua_decorations.append({"id": decor["id"], "name": decor["name"], "emoji": decor["emoji"], "score": decor["score"]})
                             sync_aqua_tank_history()
@@ -2566,7 +2561,6 @@ elif st.session_state.page in [
                             key=f"aqua_feed_one_normal_{i}",
                             use_container_width=True,
                         ):
-                            play_click_sound(delay=0)
                             st.session_state.aqua_food_inventory["normal"] -= 1
                             give_fish_food(i, "normal")
                             sync_aqua_tank_history()
@@ -2579,7 +2573,6 @@ elif st.session_state.page in [
                             key=f"aqua_feed_one_premium_{i}",
                             use_container_width=True,
                         ):
-                            play_click_sound(delay=0)
                             st.session_state.aqua_food_inventory["premium"] -= 1
                             give_fish_food(i, "premium")
                             sync_aqua_tank_history()
@@ -2634,7 +2627,6 @@ elif st.session_state.page in [
                 if needed_normal > normal_stock or needed_premium > premium_stock:
                     st.warning("選んだ魚の数に対して餌が足りません。数を調整してね！")
                 else:
-                    play_click_sound(delay=0)
                     st.session_state.aqua_food_inventory["normal"] -= needed_normal
                     st.session_state.aqua_food_inventory["premium"] -= needed_premium
                     for i in fish_indices:
@@ -2656,7 +2648,6 @@ elif st.session_state.page in [
                          disabled=bundle_stock == 0 or not displayed_indices,
                          key="aqua_feed_bundle", use_container_width=True):
                 if st.session_state.aqua_food_inventory.get("bundle", 0) > 0 and displayed_indices:
-                    play_click_sound(delay=0)
                     st.session_state.aqua_food_inventory["bundle"] -= 1
                     for i in displayed_indices:
                         give_fish_food(i, "bundle")
@@ -2672,7 +2663,6 @@ elif st.session_state.page in [
                          disabled=grand_bundle_stock == 0,
                          key="aqua_feed_grand_bundle", use_container_width=True):
                 if st.session_state.aqua_food_inventory.get("grand_bundle", 0) > 0:
-                    play_click_sound(delay=0)
                     st.session_state.aqua_food_inventory["grand_bundle"] -= 1
                     for i in range(len(fish_list)):
                         give_fish_food(i, "grand_bundle")

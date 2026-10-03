@@ -2539,6 +2539,8 @@ elif st.session_state.page in [
 
             normal_stock = st.session_state.aqua_food_inventory.get("normal", 0)
             premium_stock = st.session_state.aqua_food_inventory.get("premium", 0)
+            bundle_stock = st.session_state.aqua_food_inventory.get("bundle", 0)
+            grand_bundle_stock = st.session_state.aqua_food_inventory.get("grand_bundle", 0)
 
             # 展示中の魚だけ、直接餌をあげられるように表示する。
             displayed_fish_indices = [

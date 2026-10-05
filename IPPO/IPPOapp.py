@@ -70,6 +70,7 @@ JAR_FULL_SOUND_PATH = os.path.join(os.path.dirname(__file__), "sounds", "歓声�
 AQUA_POINT_SOUND_PATH = os.path.join(os.path.dirname(__file__), "sounds", "パパッ.mp3")
 AQUA_GACHA_LOW_SOUND_PATH = os.path.join(os.path.dirname(__file__), "sounds", "ペタッ.mp3")
 AQUA_GACHA_THREE_SOUND_PATH = os.path.join(os.path.dirname(__file__), "sounds", "きらーん1.mp3")
+AQUA_FEED_SOUND_PATH = os.path.join(os.path.dirname(__file__), "sounds", "コルク栓を抜く.mp3")
 
 JAR_SIZE_LABELS = {30: "S", 50: "M", 100: "L"}
 
@@ -189,7 +190,7 @@ def obtain_aqua_fish(species: dict) -> tuple[bool, int]:
     return True, 0
 
 
-def give_fish_food(fish_index: int, food_key: str, count: int = 1):
+def give_fish_food(fish_index: int, food_key: str, count: int = 1, play_sound: bool = True):
     """餌の成長ポイントを加算し、5ポイントごとに0.1cm成長させる。"""
     fish = st.session_state.aqua_fish[fish_index]
     old_size_mm = float(fish.get("size_mm", 10.0))
@@ -207,6 +208,8 @@ def give_fish_food(fish_index: int, food_key: str, count: int = 1):
         "fish": fish_display_name(fish), "food": AQUA_FOOD[food_key]["name"],
         "count": count, "points": points,
     })
+    if play_sound:
+        play_aqua_feed_sound(delay=0)
 
 
 def queue_aqua_growth_notification(fish: dict, old_size_mm: float, new_size_mm: float):
@@ -1195,6 +1198,7 @@ _jar_full_sound_b64 = load_sound_base64(JAR_FULL_SOUND_PATH)
 _aqua_point_sound_b64 = load_sound_base64(AQUA_POINT_SOUND_PATH)
 _aqua_gacha_low_sound_b64 = load_sound_base64(AQUA_GACHA_LOW_SOUND_PATH)
 _aqua_gacha_three_sound_b64 = load_sound_base64(AQUA_GACHA_THREE_SOUND_PATH)
+_aqua_feed_sound_b64 = load_sound_base64(AQUA_FEED_SOUND_PATH)
 
 
 def play_click_sound(delay: float = 1.2):
@@ -1229,6 +1233,16 @@ def play_aqua_point_sound(delay: float = 0):
     if _aqua_point_sound_b64 is None:
         return
     sound_html = f'<audio autoplay="true" style="display:none;"><source src="data:audio/mp3;base64,{_aqua_point_sound_b64}" type="audio/mp3"></audio>'
+    st.components.v1.html(sound_html, height=0)
+    if delay:
+        time.sleep(delay)
+
+
+def play_aqua_feed_sound(delay: float = 0):
+    """魚に餌を渡したときの効果音。"""
+    if _aqua_feed_sound_b64 is None:
+        return
+    sound_html = f'<audio autoplay="true" style="display:none;"><source src="data:audio/mp3;base64,{_aqua_feed_sound_b64}" type="audio/mp3"></audio>'
     st.components.v1.html(sound_html, height=0)
     if delay:
         time.sleep(delay)
@@ -2631,9 +2645,10 @@ elif st.session_state.page in [
                     st.session_state.aqua_food_inventory["premium"] -= needed_premium
                     for i in fish_indices:
                         if normal_count:
-                            give_fish_food(i, "normal", normal_count)
+                            give_fish_food(i, "normal", normal_count, play_sound=False)
                         if premium_count:
-                            give_fish_food(i, "premium", premium_count)
+                            give_fish_food(i, "premium", premium_count, play_sound=False)
+                    play_aqua_feed_sound(delay=0)
                     sync_aqua_tank_history()
                     save_progress()
                     st.success(f"🐠 {len(fish_indices)}匹に餌をあげました！")
@@ -2650,7 +2665,8 @@ elif st.session_state.page in [
                 if st.session_state.aqua_food_inventory.get("bundle", 0) > 0 and displayed_indices:
                     st.session_state.aqua_food_inventory["bundle"] -= 1
                     for i in displayed_indices:
-                        give_fish_food(i, "bundle")
+                        give_fish_food(i, "bundle", play_sound=False)
+                    play_aqua_feed_sound(delay=0)
                     sync_aqua_tank_history()
                     save_progress()
                     st.success(f"🎉 展示中の{len(displayed_indices)}匹に餌をあげました！")
@@ -2665,7 +2681,8 @@ elif st.session_state.page in [
                 if st.session_state.aqua_food_inventory.get("grand_bundle", 0) > 0:
                     st.session_state.aqua_food_inventory["grand_bundle"] -= 1
                     for i in range(len(fish_list)):
-                        give_fish_food(i, "grand_bundle")
+                        give_fish_food(i, "grand_bundle", play_sound=False)
+                    play_aqua_feed_sound(delay=0)
                     sync_aqua_tank_history()
                     save_progress()
                     st.success(f"🎉 所持している{len(fish_list)}匹全員に餌をあげました！")

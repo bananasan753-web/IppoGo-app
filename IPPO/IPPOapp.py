@@ -118,6 +118,42 @@ AQUA_DECORATIONS = [
     {"id": "treasure", "name": "宝箱", "emoji": "💎", "price": 12, "score": 8},
 ]
 
+# =====================================================
+# 🪸 飾りガチャ（data/goods.jsonから読み込み）
+# =====================================================
+# goods.json の形式（リスト）:
+#   {"id": "jellyfish_lamp", "name": "クラゲランプ", "emoji": "🪼", "stars": 3, "weight": 10}
+#   stars  : 1〜5（そのまま豪華度になる）
+#   weight : 出やすさ（大きいほど出やすい。省略時は1）
+#   gacha  : false にするとガチャから外せる（省略時はtrue）
+# ※ idはショップの飾り（seaweed等）や他のグッズと重ならないようにしてください。
+AQUA_DECOR_GACHA_PRICE = 5  # 飾りガチャ1回に必要なアクアポイント
+GOODS_DATA_PATH = os.path.join(BASE_DIR, "data", "goods.json")
+
+
+def load_aqua_decor_gacha() -> list:
+    try:
+        with open(GOODS_DATA_PATH, "r", encoding="utf-8") as f:
+            raw = json.load(f)
+    except (FileNotFoundError, json.JSONDecodeError):
+        return []
+    items = []
+    for item in raw if isinstance(raw, list) else []:
+        if not item.get("gacha", True):
+            continue
+        if not all(item.get(k) for k in ("id", "name", "emoji")):
+            continue
+        stars = max(1, min(5, int(item.get("stars", 1))))
+        weight = float(item.get("weight", 1))
+        if weight <= 0:
+            continue
+        items.append({"id": item["id"], "name": item["name"], "emoji": item["emoji"],
+                      "stars": stars, "weight": weight})
+    return items
+
+
+AQUA_GACHA_DECORATIONS = load_aqua_decor_gacha()
+
 AQUA_TANK_LEVELS = [
     {"level": 1, "required": 0, "name": "小さな水槽", "size": "60cm水槽"},
     {"level": 2, "required": 35, "name": "にぎやかな水槽", "size": "90cm水槽"},
@@ -2490,7 +2526,7 @@ elif st.session_state.page in [
                     st.rerun()
 
         st.write("---")
-        shop_tab, gacha_tab, food_tab, decor_tab = st.tabs(["🐟 魚ショップ", "🎁 魚ガチャ", "🍚 餌ショップ", "🪸 水槽ショップ"])
+        shop_tab, gacha_tab, food_tab, decor_tab, decor_gacha_tab = st.tabs(["🐟 魚ショップ", "🎁 魚ガチャ", "🍚 餌ショップ", "🪸 水槽ショップ", "🎰 飾りガチャ"])
 
         with shop_tab:
             st.markdown("#### 🐟 ショップ限定の魚")
@@ -2575,6 +2611,38 @@ elif st.session_state.page in [
                             st.rerun()
                         else:
                             st.warning("アクアポイントが足りません！")
+
+        with decor_gacha_tab:
+            st.markdown("#### 🎰 ガチャ限定の飾り")
+            st.write(f"1回 **{AQUA_DECOR_GACHA_PRICE} AP**。水槽ショップにはない飾りが出ます！")
+            st.caption("☆の数がそのまま豪華度になります（☆1なら+1、☆3なら+3、☆5なら+5）。")
+
+            # 直前のガチャ結果は、画面更新後にここで表示・効果音を鳴らす
+            decor_result = st.session_state.pop("aqua_decor_gacha_result", None)
+            if decor_result:
+                play_aqua_gacha_sound(decor_result["stars"], delay=0)
+                st.success(f"🎉 {'☆' * decor_result['stars']}！ {decor_result['emoji']} {decor_result['name']}が出ました！（豪華度 +{decor_result['stars']}）")
+
+            if not AQUA_GACHA_DECORATIONS:
+                st.info("🚧 飾りガチャは準備中です！（data/goods.json にガチャの飾りを入れると遊べます）")
+            else:
+                if st.button(f"🎰 {AQUA_DECOR_GACHA_PRICE} APで飾りガチャを回す！", type="primary",
+                             use_container_width=True, key="aqua_decor_gacha"):
+                    if st.session_state.aqua_points >= AQUA_DECOR_GACHA_PRICE:
+                        st.session_state.aqua_points -= AQUA_DECOR_GACHA_PRICE
+                        got = random.choices(AQUA_GACHA_DECORATIONS,
+                                             weights=[g["weight"] for g in AQUA_GACHA_DECORATIONS], k=1)[0]
+                        st.session_state.aqua_decorations.append({
+                            "id": got["id"], "name": got["name"], "emoji": got["emoji"],
+                            "stars": got["stars"], "score": got["stars"], "display": True,
+                        })
+                        st.session_state.aqua_decor_gacha_result = got
+                        sync_aqua_tank_history()
+                        save_progress()
+                        st.rerun()
+                    else:
+                        st.warning("アクアポイントが足りません！")
+            st.caption("ガチャで出た飾りは、そのまま水槽に飾られます。「今までに集めた魚やアイテム」で展示のON/OFFができます。")
 
         st.write("---")
         st.markdown("### 🐟 GETした魚一覧・餌やり")

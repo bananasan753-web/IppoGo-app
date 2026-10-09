@@ -162,6 +162,20 @@ def normalize_aqua_fish():
         fish.setdefault("display", True)
 
 
+def normalize_aqua_decorations():
+    """既存の飾りデータにも展示設定（display）を付ける。旧データは展示中として扱う。"""
+    for decor in st.session_state.get("aqua_decorations", []):
+        decor.setdefault("display", True)
+
+
+def toggle_decoration_display(index: int):
+    """飾りの「展示する」チェックが変わったときに呼ばれる。"""
+    decorations = st.session_state.get("aqua_decorations", [])
+    if 0 <= index < len(decorations):
+        decorations[index]["display"] = bool(st.session_state.get(f"aqua_decor_show_{index}", True))
+        save_progress()
+
+
 def fish_letter(number: int) -> str:
     result = ""
     while number:
@@ -328,7 +342,7 @@ def add_aqua_reward(level: int, source: str):
 def render_aquarium_tank() -> str:
     level_data = get_aqua_tank_level()
     fish = [f for f in st.session_state.get("aqua_fish", []) if f.get("display", True)]
-    decorations = st.session_state.get("aqua_decorations", [])
+    decorations = [d for d in st.session_state.get("aqua_decorations", []) if d.get("display", True)]
     fish_html = "".join(
         f'<span title="{html.escape(fish_display_name(f), quote=True)} {f.get("size_mm", 10.0):.1f}mm" '
         f'style="font-size:{max(28, min(70, 30 + f.get("size_mm", 10.0) * 0.7)):.0f}px; margin:8px;">'
@@ -2370,6 +2384,7 @@ elif st.session_state.page in [
     elif st.session_state.page == "aquarium_page":
         st.title("🐠 あなただけの水族館")
         normalize_aqua_fish()
+        normalize_aqua_decorations()
         tank = get_aqua_tank_level()
         tank_score = get_aqua_tank_score()
         tank_history = sync_aqua_tank_history()
@@ -2387,6 +2402,53 @@ elif st.session_state.page in [
             st.metric("🐟 飼っている魚", len(st.session_state.aqua_fish))
         with stat3:
             st.metric("🪸 飾り", len(st.session_state.aqua_decorations))
+
+        # --- 今までに集めた魚やアイテム ---
+        with st.expander("📦 今までに集めた魚やアイテム"):
+            owned_fish = st.session_state.aqua_fish
+            owned_decors = st.session_state.aqua_decorations
+            food_stock = st.session_state.aqua_food_inventory
+
+            st.markdown("#### 🐟 魚")
+            if not owned_fish:
+                st.caption("まだ魚がいません。ショップかガチャで迎えよう！")
+            else:
+                shown_fish = sum(1 for f in owned_fish if f.get("display", True))
+                st.write(f"合計 **{len(owned_fish)}匹**（展示中 {shown_fish}匹 ／ 非展示 {len(owned_fish) - shown_fish}匹）")
+                fish_species = {}
+                for f in owned_fish:
+                    fish_species.setdefault(f.get("id", f.get("name", "魚")), []).append(f)
+                for members in fish_species.values():
+                    first = members[0]
+                    st.write(f"{first.get('emoji', '🐟')} {first.get('name', '魚')}　{'☆' * get_fish_stars(first)}　**{len(members)}/5匹**")
+                st.caption("魚の名前や展示の切り替えは、下の「GETした魚一覧・餌やり」でできます。")
+
+            st.markdown("#### 🪸 飾り")
+            if not owned_decors:
+                st.caption("まだ飾りがありません。水槽ショップで買ってみよう！")
+            else:
+                shown_decors = sum(1 for d in owned_decors if d.get("display", True))
+                st.write(f"合計 **{len(owned_decors)}個**（展示中 {shown_decors}個 ／ 非展示 {len(owned_decors) - shown_decors}個）")
+                st.caption("チェックを入れた飾りだけが展示水槽に飾られます。")
+                decor_groups = {}
+                for i, d in enumerate(owned_decors):
+                    decor_groups.setdefault(d.get("id", d.get("name", "飾り")), []).append(i)
+                for indices in decor_groups.values():
+                    first = owned_decors[indices[0]]
+                    st.write(f"{first.get('emoji', '🪸')} {first.get('name', '飾り')}　**{len(indices)}個**")
+                    for n, i in enumerate(indices, 1):
+                        st.checkbox(
+                            f"{first.get('emoji', '🪸')} {first.get('name', '飾り')}{n} を展示する",
+                            value=owned_decors[i].get("display", True),
+                            key=f"aqua_decor_show_{i}",
+                            on_change=toggle_decoration_display,
+                            args=(i,),
+                        )
+
+            st.markdown("#### 🍚 餌")
+            for food_key, food in AQUA_FOOD.items():
+                unit = "個" if food_key in ("bundle", "grand_bundle") else "回"
+                st.write(f"{food['emoji']} {food['name']}：**{food_stock.get(food_key, 0)}{unit}**")
 
         st.write("---")
         st.subheader("🏆 達成した目標を選ぼう！")
@@ -2506,7 +2568,7 @@ elif st.session_state.page in [
                     if st.button("飾る", key=f"buy_decor_{decor['id']}", use_container_width=True):
                         if st.session_state.aqua_points >= decor["price"]:
                             st.session_state.aqua_points -= decor["price"]
-                            st.session_state.aqua_decorations.append({"id": decor["id"], "name": decor["name"], "emoji": decor["emoji"], "score": decor["score"]})
+                            st.session_state.aqua_decorations.append({"id": decor["id"], "name": decor["name"], "emoji": decor["emoji"], "score": decor["score"], "display": True})
                             sync_aqua_tank_history()
                             save_progress()
                             st.success(f"{decor['emoji']} {decor['name']}を水槽に置きました！")

@@ -1,0 +1,163 @@
+[
+  {
+    "id": "pebble",
+    "name": "小石",
+    "emoji": "🪨",
+    "stars": 1,
+    "weight": 40
+  },
+  {
+    "id": "shell",
+    "name": "きれいな貝殻",
+    "emoji": "🐚",
+    "stars": 1,
+    "weight": 40
+  },
+  {
+    "id": "driftwood",
+    "name": "流木",
+    "emoji": "🪵",
+    "stars": 1,
+    "weight": 40
+  },
+  {
+    "id": "old_anchor",
+    "name": "古びた錨",
+    "emoji": "⚓",
+    "stars": 1,
+    "weight": 40
+  },
+  {
+    "id": "fish_hook",
+    "name": "釣り針",
+    "emoji": "🪝",
+    "stars": 1,
+    "weight": 40
+  },
+  {
+    "id": "plant_pot",
+    "name": "水草ポット",
+    "emoji": "🪴",
+    "stars": 1,
+    "weight": 40
+  },
+  {
+    "id": "pearl_oyster",
+    "name": "真珠貝",
+    "emoji": "🦪",
+    "stars": 2,
+    "weight": 25
+  },
+  {
+    "id": "old_lantern",
+    "name": "古いランタン",
+    "emoji": "🏮",
+    "stars": 2,
+    "weight": 25
+  },
+  {
+    "id": "wind_chime",
+    "name": "海の風鈴",
+    "emoji": "🎐",
+    "stars": 2,
+    "weight": 25
+  },
+  {
+    "id": "small_yacht",
+    "name": "小さなヨット",
+    "emoji": "⛵",
+    "stars": 2,
+    "weight": 25
+  },
+  {
+    "id": "old_map",
+    "name": "古地図",
+    "emoji": "🗺️",
+    "stars": 2,
+    "weight": 25
+  },
+  {
+    "id": "sunken_ship",
+    "name": "沈んだ船",
+    "emoji": "🚢",
+    "stars": 3,
+    "weight": 12
+  },
+  {
+    "id": "sea_piano",
+    "name": "海底のピアノ",
+    "emoji": "🎹",
+    "stars": 3,
+    "weight": 12
+  },
+  {
+    "id": "mermaid_mirror",
+    "name": "人魚の鏡",
+    "emoji": "🪞",
+    "stars": 3,
+    "weight": 12
+  },
+  {
+    "id": "crystal_ball",
+    "name": "水晶玉",
+    "emoji": "🔮",
+    "stars": 3,
+    "weight": 12
+  },
+  {
+    "id": "moai",
+    "name": "海底のモアイ像",
+    "emoji": "🗿",
+    "stars": 3,
+    "weight": 12
+  },
+  {
+    "id": "sea_crown",
+    "name": "海底の王冠",
+    "emoji": "👑",
+    "stars": 4,
+    "weight": 6
+  },
+  {
+    "id": "sea_temple",
+    "name": "海底神殿",
+    "emoji": "🏛️",
+    "stars": 4,
+    "weight": 6
+  },
+  {
+    "id": "sea_ferris_wheel",
+    "name": "海底の観覧車",
+    "emoji": "🎡",
+    "stars": 4,
+    "weight": 6
+  },
+  {
+    "id": "mermaid_violin",
+    "name": "人魚のヴァイオリン",
+    "emoji": "🎻",
+    "stars": 4,
+    "weight": 6
+  },
+  {
+    "id": "ryugu_castle",
+    "name": "竜宮城",
+    "emoji": "🏯",
+    "stars": 5,
+    "weight": 3
+  },
+  {
+    "id": "trident",
+    "name": "海神のトライデント",
+    "emoji": "🔱",
+    "stars": 5,
+    "weight": 3
+  },
+  {
+    "id": "sea_dragon",
+    "name": "海の守り龍",
+    "emoji": "🐉",
+    "stars": 5,
+    "weight": 3
+  }
+]

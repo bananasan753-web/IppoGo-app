@@ -416,6 +416,433 @@ def feed_selected_fish(fish_index: int, food_key: str) -> bool:
 
 
 # =====================================================
+# 🦖 恐竜レース（すごろく）
+# =====================================================
+# ・恐竜ポイントはアクアポイント（st.session_state.aqua_points）と共通です。
+# ・新しい恐竜を増やすときは DINO_SPECIES に1つ書き足してください。
+DINO_DICE_COST = 1          # サイコロ1回に必要なポイント
+DINO_MAX_LEVEL = 10
+DINO_BATTLE_WIN_EXP = 6
+DINO_BATTLE_LOSE_EXP = 2
+DINO_SPECIAL_USES = 2        # 固有技は1回の力試しで使える回数
+
+DINO_SPECIES = {
+    "stegosaurus": {
+        "name": "ステゴサウルス", "emoji": "🦕", "base_hp": 26,
+        "passive_name": "どっしり歩き",
+        "passive_text": "サイコロの目が1のとき、必ず2マス進む。",
+        "special_name": "トゲ尾スイング",
+        "special_text": "3〜6ダメージを与え、自分のHPを2回復する。",
+    },
+    "velociraptor": {
+        "name": "ヴェロキラプトル", "emoji": "🦖", "base_hp": 20,
+        "passive_name": "仲間を呼ぶ",
+        "passive_text": "サイコロを振るたび、一定確率で仲間を呼んでポイントを1〜3個ゲットする。",
+        "special_name": "連続ひっかき",
+        "special_text": "2〜5回の連続攻撃。1回ごとのダメージは1〜3でランダム。",
+    },
+    "triceratops": {
+        "name": "トリケラトプス", "emoji": "🦏", "base_hp": 24,
+        "passive_name": "突進ダッシュ",
+        "passive_text": "サイコロを振るたび、一定確率で+1マス多く進む。",
+        "special_name": "捨て身の突進",
+        "special_text": "7〜12の大ダメージ！ ただし自分も2〜4ダメージを受ける。",
+    },
+}
+
+DINO_FOOD = {
+    "meat": {"name": "こんがり肉", "emoji": "🍖", "price": 2, "exp": 3},
+    "feast": {"name": "ごちそう肉", "emoji": "🍗", "price": 5, "exp": 8},
+}
+
+# 野良恐竜（力試しの相手）
+WILD_DINOS = [
+    {"name": "コンプソグナトゥス", "emoji": "🦎"},
+    {"name": "アンキロサウルス", "emoji": "🐢"},
+    {"name": "パラサウロロフス", "emoji": "🦕"},
+    {"name": "ディロフォサウルス", "emoji": "🐊"},
+    {"name": "ティラノサウルス", "emoji": "🦖"},
+]
+
+# コース。1マス＝100m。ready=Falseのコースは「準備中」表示になります。
+DINO_COURSES = {
+    "beginner": {"name": "はじめての恐竜レース", "tier": "🟢 初級", "distance_km": 5, "ready": True},
+    "intermediate": {"name": "恐竜ロードレース", "tier": "🟡 中級", "distance_km": 10, "ready": False},
+    "advanced": {"name": "恐竜サバイバルレース", "tier": "🔴 上級", "distance_km": 20, "ready": False},
+}
+
+DINO_BOOST_MESSAGES = ["💨 追い風が来た！", "🌟 近道を見つけた！", "🌋 地面がゆれて背中を押された！"]
+DINO_SOUND_PRIORITY = {"click": 0, "feed": 1, "points": 1, "achieve": 2, "finish": 3}
+
+
+def dino_exp_for_level(level: int) -> int:
+    """そのレベルに必要な累計経験値。Lv2=10、Lv3=30、Lv4=60…"""
+    return 10 * level * (level - 1) // 2
+
+
+def dino_level_from_exp(exp: int) -> int:
+    level = 1
+    while level < DINO_MAX_LEVEL and exp >= dino_exp_for_level(level + 1):
+        level += 1
+    return level
+
+
+def dino_level(dino: dict) -> int:
+    return dino_level_from_exp(dino.get("exp", 0))
+
+
+def dino_display_name(dino: dict) -> str:
+    return dino.get("custom_name") or DINO_SPECIES[dino["species"]]["name"]
+
+
+def dino_max_hp(dino: dict) -> int:
+    return DINO_SPECIES[dino["species"]]["base_hp"] + (dino_level(dino) - 1) * 3
+
+
+def dino_power_bonus(level: int) -> int:
+    """Lv4でダメージ+1、Lv7で+2、Lv10で+3。"""
+    return (level - 1) // 3
+
+
+def dino_passive_chance(level: int) -> float:
+    """固有能力が発動する確率。Lv1で20%、Lv10で47%。"""
+    return min(0.5, 0.20 + 0.03 * (level - 1))
+
+
+def dino_course_goal(course_key: str) -> int:
+    return DINO_COURSES[course_key]["distance_km"] * 10
+
+
+def queue_dino_sound(kind: str):
+    current = st.session_state.get("dino_sound")
+    if current is None or DINO_SOUND_PRIORITY[kind] > DINO_SOUND_PRIORITY[current]:
+        st.session_state.dino_sound = kind
+
+
+def add_dino_message(text: str):
+    st.session_state.setdefault("dino_messages", []).append(text)
+
+
+def log_dino_event(text: str):
+    st.session_state.dino_event_log.append({
+        "date": get_now_jst().strftime("%Y/%m/%d %H:%M"), "text": text,
+    })
+
+
+def get_dino_partner():
+    partner_id = st.session_state.get("dino_partner")
+    return next((d for d in st.session_state.get("dino_owned", []) if d.get("id") == partner_id), None)
+
+
+def ensure_dino_data():
+    """初期恐竜3種を配る。足りない項目も補う。"""
+    if not st.session_state.dino_owned:
+        st.session_state.dino_owned = [
+            {"id": f"{key}_1", "species": key, "exp": 0, "custom_name": ""}
+            for key in DINO_SPECIES
+        ]
+    for d in st.session_state.dino_owned:
+        d.setdefault("custom_name", "")
+        d.setdefault("exp", 0)
+    for key in DINO_FOOD:
+        st.session_state.dino_food.setdefault(key, 0)
+    if st.session_state.dino_partner and get_dino_partner() is None:
+        st.session_state.dino_partner = None
+
+
+def get_dino_race(course_key: str) -> dict:
+    race = st.session_state.dino_race.setdefault(course_key, {})
+    race.setdefault("pos", 0)
+    race.setdefault("free_rolls", 0)
+    race.setdefault("pending_battle", None)
+    race.setdefault("finished", False)
+    race.setdefault("laps", 0)
+    return race
+
+
+def add_dino_exp(dino: dict, amount: int):
+    if amount <= 0:
+        return
+    old_level = dino_level(dino)
+    dino["exp"] = dino.get("exp", 0) + amount
+    new_level = dino_level(dino)
+    if new_level > old_level:
+        text = f"{dino_display_name(dino)}が Lv.{new_level} にレベルアップ！"
+        add_dino_message(f"🎉 {text}")
+        log_dino_event(f"🦖 {text}")
+        queue_dino_sound("achieve")
+
+
+def build_dino_board(course_key: str) -> dict:
+    """特別マスの配置。コースごとに固定（毎回同じ盤面）。戻るマスはありません。"""
+    goal = dino_course_goal(course_key)
+    rnd = random.Random(f"dino-board-{course_key}")
+    count = max(8, goal // 4)
+    positions = sorted(rnd.sample(range(3, goal), count))
+    pattern = ["boost", "again", "food", "battle"]
+    kinds = [pattern[i % len(pattern)] for i in range(count)]
+    rnd.shuffle(kinds)
+    return dict(zip(positions, kinds))
+
+
+def render_dino_board(course_key: str, pos: int, token: str) -> str:
+    goal = dino_course_goal(course_key)
+    board = build_dino_board(course_key)
+    icons = {"boost": "💨", "again": "🎲", "food": "🍖", "battle": "⚔️"}
+    colors = {"boost": "#d6f0ff", "again": "#fff2b8", "food": "#ffe0c2", "battle": "#ffd0d0"}
+    per_row = 10
+    cells = []
+    for start in range(1, goal + 1, per_row):
+        nums = list(range(start, min(start + per_row, goal + 1)))
+        if ((start - 1) // per_row) % 2 == 1:   # すごろく風に1行ごと折り返す
+            nums.reverse()
+        for n in nums:
+            if n == goal:
+                icon, bg = "🏁", "#d9f7be"
+            else:
+                icon, bg = icons.get(board.get(n), ""), colors.get(board.get(n), "#f4f4f4")
+            here = (n == pos)
+            if here:
+                icon = token
+            border = "3px solid #ff9800" if here else "1px solid #cccccc"
+            opacity = "0.45" if n < pos else "1"
+            cells.append(
+                f'<div style="background:{bg}; border:{border}; border-radius:8px; opacity:{opacity}; color:#333; '
+                f'aspect-ratio:1; display:flex; flex-direction:column; align-items:center; justify-content:center;">'
+                f'<div style="font-size:clamp(7px,1.6vw,11px); line-height:1;">{n}</div>'
+                f'<div style="font-size:clamp(12px,3vw,22px); line-height:1.1;">{icon}</div></div>'
+            )
+    start_line = f'🚩 スタート {token if pos == 0 else ""}'
+    return (
+        f'<div style="margin-bottom:6px; font-weight:bold;">{start_line}</div>'
+        f'<div style="display:grid; grid-template-columns:repeat({per_row}, 1fr); gap:3px;">{"".join(cells)}</div>'
+    )
+
+
+def finish_dino_race(course_key: str):
+    race = get_dino_race(course_key)
+    if race["finished"]:
+        return
+    race["finished"] = True
+    race["laps"] += 1
+    st.session_state.course_complete_log.append({
+        "date": get_now_jst().strftime("%Y/%m/%d %H:%M"),
+        "course": DINO_COURSES[course_key]["name"],
+    })
+    add_dino_message(f"🏁 ゴール！！ 『{DINO_COURSES[course_key]['name']}』を完走しました！おめでとう！")
+    queue_dino_sound("finish")
+
+
+def advance_dino(course_key: str, steps: int, partner: dict) -> int:
+    """前にだけ進む（戻るマスはありません）。進んだ分だけ経験値が入る。"""
+    race = get_dino_race(course_key)
+    new_pos = min(dino_course_goal(course_key), race["pos"] + max(0, steps))
+    gained = new_pos - race["pos"]
+    race["pos"] = new_pos
+    add_dino_exp(partner, gained)
+    return gained
+
+
+def make_wild_dino(partner: dict) -> dict:
+    base = random.choice(WILD_DINOS)
+    level = max(1, min(DINO_MAX_LEVEL, dino_level(partner) + random.randint(-1, 1)))
+    return {"name": base["name"], "emoji": base["emoji"], "level": level, "max_hp": 14 + 3 * level}
+
+
+def apply_dino_square(course_key: str, partner: dict):
+    race = get_dino_race(course_key)
+    goal = dino_course_goal(course_key)
+    kind = build_dino_board(course_key).get(race["pos"])
+    if kind == "boost":
+        extra = min(random.randint(2, 3), goal - race["pos"])
+        add_dino_message(f"{random.choice(DINO_BOOST_MESSAGES)} さらに {extra}マス（{extra * 100}m）進む！")
+        advance_dino(course_key, extra, partner)
+        if race["pos"] >= goal:
+            finish_dino_race(course_key)
+    elif kind == "again":
+        race["free_rolls"] += 1
+        add_dino_message("🎲 もう一回サイコロが振れるよ！（ポイントはかからない！）")
+    elif kind == "food":
+        food_key = random.choices(["meat", "feast"], weights=[7, 3])[0]
+        st.session_state.dino_food[food_key] = st.session_state.dino_food.get(food_key, 0) + 1
+        food = DINO_FOOD[food_key]
+        add_dino_message(f"{food['emoji']} {food['name']}を見つけた！ 持ち物に入れたよ！")
+    elif kind == "battle":
+        enemy = make_wild_dino(partner)
+        race["pending_battle"] = enemy
+        add_dino_message(f"⚔️ 野良の {enemy['emoji']} {enemy['name']} があらわれた！ 力試しに挑むかは自由だよ。")
+
+
+def roll_dino_dice(course_key: str):
+    partner = get_dino_partner()
+    race = get_dino_race(course_key)
+    goal = dino_course_goal(course_key)
+    if partner is None or race["finished"] or race["pending_battle"]:
+        return
+    if race["free_rolls"] > 0:
+        race["free_rolls"] -= 1
+    elif st.session_state.aqua_points >= DINO_DICE_COST:
+        st.session_state.aqua_points -= DINO_DICE_COST
+    else:
+        add_dino_message("⚠️ ポイントが足りません！ 目標を達成してポイントを貯めよう。")
+        return
+
+    species_key = partner["species"]
+    chance = dino_passive_chance(dino_level(partner))
+    dice = random.randint(1, 6)
+    steps = dice
+    add_dino_message(f"🎲 サイコロの目は {dice}！")
+    if species_key == "stegosaurus" and dice == 1:
+        steps = 2
+        add_dino_message("🦕 どっしり歩きで、2マス進む！")
+    if species_key == "triceratops" and random.random() < chance:
+        steps += 1
+        add_dino_message("🦏 突進ダッシュ！ さらに +1マス進む！")
+    if species_key == "velociraptor" and random.random() < chance:
+        bonus_points = random.randint(1, 3)
+        st.session_state.aqua_points += bonus_points
+        add_dino_message(f"🦖 ヴェロキラプトルが仲間を呼んだ！ 仲間たちから {bonus_points}ポイントもらった！")
+        queue_dino_sound("points")
+
+    gained = advance_dino(course_key, steps, partner)
+    add_dino_message(f"👣 {gained}マス（{gained * 100}m）進んだ！ 現在 {race['pos'] * 100}m 地点")
+    queue_dino_sound("click")
+    if race["pos"] >= goal:
+        finish_dino_race(course_key)
+    else:
+        apply_dino_square(course_key, partner)
+    save_progress()
+
+
+def restart_dino_race(course_key: str):
+    race = get_dino_race(course_key)
+    race.update({"pos": 0, "free_rolls": 0, "pending_battle": None, "finished": False})
+    save_progress()
+
+
+# ---------------- バトル（力試し） ----------------
+def start_dino_battle(course_key: str, partner: dict):
+    race = get_dino_race(course_key)
+    enemy = race["pending_battle"]
+    if not enemy:
+        return
+    race["pending_battle"] = None
+    max_hp = dino_max_hp(partner)
+    st.session_state.dino_battle = {
+        "enemy": enemy, "enemy_hp": enemy["max_hp"],
+        "player_max_hp": max_hp, "player_hp": max_hp,
+        "special_left": DINO_SPECIAL_USES,
+        "log": ["⚔️ 力試しスタート！ どう戦う？"], "over": False, "result": None,
+    }
+    save_progress()
+
+
+def skip_dino_battle(course_key: str):
+    race = get_dino_race(course_key)
+    enemy = race["pending_battle"]
+    race["pending_battle"] = None
+    if enemy:
+        add_dino_message(f"👋 {enemy['emoji']} {enemy['name']}は見送った。さあ、先へ進もう！")
+    save_progress()
+
+
+def dino_special_attack(species_key: str, bonus: int, pname: str):
+    """固有技。(敵へのダメージ, 自分へのダメージ, 回復量, 表示テキスト) を返す。"""
+    special = DINO_SPECIES[species_key]["special_name"]
+    if species_key == "velociraptor":
+        hits = [random.randint(1, 3) for _ in range(random.randint(2, 5))]
+        damage = sum(hits) + bonus
+        return damage, 0, 0, f"🌟 {pname}の固有技『{special}』！ {len(hits)}回連続（{'+'.join(map(str, hits))}）で合計 {damage}ダメージ！"
+    if species_key == "stegosaurus":
+        damage = random.randint(3, 6) + bonus
+        return damage, 0, 2, f"🌟 {pname}の固有技『{special}』！ {damage}ダメージ！ 自分のHPが2回復！"
+    damage = random.randint(7, 12) + bonus
+    recoil = random.randint(2, 4)
+    return damage, recoil, 0, f"🌟 {pname}の固有技『{special}』！ {damage}ダメージ！ …でも自分も {recoil}ダメージ！"
+
+
+def resolve_dino_battle_turn(partner: dict, action: str):
+    battle = st.session_state.dino_battle
+    enemy = battle["enemy"]
+    pname = f"{DINO_SPECIES[partner['species']]['emoji']} {dino_display_name(partner)}"
+    ename = f"{enemy['emoji']} {enemy['name']}"
+    bonus_p = dino_power_bonus(dino_level(partner))
+    bonus_e = dino_power_bonus(enemy["level"])
+
+    if action == "special" and battle.get("special_left", 0) <= 0:
+        battle["log"] = ["🌟 固有技はもう使えないよ！ ほかの行動を選ぼう。"]
+        return
+    if action == "flee":
+        battle["over"], battle["result"] = True, "flee"
+        battle["log"] = [f"🏃 {pname}は うまく逃げ出した！ 無理しなくて大丈夫！"]
+        return
+
+    enemy_action = random.choices(["attack", "defend", "special"], weights=[5, 2, 3])[0]
+    enemy_label = {"attack": "こうげき", "defend": "ぼうぎょ", "special": "強打"}[enemy_action]
+    log = [f"👀 {ename}は『{enemy_label}』を選んだ！"]
+    to_enemy = to_player = heal = 0
+
+    # --- 自分の行動 ---
+    if action == "attack":
+        if enemy_action == "defend":
+            damage = random.randint(4, 8) + bonus_e
+            to_player += damage
+            log.append(f"🛡️ 守りを固めていた{ename}に反撃された！ {damage}ダメージ！")
+        else:
+            damage = random.randint(1, 5) + bonus_p
+            to_enemy += damage
+            log.append(f"⚔️ {pname}のこうげき！ {damage}ダメージ！")
+    elif action == "defend":
+        if enemy_action == "attack":
+            damage = random.randint(4, 8) + bonus_p
+            to_enemy += damage
+            log.append(f"🛡️ {pname}は攻撃を受け止めてカウンター！ {damage}ダメージ！")
+        elif enemy_action == "defend":
+            log.append("🛡️ おたがい守りを固めて、にらみ合い…")
+        else:
+            log.append(f"🛡️ {pname}は身構えたが、強打は防ぎきれない！")
+    else:  # special
+        battle["special_left"] -= 1
+        damage, recoil, heal, text = dino_special_attack(partner["species"], bonus_p, pname)
+        to_enemy += damage
+        to_player += recoil
+        log.append(text)
+
+    # --- 相手の行動 ---
+    if enemy_action == "attack" and action != "defend":
+        damage = random.randint(1, 5) + bonus_e
+        to_player += damage
+        log.append(f"💥 {ename}のこうげき！ {damage}ダメージ！")
+    elif enemy_action == "special":
+        damage = random.randint(4, 7) + bonus_e
+        to_player += damage
+        log.append(f"💥 {ename}の強打！ {damage}ダメージ！")
+
+    battle["enemy_hp"] = max(0, battle["enemy_hp"] - to_enemy)
+    battle["player_hp"] = max(0, battle["player_hp"] - to_player)
+    if heal and battle["player_hp"] > 0:
+        battle["player_hp"] = min(battle["player_max_hp"], battle["player_hp"] + heal)
+
+    if battle["enemy_hp"] <= 0:
+        battle["over"], battle["result"] = True, "win"
+        log.append(f"🎉 {ename}に勝利！ 経験値 +{DINO_BATTLE_WIN_EXP}！")
+        add_dino_exp(partner, DINO_BATTLE_WIN_EXP)
+        if random.random() < 0.5:
+            st.session_state.dino_food["meat"] = st.session_state.dino_food.get("meat", 0) + 1
+            log.append("🍖 戦利品のこんがり肉を手に入れた！")
+        log_dino_event(f"⚔️ {pname}が野良の{ename}との力試しに勝利！")
+        queue_dino_sound("achieve")
+    elif battle["player_hp"] <= 0:
+        battle["over"], battle["result"] = True, "lose"
+        log.append(f"😵 {pname}はたおれてしまった… でも挑戦はすごいこと！ 経験値 +{DINO_BATTLE_LOSE_EXP}")
+        add_dino_exp(partner, DINO_BATTLE_LOSE_EXP)
+        log_dino_event(f"⚔️ {pname}が野良の{ename}に力試しで挑戦！")
+    battle["log"] = log
+    save_progress()
+
+
+
+# =====================================================
 # 💾 セーブデータ（Supabaseクラウド連携）
 # =====================================================
 PERSISTENT_KEYS = [
@@ -447,6 +874,11 @@ PERSISTENT_KEYS = [
     "aqua_duplicate_bonus",
     "aqua_goal_log",
     "aqua_tank_history",
+    "dino_owned",
+    "dino_partner",
+    "dino_food",
+    "dino_race",
+    "dino_event_log",
 ]
 
 PERSISTENT_DEFAULTS = {
@@ -478,6 +910,11 @@ PERSISTENT_DEFAULTS = {
     "aqua_duplicate_bonus": 0,
     "aqua_goal_log": [],
     "aqua_tank_history": None,
+    "dino_owned": [],
+    "dino_partner": None,
+    "dino_food": {"meat": 0, "feast": 0},
+    "dino_race": {},
+    "dino_event_log": [],
 }
 
 
@@ -827,10 +1264,15 @@ def get_ippo_events_for_date(date_str: str) -> list:
         if ag["date"].startswith(date_str):
             level = ag.get("level", "")
             points = ag.get("points", 0)
-            events.append((
-                ag["date"].split(" ")[1],
-                f"🐠 『{ag.get('target', '')}』{level}目標達成（💧{points}アクアポイント）"
-            ))
+            if ag.get("source") == "dino":
+                label = f"🦖 『{ag.get('target', '')}』{level}目標達成（💧{points}ポイント）"
+            else:
+                label = f"🐠 『{ag.get('target', '')}』{level}目標達成（💧{points}アクアポイント）"
+            events.append((ag["date"].split(" ")[1], label))
+    # 恐竜レースでの出来事（レベルアップ・力試しなど）
+    for de in st.session_state.get("dino_event_log", []):
+        if de["date"].startswith(date_str):
+            events.append((de["date"].split(" ")[1], de["text"]))
     events.sort(key=lambda ev: ev[0])
     return events
 
@@ -1463,6 +1905,16 @@ if "aqua_goal_log" not in st.session_state:
     st.session_state.aqua_goal_log = []
 if "aqua_tank_history" not in st.session_state:
     st.session_state.aqua_tank_history = None
+if "dino_owned" not in st.session_state:
+    st.session_state.dino_owned = []
+if "dino_partner" not in st.session_state:
+    st.session_state.dino_partner = None
+if "dino_food" not in st.session_state:
+    st.session_state.dino_food = {"meat": 0, "feast": 0}
+if "dino_race" not in st.session_state:
+    st.session_state.dino_race = {}
+if "dino_event_log" not in st.session_state:
+    st.session_state.dino_event_log = []
 
 STICKER_CIRCLE_COLORS = {
     "赤": "🔴", "橙": "🟠", "黄": "🟡", "緑": "🟢",
@@ -1726,7 +2178,7 @@ elif st.session_state.page == "menu_select":
 # =====================================================
 elif st.session_state.page in [
     "target_page", "calendar_page", "stage_page",
-    "candy_page", "aquarium_page", "running_page", "running_course_page", "schedule_page"
+    "candy_page", "aquarium_page", "dino_page", "schedule_page"
 ]:
 
     # サイドバーメニュー
@@ -2191,9 +2643,9 @@ elif st.session_state.page in [
                 st.session_state.page = "aquarium_page"
                 st.rerun()
         with scol3:
-            if st.button("🏃‍♂️\n\nランニング", use_container_width=True, key="stage_running"):
+            if st.button("🦖\n\n恐竜レース", use_container_width=True, key="stage_dino"):
                 play_click_sound()
-                st.session_state.page = "running_page"
+                st.session_state.page = "dino_page"
                 st.rerun()
 
     # --- 一日のスケジュール画面 ---
@@ -2833,175 +3285,258 @@ elif st.session_state.page in [
         if tank["level"] == AQUA_TANK_LEVELS[-1]["level"]:
             st.success("🏆 最高レベルに到達！")
 
-    # --- ランニングページ ---
-    elif st.session_state.page == "running_page":
-        st.title("🏃‍♂️ ランニングステージ")
+    # --- 恐竜レースページ ---
+    elif st.session_state.page == "dino_page":
+        st.title("🦖 恐竜レース")
+        ensure_dino_data()
+        partner = get_dino_partner()
 
-        if st.session_state.companion:
-            comp = COMPANIONS[st.session_state.companion]
-            st.markdown(f"#### 🐾 現在の相棒：{comp['emoji']} {comp['name']}")
-        else:
-            st.caption("🐾 まだ相棒が選ばれていません（右下の「相棒選択」から選べます）")
+        # 効果音・演出は、画面更新後に一度だけ
+        dino_sound_kind = st.session_state.pop("dino_sound", None)
+        if dino_sound_kind == "finish":
+            play_jar_full_sound(delay=0)
+            st.balloons()
+        elif dino_sound_kind == "achieve":
+            play_achieve_sound(delay=0)
+        elif dino_sound_kind == "points":
+            play_aqua_point_sound(delay=0)
+        elif dino_sound_kind == "feed":
+            play_aqua_feed_sound(delay=0)
+        elif dino_sound_kind == "click":
+            play_click_sound(delay=0)
 
-        st.write("走りたいステージを選んでください：")
-        st.write("")
+        st.caption("サイコロで進むすごろくレース！ 1マス＝100m。戻るマスはないので、安心して進もう🦖")
 
-        courses_by_tier = {tier: [] for tier in RUNNING_TIER_ORDER}
-        for course_key, course in RUNNING_COURSES.items():
-            courses_by_tier[course["tier"]].append((course_key, course))
+        # ポイント・パートナー表示
+        info1, info2, info3 = st.columns(3)
+        with info1:
+            st.metric("💧 ポイント（水族館と共通）", st.session_state.aqua_points)
+        with info2:
+            if partner:
+                st.metric("🤝 パートナー", f"{DINO_SPECIES[partner['species']]['emoji']} {dino_display_name(partner)}")
+            else:
+                st.metric("🤝 パートナー", "未選択")
+        with info3:
+            st.metric("🎲 サイコロ1回", f"{DINO_DICE_COST}ポイント")
 
-        level_tabs = st.tabs(RUNNING_TIER_ORDER)
+        # 目標を達成してポイントをゲット（水族館と同じポイント）
+        with st.expander("🏆 目標を達成してポイントをゲット！"):
+            st.caption("達成した目標のレベルぶんだけポイントがもらえます（水族館のポイントと同じです）。")
+            if not st.session_state.target_list:
+                st.warning("⚠️ まだ目標が登録されていません！『目標登録』で目標を作ってね！")
+            else:
+                dino_target_titles = [t["title"] for t in st.session_state.target_list]
+                dino_target_title = st.selectbox("🎯 どの目標を達成した？", dino_target_titles, key="dino_target_select")
+                dino_target_data = next(t for t in st.session_state.target_list if t["title"] == dino_target_title)
+                dino_level_options = [
+                    f"{lv}: {task} (💧{int(lv.replace('Lv.', '').replace('Lv', ''))}ポイント)"
+                    for lv, task in dino_target_data["tasks"].items()
+                ]
+                dino_level_str = st.selectbox("⭐ どのレベルをクリアした？", dino_level_options, key="dino_level_select")
+                dino_lv_key = dino_level_str.split(":")[0]
+                dino_task_text = dino_target_data["tasks"][dino_lv_key]
+                if st.button("➕ この1歩を達成した！", type="primary", key="dino_achieve_button"):
+                    dino_earned = int(dino_lv_key.replace("Lv.", "").replace("Lv", ""))
+                    st.session_state.aqua_points += dino_earned
+                    st.session_state.aqua_goal_log.append({
+                        "date": get_now_jst().strftime("%Y/%m/%d %H:%M"),
+                        "target": dino_target_title, "level": dino_lv_key, "task": dino_task_text,
+                        "points": dino_earned, "source": "dino",
+                    })
+                    add_sticker_for_date(get_now_jst().strftime("%Y/%m/%d"))
+                    queue_dino_sound("points")
+                    add_dino_message(f"🎉 目標達成！ {dino_earned}ポイントをゲットしたよ！")
+                    save_progress()
+                    st.rerun()
 
-        for tab, tier in zip(level_tabs, RUNNING_TIER_ORDER):
-            with tab:
-                st.markdown(f"### {tier}")
-                stage_cols = st.columns(3)
-                for col, (course_key, course) in zip(stage_cols, courses_by_tier[tier]):
-                    with col:
-                        if st.button(f"🏃\n\n{course['name']}", use_container_width=True, key=f"run_{course_key}"):
-                            if course["ready"]:
-                                play_click_sound()
-                                st.session_state.active_course_key = course_key
-                                st.session_state.page = "running_course_page"
-                                st.rerun()
-                            else:
-                                play_click_sound(delay=0)
-                                st.info(f"🚧 {tier} {course['name']} は現在準備中です！お楽しみに！")
+        # 直前の出来事（サイコロの結果など）
+        dino_messages = st.session_state.pop("dino_messages", [])
+        if dino_messages:
+            with st.container(border=True):
+                for message_text in dino_messages:
+                    st.write(message_text)
 
-        st.write("---")
-        spacer_col, button_col = st.columns([3, 1])
-        with button_col:
-            if st.button("🐾 相棒選択", use_container_width=True, key="open_companion_picker"):
-                play_click_sound(delay=0)
-                st.session_state.show_companion_picker = not st.session_state.show_companion_picker
+        race_tab, dino_tab, dino_shop_tab = st.tabs(["🏁 レース", "🦖 恐竜たち", "🍖 恐竜ショップ"])
 
-        if st.session_state.show_companion_picker:
-            st.markdown("### 🐾 一緒に走る相棒を選んでね！")
-            comp_cols = st.columns(3)
-            for col, (comp_key, comp_data) in zip(comp_cols, COMPANIONS.items()):
-                with col:
-                    st.markdown(f"<div style='text-align:center; font-size:64px;'>{comp_data['emoji']}</div>",
-                                unsafe_allow_html=True)
-                    if st.button(comp_data["name"], use_container_width=True, key=f"pick_companion_{comp_key}"):
-                        play_click_sound()
-                        st.session_state.companion = comp_key
-                        st.session_state.show_companion_picker = False
+        # ---------------- レース ----------------
+        with race_tab:
+            course_keys = list(DINO_COURSES.keys())
+            course_key = st.selectbox(
+                "🗺️ コースを選ぶ", course_keys,
+                format_func=lambda k: f"{DINO_COURSES[k]['tier']} {DINO_COURSES[k]['name']}（{DINO_COURSES[k]['distance_km']}km）",
+                key="dino_course_choice",
+            )
+            course = DINO_COURSES[course_key]
+            if not course["ready"]:
+                st.info(f"🚧 {course['tier']} {course['name']} は現在準備中です！お楽しみに！")
+            elif partner is None:
+                st.warning("🤝 まずは『恐竜たち』タブで、一緒に走るパートナーを選んでね！")
+            else:
+                race = get_dino_race(course_key)
+                goal = dino_course_goal(course_key)
+                partner_species = DINO_SPECIES[partner["species"]]
+                partner_level = dino_level(partner)
+                st.markdown(f"#### {partner_species['emoji']} {dino_display_name(partner)}（Lv.{partner_level}）と一緒に走ろう！")
+                st.write(f"📍 現在地：**{race['pos'] * 100}m / {goal * 100}m**（{race['pos']}/{goal}マス）　🏁 完走 {race['laps']}回")
+                st.progress(min(race["pos"] / goal, 1.0))
+                st.markdown(render_dino_board(course_key, race["pos"], partner_species["emoji"]), unsafe_allow_html=True)
+                st.caption("💨 追い風　🎲 もう一回　🍖 食べ物　⚔️ バトル（力試し・挑むかは自由）　🏁 ゴール")
+                st.write("")
+
+                battle = st.session_state.get("dino_battle")
+                if battle:
+                    # ===== バトル中 =====
+                    enemy = battle["enemy"]
+                    st.markdown(f"### ⚔️ 力試し！ vs {enemy['emoji']} {enemy['name']}（Lv.{enemy['level']}）")
+                    col_me, col_enemy = st.columns(2)
+                    with col_me:
+                        st.markdown(f"**{partner_species['emoji']} {dino_display_name(partner)}**")
+                        st.caption(f"HP {battle['player_hp']} / {battle['player_max_hp']}")
+                        st.progress(battle["player_hp"] / battle["player_max_hp"])
+                    with col_enemy:
+                        st.markdown(f"**{enemy['emoji']} {enemy['name']}**")
+                        st.caption(f"HP {battle['enemy_hp']} / {enemy['max_hp']}")
+                        st.progress(battle["enemy_hp"] / enemy["max_hp"])
+                    with st.container(border=True):
+                        for line in battle["log"]:
+                            st.write(line)
+
+                    if battle["over"]:
+                        if st.button("🏁 レースにもどる", type="primary", use_container_width=True, key="dino_battle_end"):
+                            del st.session_state["dino_battle"]
+                            st.rerun()
+                    else:
+                        special_left = battle.get("special_left", 0)
+                        st.caption(f"🌟 固有技『{partner_species['special_name']}』：{partner_species['special_text']}（この力試しであと {special_left}回）")
+                        battle_actions = [
+                            ("attack", "⚔️ こうげき"), ("defend", "🛡️ ぼうぎょ"),
+                            ("special", f"🌟 固有技({special_left})"), ("flee", "🏃 にげる"),
+                        ]
+                        for action_col, (action_key, action_label) in zip(st.columns(4), battle_actions):
+                            with action_col:
+                                if st.button(action_label, use_container_width=True, key=f"dino_battle_{action_key}",
+                                             disabled=(action_key == "special" and special_left <= 0)):
+                                    resolve_dino_battle_turn(partner, action_key)
+                                    st.rerun()
+                        with st.expander("📖 戦い方のルール"):
+                            st.write("⚔️ **こうげき**：1〜5のダメージ。ただし相手がぼうぎょだと反撃される！")
+                            st.write("🛡️ **ぼうぎょ**：相手がこうげきなら攻撃を止めて大きな反撃！ でも相手が固有技・強打のときは防げない。")
+                            st.write(f"🌟 **固有技**：恐竜ごとの特別な技。ぼうぎょされても止められない。1回の力試しで{DINO_SPECIAL_USES}回まで。")
+                            st.write("🏃 **にげる**：いつでも安全に逃げられる。")
+
+                elif race["pending_battle"]:
+                    # ===== バトルマスに到着（挑むかどうかは自由）=====
+                    pending = race["pending_battle"]
+                    st.warning(f"⚔️ 野良の {pending['emoji']} {pending['name']}（Lv.{pending['level']}）があらわれた！ 力試しに挑戦する？")
+                    fight_col, skip_col = st.columns(2)
+                    with fight_col:
+                        if st.button("⚔️ 力試しに挑む！", type="primary", use_container_width=True, key="dino_battle_accept"):
+                            start_dino_battle(course_key, partner)
+                            st.rerun()
+                    with skip_col:
+                        if st.button("👋 見送る", use_container_width=True, key="dino_battle_skip"):
+                            skip_dino_battle(course_key)
+                            st.rerun()
+
+                elif race["finished"]:
+                    # ===== ゴール =====
+                    st.success(f"🏁 『{course['name']}』を完走しました！ よくがんばったね！")
+                    if st.button("🔄 もう一度走る", type="primary", use_container_width=True, key=f"dino_restart_{course_key}"):
+                        restart_dino_race(course_key)
                         st.rerun()
 
-    # --- 一歩村一周コース等 ---
-    elif st.session_state.page == "running_course_page":
-        course_key = st.session_state.active_course_key
-        course = RUNNING_COURSES[course_key]
-        distance_goal = course["distance"]
-
-        st.title(f"🏃‍♂️ {course['name']}")
-        st.write(f"全長 **{distance_goal}km** ！目標を達成してゴールを目指そう！")
-
-        if st.session_state.companion:
-            comp = COMPANIONS[st.session_state.companion]
-            st.markdown(
-                f"<div style='font-size:20px;'>{comp['emoji']} <b>{comp['name']}</b> が一緒に走っています！</div>",
-                unsafe_allow_html=True)
-        else:
-            st.caption("🐾 相棒が未選択です。ステージ選択画面の「相棒選択」から選べます。")
-
-        if st.button("← ステージ選択に戻る"):
-            play_click_sound()
-            st.session_state.page = "running_page"
-            st.rerun()
-
-        st.write("---")
-        st.subheader("🏆 達成した目標を選ぼう！")
-
-        if not st.session_state.target_list:
-            st.warning("⚠️ まだ目標が登録されていません！「目標登録画面」で目標を作ってきてね！")
-            selected_course_target_title = None
-        else:
-            course_target_titles = [t["title"] for t in st.session_state.target_list]
-            selected_course_target_title = st.selectbox("🎯 どの目標を達成した？", course_target_titles,
-                                                        key=f"course_target_select_{course_key}")
-            selected_course_target_data = next(
-                t for t in st.session_state.target_list if t["title"] == selected_course_target_title)
-
-            course_level_options = [f"{lv}: {task} (🏃×{lv.split('.')[1]}km進む)" for lv, task in
-                                    selected_course_target_data["tasks"].items()]
-            selected_course_level_str = st.selectbox("⭐ どのレベルをクリアした？", course_level_options,
-                                                     key=f"course_level_select_{course_key}")
-
-            course_chosen_lv_key = selected_course_level_str.split(":")[0]
-            course_chosen_km = int(course_chosen_lv_key.split(".")[1])
-
-        st.write("")
-
-        if st.button("➕ この1歩を達成した！", type="primary", key=f"course_achieve_button_{course_key}"):
-            if selected_course_target_title:
-                play_achieve_sound()
-                current_km = st.session_state.course_km.get(course_key, 0)
-                new_total_km = min(current_km + course_chosen_km, distance_goal)
-                st.session_state.course_km[course_key] = new_total_km
-
-                if course_chosen_km == 5:
-                    message = "🌬️ 絶好調！追い風が来た！一気に5km進んだよ！"
-                elif new_total_km >= distance_goal * (2 / 3):
-                    message = random.choice(COURSE_LATE_PRAISE_WORDS)
                 else:
-                    message = random.choice(COURSE_PRAISE_WORDS)
+                    # ===== サイコロ =====
+                    free_rolls = race["free_rolls"]
+                    can_roll = free_rolls > 0 or st.session_state.aqua_points >= DINO_DICE_COST
+                    if free_rolls > 0:
+                        dice_label = f"🎲 サイコロを振る！（無料・あと{free_rolls}回）"
+                    else:
+                        dice_label = f"🎲 サイコロを振る！（{DINO_DICE_COST}ポイント）"
+                    if st.button(dice_label, type="primary", use_container_width=True,
+                                 disabled=not can_roll, key=f"dino_roll_{course_key}"):
+                        roll_dino_dice(course_key)
+                        st.rerun()
+                    if not can_roll:
+                        st.caption("ポイントが足りません。上の『目標を達成してポイントをゲット！』でポイントを貯めよう！")
+                    st.caption(f"✨ {partner_species['passive_name']}：{partner_species['passive_text']}（発動確率 {int(dino_passive_chance(partner_level) * 100)}%）"
+                               if partner["species"] != "stegosaurus" else
+                               f"✨ {partner_species['passive_name']}：{partner_species['passive_text']}")
 
-                bonus_km, bonus_message = maybe_apply_bonus(course_key)
-                total_km_for_log = course_chosen_km
-                if bonus_km:
-                    boosted_km = min(st.session_state.course_km[course_key] + bonus_km, distance_goal)
-                    st.session_state.course_km[course_key] = boosted_km
-                    message = f"{message}\n\n{bonus_message}"
-                    total_km_for_log += bonus_km
+        # ---------------- 恐竜たち ----------------
+        with dino_tab:
+            st.markdown("#### 🦖 あなたの恐竜たち")
+            st.caption("名前は自由につけられます。パートナーに選んだ恐竜が、レースとバトルに出ます。")
+            for dino in st.session_state.dino_owned:
+                species = DINO_SPECIES[dino["species"]]
+                level = dino_level(dino)
+                is_partner = dino["id"] == st.session_state.dino_partner
+                title = f"{species['emoji']} {dino_display_name(dino)}　Lv.{level}" + ("　🤝パートナー" if is_partner else "")
+                with st.expander(title, expanded=is_partner):
+                    st.write(f"種類：**{species['name']}**　／　最大HP：**{dino_max_hp(dino)}**　／　ダメージ補正：+{dino_power_bonus(level)}")
+                    if level >= DINO_MAX_LEVEL:
+                        st.progress(1.0)
+                        st.caption(f"経験値 {dino.get('exp', 0)}（最大レベル！）")
+                    else:
+                        base_exp = dino_exp_for_level(level)
+                        next_exp = dino_exp_for_level(level + 1)
+                        st.progress((dino.get("exp", 0) - base_exp) / (next_exp - base_exp))
+                        st.caption(f"経験値 {dino.get('exp', 0)}（次のレベルまであと {next_exp - dino.get('exp', 0)}）")
+                    st.write(f"✨ **固有能力『{species['passive_name']}』**：{species['passive_text']}")
+                    if dino["species"] != "stegosaurus":
+                        st.caption(f"　発動確率：{int(dino_passive_chance(level) * 100)}%（レベルが上がると高くなる）")
+                    st.write(f"🌟 **固有技『{species['special_name']}』**：{species['special_text']}")
+                    new_name = st.text_input("名前（空欄なら元の名前）", value=dino.get("custom_name", ""),
+                                             key=f"dino_name_{dino['id']}", placeholder=species["name"])
+                    if new_name.strip() != dino.get("custom_name", ""):
+                        dino["custom_name"] = new_name.strip()
+                        save_progress()
+                    if st.button("🤝 パートナーにする", key=f"dino_partner_{dino['id']}",
+                                 disabled=is_partner, use_container_width=True):
+                        st.session_state.dino_partner = dino["id"]
+                        save_progress()
+                        st.rerun()
 
-                if st.session_state.companion:
-                    comp_info = COMPANIONS[st.session_state.companion]
-                    comp_line = random.choice(COMPANION_MESSAGES[st.session_state.companion])
-                    message = f"{message}\n\n{comp_info['emoji']} {comp_info['name']}「{comp_line}」"
+        # ---------------- 恐竜ショップ ----------------
+        with dino_shop_tab:
+            st.markdown("#### 🍖 恐竜のごはん")
+            st.caption("餌をあげると経験値がたまって、恐竜のレベルが上がります。レースのマスに進んだり、力試しに勝ったりしても経験値がもらえるよ！")
+            food_cols = st.columns(len(DINO_FOOD))
+            for food_col, (food_key, food) in zip(food_cols, DINO_FOOD.items()):
+                with food_col:
+                    st.markdown(f"### {food['emoji']} {food['name']}")
+                    st.write(f"{food['price']}ポイント ／ 経験値 +{food['exp']}")
+                    st.caption(f"持っている数：{st.session_state.dino_food.get(food_key, 0)}個")
+                    if st.button("購入する", key=f"dino_buy_{food_key}", use_container_width=True):
+                        if st.session_state.aqua_points >= food["price"]:
+                            st.session_state.aqua_points -= food["price"]
+                            st.session_state.dino_food[food_key] = st.session_state.dino_food.get(food_key, 0) + 1
+                            save_progress()
+                            st.success(f"{food['emoji']} {food['name']}を買いました！")
+                            st.rerun()
+                        else:
+                            st.warning("ポイントが足りません！")
 
-                st.session_state.course_praise_message[course_key] = message
+            st.write("---")
+            st.markdown("#### 🍽️ 餌をあげる")
+            owned_dinos = st.session_state.dino_owned
+            feed_index = st.selectbox(
+                "どの恐竜にあげる？", list(range(len(owned_dinos))),
+                format_func=lambda i: f"{DINO_SPECIES[owned_dinos[i]['species']]['emoji']} {dino_display_name(owned_dinos[i])}（Lv.{dino_level(owned_dinos[i])}）",
+                key="dino_feed_target",
+            )
+            for food_key, food in DINO_FOOD.items():
+                stock = st.session_state.dino_food.get(food_key, 0)
+                if st.button(f"{food['emoji']} {food['name']}をあげる（残り{stock}個・経験値+{food['exp']}）",
+                             disabled=stock <= 0, key=f"dino_feed_{food_key}", use_container_width=True):
+                    target = owned_dinos[feed_index]
+                    st.session_state.dino_food[food_key] -= 1
+                    add_dino_message(f"{food['emoji']} {dino_display_name(target)}は{food['name']}をもぐもぐ！ 経験値 +{food['exp']}")
+                    queue_dino_sound("feed")
+                    add_dino_exp(target, food["exp"])
+                    save_progress()
+                    st.rerun()
 
-                course_task_text = selected_course_target_data["tasks"][course_chosen_lv_key]
-                companion_name = COMPANIONS[st.session_state.companion]["name"] if st.session_state.companion else None
-                st.session_state.course_run_log.append({
-                    "date": get_now_jst().strftime("%Y/%m/%d %H:%M"),
-                    "course": course["name"],
-                    "km": total_km_for_log,
-                    "task": f"【{selected_course_target_title} - {course_chosen_lv_key}】 {course_task_text}",
-                    "companion": companion_name,
-                })
-                add_sticker_for_date(get_now_jst().strftime("%Y/%m/%d"))
-            else:
-                st.error("⚠️ 達成する目標を上のメニューから選んでください！")
-
-        if st.session_state.course_praise_message.get(course_key):
-            st.success(st.session_state.course_praise_message[course_key])
-
-        current_km = st.session_state.course_km.get(course_key, 0)
-        st.write("")
-        st.markdown(f"### 🗺️ 現在の走行距離：{current_km} / {distance_goal} km")
-        st.progress(min(current_km / distance_goal, 1.0))
-
-        if current_km >= distance_goal:
-            st.markdown("## 🎉 ゴール達成！おめでとう！！")
-            st.balloons()
-            st.success(f"素晴らしい！！！『{course['name']}』を走りきりました！！！")
-            if not st.session_state.course_complete_sound_played.get(course_key, False):
-                play_jar_full_sound()
-                st.session_state.course_complete_sound_played[course_key] = True
-                st.session_state.course_complete_log.append({
-                    "date": get_now_jst().strftime("%Y/%m/%d %H:%M"),
-                    "course": course["name"],
-                })
-                if st.session_state.companion:
-                    complete_line = random.choice(COMPANION_COMPLETE_MESSAGES[st.session_state.companion])
-                    st.session_state.course_complete_companion_message[course_key] = complete_line
-
-            if st.session_state.companion and course_key in st.session_state.course_complete_companion_message:
-                comp_info = COMPANIONS[st.session_state.companion]
-                comp_line = st.session_state.course_complete_companion_message[course_key]
-                st.info(f"{comp_info['emoji']} {comp_info['name']}「{comp_line}」")
 
 # =====================================================
 # 💾 Supabase への自動セーブ

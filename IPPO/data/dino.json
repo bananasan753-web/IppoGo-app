@@ -1,0 +1,29 @@
+{
+  "stegosaurus": {
+    "name": "ステゴサウルス",
+    "emoji": "🦕",
+    "base_hp": 26,
+    "passive_name": "どっしり歩き",
+    "passive_text": "サイコロの目が1のとき、必ず2マス進む。",
+    "special_name": "トゲ尾スイング",
+    "special_text": "3〜6ダメージを与え、自分のHPを2回復する。"
+  },
+  "velociraptor": {
+    "name": "ヴェロキラプトル",
+    "emoji": "🦖",
+    "base_hp": 20,
+    "passive_name": "仲間を呼ぶ",
+    "passive_text": "サイコロを振るたび、一定確率で仲間を呼んでポイントを1〜3個ゲットする。",
+    "special_name": "連続ひっかき",
+    "special_text": "2〜5回の連続攻撃。1回ごとのダメージは1〜3でランダム。"
+  },
+  "triceratops": {
+    "name": "トリケラトプス",
+    "emoji": "🦏",
+    "base_hp": 24,
+    "passive_name": "突進ダッシュ",
+    "passive_text": "サイコロを振るたび、一定確率で+1マス多く進む。",
+    "special_name": "捨て身の突進",
+    "special_text": "7〜12の大ダメージ！ ただし自分も2〜4ダメージを受ける。"
+  }
+}

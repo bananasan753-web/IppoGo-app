@@ -1,0 +1,49 @@
+{
+  "courses": {
+    "survival": {
+      "name": "恐竜サバイバルレース",
+      "tier": "🔴 上級",
+      "distance_km": 20,
+      "ready": true,
+      "price": 60,
+      "mode": "survival"
+    },
+    "relax": {
+      "name": "ゆるレース",
+      "tier": "🩷 のんびり",
+      "distance_km": 5,
+      "ready": true,
+      "price": 50,
+      "mode": "relax"
+    }
+  },
+  "stat_items": [
+    {
+      "id": "speed_drink_lv1",
+      "name": "素早さドリンクLv1",
+      "emoji": "🧃",
+      "price": 18,
+      "exp": 5,
+      "stat": "speed",
+      "amount": 1
+    },
+    {
+      "id": "meat_lv1",
+      "name": "体力モリモリ骨付き肉Lv1",
+      "emoji": "🍖",
+      "price": 20,
+      "exp": 5,
+      "stat": "hp",
+      "amount": 3
+    },
+    {
+      "id": "chili_lv1",
+      "name": "唐辛子Lv1",
+      "emoji": "🌶️",
+      "price": 22,
+      "exp": 5,
+      "stat": "attack",
+      "amount": 1
+    }
+  ]
+}

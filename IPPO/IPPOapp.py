@@ -691,25 +691,38 @@ def apply_dino_square(course_key: str, partner: dict):
         add_dino_message(f"⚔️ 野良の {enemy['emoji']} {enemy['name']} があらわれた！ 力試しに挑むかは自由だよ。")
 
 
-def roll_dino_dice(course_key: str):
+def roll_dino_dice(course_key: str, special_dice_value=None):
     partner = get_dino_partner()
     race = get_dino_race(course_key)
     goal = dino_course_goal(course_key)
     if partner is None or race["finished"] or race["pending_battle"]:
         return
-    if race["free_rolls"] > 0:
+    if special_dice_value is not None:
+        if st.session_state.get("dino_special_dice", 0) <= 0:
+            add_dino_message("⚠️ スペシャルダイスを持っていません！ショップで購入しよう。")
+            return
+        if special_dice_value not in range(1, 7):
+            return
+        st.session_state.dino_special_dice -= 1
+        dice = int(special_dice_value)
+        add_dino_message(f"🌟 スペシャルダイス！ 好きな {dice} を選んだ！")
+    elif race["free_rolls"] > 0:
         race["free_rolls"] -= 1
+        dice = random.randint(1, 6)
     elif st.session_state.aqua_points >= DINO_DICE_COST:
         st.session_state.aqua_points -= DINO_DICE_COST
+        dice = random.randint(1, 6)
     else:
         add_dino_message("⚠️ ポイントが足りません！ 目標を達成してポイントを貯めよう。")
         return
 
     species_key = partner["species"]
     chance = dino_passive_chance(dino_level(partner))
-    dice = random.randint(1, 6)
     steps = dice
-    add_dino_message(f"🎲 サイコロの目は {dice}！ {dice}マス進む！")
+    if special_dice_value is None:
+        add_dino_message(f"🎲 サイコロの目は {dice}！ {dice}マス進む！")
+    else:
+        add_dino_message(f"🎲 {dice}マス進む！")
     # サイコロの出目と移動数は必ず一致。固有能力による追加移動はしない。
     if species_key == "velociraptor" and random.random() < chance:
         bonus_points = random.randint(1, 3)
@@ -899,6 +912,7 @@ PERSISTENT_KEYS = [
     "dino_owned",
     "dino_partner",
     "dino_food",
+    "dino_special_dice",
     "dino_race",
     "dino_event_log",
     "dino_unlocked_courses",
@@ -936,6 +950,7 @@ PERSISTENT_DEFAULTS = {
     "dino_owned": [],
     "dino_partner": None,
     "dino_food": {"meat": 0, "feast": 0},
+    "dino_special_dice": 0,
     "dino_race": {},
     "dino_event_log": [],
     "dino_unlocked_courses": [],
@@ -1935,6 +1950,8 @@ if "dino_partner" not in st.session_state:
     st.session_state.dino_partner = None
 if "dino_food" not in st.session_state:
     st.session_state.dino_food = {"meat": 0, "feast": 0}
+if "dino_special_dice" not in st.session_state:
+    st.session_state.dino_special_dice = 0
 if "dino_race" not in st.session_state:
     st.session_state.dino_race = {}
 if "dino_event_log" not in st.session_state:
@@ -3486,6 +3503,15 @@ elif st.session_state.page in [
                         st.rerun()
                     if not can_roll:
                         st.caption("ポイントが足りません。上の『目標を達成してポイントをゲット！』でポイントを貯めよう！")
+                    special_stock = int(st.session_state.get("dino_special_dice", 0))
+                    if special_stock > 0:
+                        special_value = st.selectbox("🌟 スペシャルダイスの目を選ぶ", [1, 2, 3, 4, 5, 6], key=f"dino_special_value_{course_key}")
+                        if st.button(f"🌟 スペシャルダイスを使う（残り{special_stock}個）", use_container_width=True,
+                                     disabled=bool(race["finished"] or race["pending_battle"]), key=f"dino_special_roll_{course_key}"):
+                            roll_dino_dice(course_key, special_dice_value=int(special_value))
+                            st.rerun()
+                    else:
+                        st.caption("🌟 スペシャルダイスはショップで購入できます（1個5ポイント）。")
                     st.caption(f"✨ {partner_species['passive_name']}：{partner_species['passive_text']}（発動確率 {int(dino_passive_chance(partner_level) * 100)}%）"
                                if partner["species"] != "stegosaurus" else
                                f"✨ {partner_species['passive_name']}：{partner_species['passive_text']}")
@@ -3543,6 +3569,20 @@ elif st.session_state.page in [
                             st.rerun()
                         else:
                             st.warning("ポイントが足りません！")
+
+            st.write("---")
+            st.markdown("#### 🌟 スペシャルダイス")
+            st.write("**スペシャルダイス** — 5ポイント ／ 1回だけ、1〜6から好きな目を選べます。")
+            st.caption(f"所持数：{int(st.session_state.get('dino_special_dice', 0))}個")
+            if st.button("🌟 スペシャルダイスを購入（5ポイント）", key="dino_buy_special_dice", use_container_width=True):
+                if st.session_state.aqua_points >= 5:
+                    st.session_state.aqua_points -= 5
+                    st.session_state.dino_special_dice = int(st.session_state.get("dino_special_dice", 0)) + 1
+                    save_progress()
+                    st.success("スペシャルダイスを1個購入しました！レースで好きな目を選んで使えます。")
+                    st.rerun()
+                else:
+                    st.warning("ポイントが足りません！")
 
             st.write("---")
             st.markdown("#### 🏁 コースショップ")

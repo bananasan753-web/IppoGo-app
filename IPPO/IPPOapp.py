@@ -575,8 +575,10 @@ def build_dino_board(course_key: str) -> dict:
     mode = DINO_COURSES[course_key].get("mode", "")
     count = max(8, goal // (2 if mode == "survival" else 4))
     if mode == "relax":
-        positions = sorted(rnd.sample(range(3, goal), count))
-        kinds = ["event"] * count
+        # 5km（50マス）のゆるレースは、ゴール以外の49マスから特別マスを20個配置。
+        relax_special_count = min(20, max(0, goal - 1)) if goal == 50 else min(count, max(0, goal - 1))
+        positions = sorted(rnd.sample(range(1, goal), relax_special_count))
+        kinds = ["event"] * len(positions)
         rnd.shuffle(kinds)
         return dict(zip(positions, kinds))
     positions = sorted(rnd.sample(range(3, goal), count))
@@ -702,13 +704,8 @@ def roll_dino_dice(course_key: str):
     chance = dino_passive_chance(dino_level(partner))
     dice = random.randint(1, 6)
     steps = dice
-    add_dino_message(f"🎲 サイコロの目は {dice}！")
-    if species_key == "stegosaurus" and dice == 1:
-        steps = 2
-        add_dino_message("🦕 どっしり歩きで、2マス進む！")
-    if species_key == "triceratops" and random.random() < chance:
-        steps += 1
-        add_dino_message("🦏 突進ダッシュ！ さらに +1マス進む！")
+    add_dino_message(f"🎲 サイコロの目は {dice}！ {dice}マス進む！")
+    # サイコロの出目と移動数は必ず一致。固有能力による追加移動はしない。
     if species_key == "velociraptor" and random.random() < chance:
         bonus_points = random.randint(1, 3)
         st.session_state.aqua_points += bonus_points

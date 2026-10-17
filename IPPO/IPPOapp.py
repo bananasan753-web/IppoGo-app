@@ -573,20 +573,25 @@ def build_dino_board(course_key: str) -> dict:
     goal = dino_course_goal(course_key)
     rnd = random.Random(f"dino-board-{course_key}")
     mode = DINO_COURSES[course_key].get("mode", "")
-    count = max(8, goal // (2 if mode == "survival" else 4))
+
+    # ゆるレースはゴール以外の全マスがイベントマス。
     if mode == "relax":
-        # 5km（50マス）のゆるレースは、ゴール以外の49マスから特別マスを20個配置。
-        relax_special_count = min(20, max(0, goal - 1)) if goal == 50 else min(count, max(0, goal - 1))
-        positions = sorted(rnd.sample(range(1, goal), relax_special_count))
-        kinds = ["event"] * len(positions)
+        return {position: "event" for position in range(1, goal)}
+
+    # 初級5kmコースは全50マスのうち、ゴールを除く20マスを特別マスにする。
+    if course_key == "beginner" and goal == 50:
+        positions = sorted(rnd.sample(range(1, goal), 20))
+        kinds = ["boost", "again", "food", "battle"] * 5
         rnd.shuffle(kinds)
         return dict(zip(positions, kinds))
-    positions = sorted(rnd.sample(range(3, goal), count))
+
+    count = max(8, goal // (2 if mode == "survival" else 4))
+    positions = sorted(rnd.sample(range(3, goal), min(count, max(0, goal - 3))))
     pattern = ["boost", "again", "food", "battle"]
-    if DINO_COURSES[course_key].get("mode") == "survival":
-        kinds = [random.choice(["battle", "battle", "battle", "food", "boost", "again"]) for _ in range(count)]
+    if mode == "survival":
+        kinds = [rnd.choice(["battle", "battle", "battle", "food", "boost", "again"]) for _ in positions]
     else:
-        kinds = [pattern[i % len(pattern)] for i in range(count)]
+        kinds = [pattern[i % len(pattern)] for i in range(len(positions))]
     rnd.shuffle(kinds)
     return dict(zip(positions, kinds))
 

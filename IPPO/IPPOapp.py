@@ -539,6 +539,7 @@ def ensure_dino_data():
         d.setdefault("hp_bonus", 0)
         d.setdefault("attack_bonus", 0)
         d.setdefault("speed_bonus", 0)
+        d.setdefault("growth_log", [])
     for key in DINO_FOOD:
         st.session_state.dino_food.setdefault(key, 0)
     if st.session_state.dino_partner and get_dino_partner() is None:
@@ -555,17 +556,40 @@ def get_dino_race(course_key: str) -> dict:
     return race
 
 
+DINO_GROWTH_STATS = {
+    "hp": {"emoji": "❤️", "label": "HP", "field": "hp_bonus"},
+    "attack": {"emoji": "⚔️", "label": "攻撃力", "field": "attack_bonus"},
+    "speed": {"emoji": "💨", "label": "素早さ", "field": "speed_bonus"},
+}
+DINO_GROWTH_LOG_MAX = 200
+
+
+def record_dino_growth(dino: dict, text: str):
+    """成長履歴に1行追加する（最新200件まで保存）。"""
+    log = dino.setdefault("growth_log", [])
+    log.append({"date": get_now_jst().strftime("%Y/%m/%d %H:%M"), "text": text})
+    if len(log) > DINO_GROWTH_LOG_MAX:
+        del log[:len(log) - DINO_GROWTH_LOG_MAX]
+
+
 def add_dino_exp(dino: dict, amount: int):
     if amount <= 0:
         return
     old_level = dino_level(dino)
     dino["exp"] = dino.get("exp", 0) + amount
     new_level = dino_level(dino)
-    if new_level > old_level:
-        text = f"{dino_display_name(dino)}が Lv.{new_level} にレベルアップ！"
-        add_dino_message(f"🎉 {text}")
-        log_dino_event(f"🦖 {text}")
-        queue_dino_sound("achieve")
+    if new_level <= old_level:
+        return
+    name = dino_display_name(dino)
+    # 1レベル上がるごとに、HP・攻撃力・素早さのどれか1つがランダムで+1
+    for reached in range(old_level + 1, new_level + 1):
+        stat_key = random.choice(list(DINO_GROWTH_STATS))
+        info = DINO_GROWTH_STATS[stat_key]
+        dino[info["field"]] = int(dino.get(info["field"], 0)) + 1
+        record_dino_growth(dino, f"⭐ Lv.{reached} にレベルアップ！ {info['emoji']} {info['label']} +1")
+        add_dino_message(f"🎉 {name}が Lv.{reached} にレベルアップ！ {info['emoji']} {info['label']}が +1 上がった！")
+        log_dino_event(f"🦖 {name}が Lv.{reached} にレベルアップ！（{info['label']}+1）")
+    queue_dino_sound("achieve")
 
 
 def build_dino_board(course_key: str) -> dict:
@@ -1956,6 +1980,8 @@ if "dino_race" not in st.session_state:
     st.session_state.dino_race = {}
 if "dino_event_log" not in st.session_state:
     st.session_state.dino_event_log = []
+if "dino_unlocked_courses" not in st.session_state:
+    st.session_state.dino_unlocked_courses = []
 
 STICKER_CIRCLE_COLORS = {
     "赤": "🔴", "橙": "🟠", "黄": "🟡", "緑": "🟢",
@@ -3527,6 +3553,16 @@ elif st.session_state.page in [
                 title = f"{species['emoji']} {dino_display_name(dino)}　Lv.{level}" + ("　🤝パートナー" if is_partner else "")
                 with st.expander(title, expanded=is_partner):
                     st.write(f"種類：**{species['name']}**　／　最大HP：**{dino_max_hp(dino)}**　／　攻撃補正：+{dino_attack(dino)}　／　素早さ：{dino_speed(dino)}")
+                    st.caption(
+                        f"📈 レベルアップ・アイテムのボーナス：❤️HP +{int(dino.get('hp_bonus', 0))}　"
+                        f"⚔️攻撃力 +{int(dino.get('attack_bonus', 0))}　💨素早さ +{int(dino.get('speed_bonus', 0))}"
+                    )
+                    if st.checkbox("📜 成長履歴を見る", key=f"dino_growth_show_{dino['id']}"):
+                        growth_log = dino.get("growth_log", [])
+                        if not growth_log:
+                            st.caption("まだ成長の記録がありません。レベルが上がるとここに残ります！")
+                        for growth_entry in reversed(growth_log):   # 新しい順
+                            st.write(f"🗓️ {growth_entry['date']}　{growth_entry['text']}")
                     if level >= DINO_MAX_LEVEL:
                         st.progress(1.0)
                         st.caption(f"経験値 {dino.get('exp', 0)}（最大レベル！）")
@@ -3619,6 +3655,7 @@ elif st.session_state.page in [
                         target = st.session_state.dino_owned[stat_target_idx]
                         stat_key = {"hp":"hp_bonus", "attack":"attack_bonus", "speed":"speed_bonus"}[item["stat"]]
                         target[stat_key] = int(target.get(stat_key, 0)) + item["amount"]
+                        record_dino_growth(target, f"{item['emoji']} {item['name']}を使った！ {DINO_GROWTH_STATS[item['stat']]['label']} +{item['amount']}")
                         add_dino_exp(target, item["exp"])
                         add_dino_message(f"{item['emoji']} {dino_display_name(target)}に{item['name']}を使った！ 経験値 +{item['exp']}、{item['stat']} +{item['amount']}！")
                         save_progress()
@@ -3652,4 +3689,3 @@ elif st.session_state.page in [
 # =====================================================
 if st.session_state.get("game_started"):
     save_progress()
-

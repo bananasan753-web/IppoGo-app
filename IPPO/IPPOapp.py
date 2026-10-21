@@ -424,7 +424,17 @@ DINO_DICE_COST = 3          # サイコロ1回に必要なポイント
 DINO_MAX_LEVEL = 10
 DINO_BATTLE_WIN_EXP = 6
 DINO_BATTLE_LOSE_EXP = 2
-DINO_SPECIAL_USES = 2        # 固有技は1回の力試しで使える回数
+DINO_SPECIAL_USES = 2
+DINO_BATTLE_PRACTICE_EXP = 0  # 模型との練習では経験値・報酬なし
+
+DINO_BERRIES = {
+    "hp": {"name": "いのちの木の実", "emoji": "❤️", "stat": "hp", "label": "最大HP"},
+    "hp_plus": {"name": "大きないのちの木の実", "emoji": "💖", "stat": "hp", "label": "最大HP"},
+    "attack": {"name": "ちからの木の実", "emoji": "⚔️", "stat": "attack", "label": "攻撃力"},
+    "attack_plus": {"name": "大きなちからの木の実", "emoji": "💥", "stat": "attack", "label": "攻撃力"},
+    "speed": {"name": "はやさの木の実", "emoji": "💨", "stat": "speed", "label": "素早さ"},
+    "speed_plus": {"name": "大きなはやさの木の実", "emoji": "🌪️", "stat": "speed", "label": "素早さ"},
+}        # 固有技は1回の力試しで使える回数
 
 DINO_DATA_PATH = os.path.join(BASE_DIR, "data", "dino.json")
 DINO_SHOP_DATA_PATH = os.path.join(BASE_DIR, "data", "dino_shop.json")
@@ -542,6 +552,9 @@ def ensure_dino_data():
         d.setdefault("growth_log", [])
     for key in DINO_FOOD:
         st.session_state.dino_food.setdefault(key, 0)
+    st.session_state.setdefault("dino_berries", {key: 0 for key in DINO_BERRIES})
+    for key in DINO_BERRIES:
+        st.session_state.dino_berries.setdefault(key, 0)
     if st.session_state.dino_partner and get_dino_partner() is None:
         st.session_state.dino_partner = None
 
@@ -782,8 +795,36 @@ def start_dino_battle(course_key: str, partner: dict):
         "enemy": enemy, "enemy_hp": enemy["max_hp"],
         "player_max_hp": max_hp, "player_hp": max_hp,
         "special_left": DINO_SPECIAL_USES,
-        "log": ["⚔️ 力試しスタート！ どう戦う？"], "over": False, "result": None,
+        "log": ["⚔️ 力試しスタート！ どう戦う？"], "over": False, "result": None, "practice": False,
     }
+    save_progress()
+
+
+def start_dino_practice_battle(partner: dict):
+    """いつでも挑戦できる模型との練習バトル。報酬目当ての周回を防ぐため報酬なし。"""
+    level = dino_level(partner)
+    enemy = {"name": "練習用の模型恐竜", "emoji": "🦖", "level": level,
+             "max_hp": max(12, dino_max_hp(partner)), "speed": max(1, dino_speed(partner)), "attack": dino_attack(partner)}
+    max_hp = dino_max_hp(partner)
+    st.session_state.dino_battle = {
+        "enemy": enemy, "enemy_hp": enemy["max_hp"], "player_max_hp": max_hp, "player_hp": max_hp,
+        "special_left": DINO_SPECIAL_USES, "log": ["🧸 模型恐竜との練習開始！ 勝っても経験値・報酬はありません。"],
+        "over": False, "result": None, "practice": True,
+    }
+    save_progress()
+
+
+def eat_dino_berry(dino: dict, berry_key: str):
+    berry = DINO_BERRIES[berry_key]
+    inventory = st.session_state.dino_berries
+    if inventory.get(berry_key, 0) <= 0:
+        return
+    inventory[berry_key] -= 1
+    amount = 2 if berry_key.endswith("_plus") else 1
+    field = {"hp": "hp_bonus", "attack": "attack_bonus", "speed": "speed_bonus"}[berry["stat"]]
+    dino[field] = int(dino.get(field, 0)) + amount
+    record_dino_growth(dino, f"{berry['emoji']} {berry['name']}を食べた！ {berry['label']} +{amount}")
+    add_dino_message(f"{berry['emoji']} {dino_display_name(dino)}が{berry['name']}を食べた！ {berry['label']} +{amount}！")
     save_progress()
 
 
@@ -877,6 +918,16 @@ def resolve_dino_battle_turn(partner: dict, action: str):
             to_player = 0
         elif enemy_speed > player_speed and to_player >= battle["player_hp"]:
             to_enemy = 0
+    # 素早さが高いほど相手の攻撃をかわしやすい（差1ごとに+5%、最大35%）。
+    player_speed = dino_speed(partner)
+    enemy_speed = int(enemy.get("speed", enemy["level"]))
+    incoming_attack = to_player
+    dodge_chance = max(0.0, min(0.35, (player_speed - enemy_speed) * 0.05))
+    if incoming_attack > 0 and random.random() < dodge_chance:
+        to_player = 0
+        log.append(f"💨 素早さを生かして攻撃を回避！（回避率 {int(dodge_chance * 100)}%）")
+    elif player_speed > enemy_speed:
+        log.append(f"💨 素早さで主導権を握る！（自分 {player_speed} ＞ 相手 {enemy_speed}）")
     battle["enemy_hp"] = max(0, battle["enemy_hp"] - to_enemy)
     battle["player_hp"] = max(0, battle["player_hp"] - to_player)
     if heal and battle["player_hp"] > 0:
@@ -884,18 +935,31 @@ def resolve_dino_battle_turn(partner: dict, action: str):
 
     if battle["enemy_hp"] <= 0:
         battle["over"], battle["result"] = True, "win"
-        log.append(f"🎉 {ename}に勝利！ 経験値 +{DINO_BATTLE_WIN_EXP}！")
-        add_dino_exp(partner, DINO_BATTLE_WIN_EXP)
-        if random.random() < 0.5:
-            st.session_state.dino_food["meat"] = st.session_state.dino_food.get("meat", 0) + 1
-            log.append("🍖 戦利品のこんがり肉を手に入れた！")
-        log_dino_event(f"⚔️ {pname}が野良の{ename}との力試しに勝利！")
+        if battle.get("practice"):
+            log.append("🎉 模型恐竜に勝利！ 練習おつかれさま！ 経験値・報酬はありません。")
+        else:
+            log.append(f"🎉 {ename}に勝利！ 経験値 +{DINO_BATTLE_WIN_EXP}！")
+            add_dino_exp(partner, DINO_BATTLE_WIN_EXP)
+            if random.random() < 0.5:
+                berry_key = random.choice(list(DINO_BERRIES))
+                st.session_state.dino_berries.setdefault(berry_key, 0)
+                st.session_state.dino_berries[berry_key] += 1
+                berry = DINO_BERRIES[berry_key]
+                amount = 2 if berry_key.endswith("_plus") else 1
+                log.append(f"{berry['emoji']} 戦利品：{berry['name']}！（食べると{berry['label']}+{amount}）")
+            else:
+                st.session_state.dino_special_dice = int(st.session_state.get("dino_special_dice", 0)) + 1
+                log.append("🌟 戦利品：スペシャルダイスを1個手に入れた！")
+            log_dino_event(f"⚔️ {pname}が野良の{ename}との力試しに勝利！")
         queue_dino_sound("achieve")
     elif battle["player_hp"] <= 0:
         battle["over"], battle["result"] = True, "lose"
-        log.append(f"😵 {pname}はたおれてしまった… でも挑戦はすごいこと！ 経験値 +{DINO_BATTLE_LOSE_EXP}")
-        add_dino_exp(partner, DINO_BATTLE_LOSE_EXP)
-        log_dino_event(f"⚔️ {pname}が野良の{ename}に力試しで挑戦！")
+        if battle.get("practice"):
+            log.append(f"😵 模型恐竜に負けてしまった…。練習だから何度でも挑戦できるよ！")
+        else:
+            log.append(f"😵 {pname}はたおれてしまった… でも挑戦はすごいこと！ 経験値 +{DINO_BATTLE_LOSE_EXP}")
+            add_dino_exp(partner, DINO_BATTLE_LOSE_EXP)
+            log_dino_event(f"⚔️ {pname}が野良の{ename}に力試しで挑戦！")
     battle["log"] = log
     save_progress()
 
@@ -936,6 +1000,7 @@ PERSISTENT_KEYS = [
     "dino_owned",
     "dino_partner",
     "dino_food",
+    "dino_berries",
     "dino_special_dice",
     "dino_race",
     "dino_event_log",
@@ -974,6 +1039,7 @@ PERSISTENT_DEFAULTS = {
     "dino_owned": [],
     "dino_partner": None,
     "dino_food": {"meat": 0, "feast": 0},
+    "dino_berries": {key: 0 for key in DINO_BERRIES},
     "dino_special_dice": 0,
     "dino_race": {},
     "dino_event_log": [],
@@ -3453,6 +3519,13 @@ elif st.session_state.page in [
                 st.caption("💨 追い風　🎲 もう一回　🍖 食べ物　⚔️ バトル（力試し・挑むかは自由）　🏁 ゴール")
                 st.write("")
 
+                # 模型恐竜との練習はレース進行に関係なくいつでも開始できる
+                if st.session_state.get("dino_battle") is None and st.button(
+                    "🧸 模型の恐竜と練習バトル（いつでも挑戦・報酬なし）",
+                    use_container_width=True, key="dino_practice_battle"):
+                    start_dino_practice_battle(partner)
+                    st.rerun()
+
                 battle = st.session_state.get("dino_battle")
                 if battle:
                     # ===== バトル中 =====
@@ -3472,7 +3545,8 @@ elif st.session_state.page in [
                             st.write(line)
 
                     if battle["over"]:
-                        if st.button("🏁 レースにもどる", type="primary", use_container_width=True, key="dino_battle_end"):
+                        end_label = "🧸 練習を終える" if battle.get("practice") else "🏁 レースにもどる"
+                        if st.button(end_label, type="primary", use_container_width=True, key="dino_battle_end"):
                             del st.session_state["dino_battle"]
                             st.rerun()
                     else:
@@ -3662,6 +3736,22 @@ elif st.session_state.page in [
                         st.rerun()
                     else:
                         st.warning("ポイントが足りません！")
+
+            st.write("---")
+            st.markdown("#### 🍇 木の実を食べる")
+            st.caption("力試しの勝利でもらった木の実を食べると、対応する能力が上がるよ！")
+            berry_target_idx = st.selectbox(
+                "木の実を食べる恐竜", list(range(len(st.session_state.dino_owned))),
+                format_func=lambda i: f"{DINO_SPECIES[st.session_state.dino_owned[i]['species']]['emoji']} {dino_display_name(st.session_state.dino_owned[i])}（Lv.{dino_level(st.session_state.dino_owned[i])}）",
+                key="dino_berry_target",
+            )
+            for berry_key, berry in DINO_BERRIES.items():
+                stock = st.session_state.get("dino_berries", {}).get(berry_key, 0)
+                amount = 2 if berry_key.endswith("_plus") else 1
+                if st.button(f"{berry['emoji']} {berry['name']}（残り{stock}個・{berry['label']}+{amount}）を食べる",
+                             disabled=stock <= 0, key=f"dino_berry_eat_{berry_key}", use_container_width=True):
+                    eat_dino_berry(st.session_state.dino_owned[berry_target_idx], berry_key)
+                    st.rerun()
 
             st.write("---")
             st.markdown("#### 🍽️ 餌をあげる")

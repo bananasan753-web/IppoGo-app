@@ -1,96 +1,110 @@
-import streamlit as st
-from datetime import datetime, date
-import zoneinfo
-import random
-import html
-import base64
-import os
-import time
-import calendar as cal_module
-import json
-import copy
-from supabase import create_client, Client
+                    st.caption(f"持っている数：{st.session_state.dino_food.get(food_key, 0)}個")
+                    if st.button("購入する", key=f"dino_buy_{food_key}", use_container_width=True):
+                        if st.session_state.aqua_points >= food["price"]:
+                            st.session_state.aqua_points -= food["price"]
+                            st.session_state.dino_food[food_key] = st.session_state.dino_food.get(food_key, 0) + 1
+                            save_progress()
+                            st.success(f"{food['emoji']} {food['name']}を買いました！")
+                            st.rerun()
+                        else:
+                            st.warning("ポイントが足りません！")
 
-# 日本標準時（JST）の定義
-JST = zoneinfo.ZoneInfo("Asia/Tokyo")
+            st.write("---")
+            st.markdown("#### 🌟 スペシャルダイス")
+            st.write("**スペシャルダイス** — 5ポイント ／ 1回だけ、1〜6から好きな目を選べます。")
+            st.caption(f"所持数：{int(st.session_state.get('dino_special_dice', 0))}個")
+            if st.button("🌟 スペシャルダイスを購入（5ポイント）", key="dino_buy_special_dice", use_container_width=True):
+                if st.session_state.aqua_points >= 5:
+                    st.session_state.aqua_points -= 5
+                    st.session_state.dino_special_dice = int(st.session_state.get("dino_special_dice", 0)) + 1
+                    save_progress()
+                    st.success("スペシャルダイスを1個購入しました！レースで好きな目を選んで使えます。")
+                    st.rerun()
+                else:
+                    st.warning("ポイントが足りません！")
 
+            st.write("---")
+            st.markdown("#### 🏁 コースショップ")
+            st.caption("ポイントで新しいすごろくコースを解放できます。")
+            for course_key in ("survival", "relax"):
+                course_data = DINO_COURSES[course_key]
+                owned_course = course_key in st.session_state.get("dino_unlocked_courses", [])
+                st.markdown(f"**{('🏆' if course_key == 'survival' else '🌸')} {course_data['name']}** — {course_data['price']}ポイント")
+                st.caption("バトルマスがたくさん！手ごわいサバイバル。" if course_key == "survival" else "和むイベントマスがたくさんある、のんびりコース。")
+                if owned_course:
+                    st.success("購入済み")
+                elif st.button(f"購入する（{course_data['price']}ポイント）", key=f"dino_course_buy_{course_key}", use_container_width=True):
+                    if st.session_state.aqua_points >= course_data["price"]:
+                        st.session_state.aqua_points -= course_data["price"]
+                        st.session_state.setdefault("dino_unlocked_courses", []).append(course_key)
+                        save_progress()
+                        st.success(f"{course_data['name']}を解放しました！")
+                        st.rerun()
+                    else:
+                        st.warning("ポイントが足りません！")
 
-def get_now_jst():
-    """アプリ内時間を常に日本時間に統一するヘルパー関数"""
-    return datetime.now(JST)
+            st.write("---")
+            st.markdown("#### 🧪 能力アップアイテム")
+            stat_target_idx = st.selectbox(
+                "能力を上げる恐竜", list(range(len(st.session_state.dino_owned))),
+                format_func=lambda i: f"{DINO_SPECIES[st.session_state.dino_owned[i]['species']]['emoji']} {dino_display_name(st.session_state.dino_owned[i])}",
+                key="dino_stat_target",
+            )
+            for item in DINO_SHOP_DATA["stat_items"]:
+                st.markdown(f"**{item['emoji']} {item['name']}** — {item['price']}ポイント ／ 経験値 +{item['exp']} ／ 能力 +{item['amount']}")
+                if st.button(f"{item['name']}を購入して使う", key=f"dino_stat_buy_{item['id']}", use_container_width=True):
+                    if st.session_state.aqua_points >= item["price"]:
+                        st.session_state.aqua_points -= item["price"]
+                        target = st.session_state.dino_owned[stat_target_idx]
+                        stat_key = {"hp":"hp_bonus", "attack":"attack_bonus", "speed":"speed_bonus"}[item["stat"]]
+                        target[stat_key] = int(target.get(stat_key, 0)) + item["amount"]
+                        record_dino_growth(target, f"{item['emoji']} {item['name']}を使った！ {DINO_GROWTH_STATS[item['stat']]['label']} +{item['amount']}")
+                        add_dino_exp(target, item["exp"])
+                        add_dino_message(f"{item['emoji']} {dino_display_name(target)}に{item['name']}を使った！ 経験値 +{item['exp']}、{item['stat']} +{item['amount']}！")
+                        save_progress()
+                        st.rerun()
+                    else:
+                        st.warning("ポイントが足りません！")
 
+            st.write("---")
+            st.markdown("#### 🍇 木の実を食べる")
+            st.caption("力試しの勝利でもらった木の実を食べると、対応する能力が上がるよ！")
+            berry_target_idx = st.selectbox(
+                "木の実を食べる恐竜", list(range(len(st.session_state.dino_owned))),
+                format_func=lambda i: f"{DINO_SPECIES[st.session_state.dino_owned[i]['species']]['emoji']} {dino_display_name(st.session_state.dino_owned[i])}（Lv.{dino_level(st.session_state.dino_owned[i])}）",
+                key="dino_berry_target",
+            )
+            for berry_key, berry in DINO_BERRIES.items():
+                stock = st.session_state.get("dino_berries", {}).get(berry_key, 0)
+                amount = 2 if berry_key.endswith("_plus") else 1
+                if st.button(f"{berry['emoji']} {berry['name']}（残り{stock}個・{berry['label']}+{amount}）を食べる",
+                             disabled=stock <= 0, key=f"dino_berry_eat_{berry_key}", use_container_width=True):
+                    eat_dino_berry(st.session_state.dino_owned[berry_target_idx], berry_key)
+                    st.rerun()
 
-# --- メニュー選択ボタンなどの文字を大きくするCSS ---
-st.markdown("""
-    <style>
-    div[data-testid="stColumn"] button p {
-        font-size: 24px !important;
-        font-weight: bold !important;
-    }
-    /* お菓子の見た目を可愛くホバーできるようにするCSS */
-    .candy-item {
-        display: inline-block;
-        font-size: 28px;
-        margin: 4px;
-        cursor: pointer;
-    }
-    .aqua-growth-message { text-align:center; font-size:30px; font-weight:800; margin:14px 0; animation:aqua-pop .55s ease-out; }
-    .aqua-milestone { position:relative; overflow:hidden; text-align:center; padding:18px 8px 8px; border-radius:18px; background:linear-gradient(180deg, rgba(225,247,255,.9), rgba(255,255,255,.7)); margin:12px 0; }
-    .aqua-milestone-title { position:relative; z-index:2; font-size:30px; font-weight:900; margin:4px 0 12px; animation:aqua-pop .6s ease-out; }
-    .aqua-fish-burst { position:relative; height:150px; overflow:hidden; }
-    .aqua-fish-burst span { position:absolute; bottom:-60px; font-size:30px; animation:aqua-rise 2.2s ease-out forwards; animation-delay:var(--delay); left:var(--left); }
-    @keyframes aqua-rise { 0% { transform:translateY(0) rotate(0deg); opacity:0; } 12% { opacity:1; } 100% { transform:translateY(-220px) rotate(var(--rotate)); opacity:0; } }
-    @keyframes aqua-pop { 0% { transform:scale(.7); opacity:0; } 70% { transform:scale(1.08); opacity:1; } 100% { transform:scale(1); opacity:1; } }
-    </style>
-    """, unsafe_allow_html=True)
+            st.write("---")
+            st.markdown("#### 🍽️ 餌をあげる")
+            owned_dinos = st.session_state.dino_owned
+            feed_index = st.selectbox(
+                "どの恐竜にあげる？", list(range(len(owned_dinos))),
+                format_func=lambda i: f"{DINO_SPECIES[owned_dinos[i]['species']]['emoji']} {dino_display_name(owned_dinos[i])}（Lv.{dino_level(owned_dinos[i])}）",
+                key="dino_feed_target",
+            )
+            for food_key, food in DINO_FOOD.items():
+                stock = st.session_state.dino_food.get(food_key, 0)
+                if st.button(f"{food['emoji']} {food['name']}をあげる（残り{stock}個・経験値+{food['exp']}）",
+                             disabled=stock <= 0, key=f"dino_feed_{food_key}", use_container_width=True):
+                    target = owned_dinos[feed_index]
+                    st.session_state.dino_food[food_key] -= 1
+                    add_dino_message(f"{food['emoji']} {dino_display_name(target)}は{food['name']}をもぐもぐ！ 経験値 +{food['exp']}")
+                    queue_dino_sound("feed")
+                    add_dino_exp(target, food["exp"])
+                    save_progress()
+                    st.rerun()
 
 
 # =====================================================
-# 🌐 Supabase 接続設定
+# 💾 Supabase への自動セーブ
 # =====================================================
-@st.cache_resource
-def init_supabase() -> Client:
-    url = st.secrets["SUPABASE_URL"]
-    key = st.secrets["SUPABASE_KEY"]
-    return create_client(url, key)
-
-
-try:
-    supabase = init_supabase()
-except Exception as e:
-    st.error("Supabaseへの接続に失敗しました。Secretsの設定を確認してください。")
-    st.stop()
-
-# =====================================================
-# 🔊 効果音まわりの設定
-# =====================================================
-SOUND_PATH = os.path.join(os.path.dirname(__file__), "sounds", "決定ボタンを押す23.mp3")
-ACHIEVE_SOUND_PATH = os.path.join(os.path.dirname(__file__), "sounds", "クイズ正解1.mp3")
-JAR_FULL_SOUND_PATH = os.path.join(os.path.dirname(__file__), "sounds", "歓声と拍手.mp3")
-AQUA_POINT_SOUND_PATH = os.path.join(os.path.dirname(__file__), "sounds", "パパッ.mp3")
-AQUA_GACHA_LOW_SOUND_PATH = os.path.join(os.path.dirname(__file__), "sounds", "ペタッ.mp3")
-AQUA_GACHA_THREE_SOUND_PATH = os.path.join(os.path.dirname(__file__), "sounds", "きらーん1.mp3")
-AQUA_FEED_SOUND_PATH = os.path.join(os.path.dirname(__file__), "sounds", "コルク栓を抜く.mp3")
-
-JAR_SIZE_LABELS = {30: "S", 50: "M", 100: "L"}
-
-
-def jar_size_label(capacity: int) -> str:
-    return JAR_SIZE_LABELS.get(capacity, "?")
-
-
-# =====================================================
-# 🐠 水族館ステージ
-# =====================================================
-# =====================================================
-# 🐠 魚データ（data/fish.jsonから読み込み）
-# =====================================================
-BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-FISH_DATA_PATH = os.path.join(BASE_DIR, "data", "fish.json")
-
-try:
-    with open(FISH_DATA_PATH, "r", encoding="utf-8") as f:
-        ALL_FISH = json.load(f)
-except (FileNotFoundError, json.JSONDecodeError) as e:
-    st.error(f"魚データ（data/fish.json）の読み込みに失敗しました: {e}")
-    st.stop()
+if st.session_state.get("game_started"):
+    save_progress()

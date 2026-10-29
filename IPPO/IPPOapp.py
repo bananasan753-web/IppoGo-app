@@ -966,6 +966,36 @@ def resolve_dino_battle_turn(partner: dict, action: str):
 
 
 # =====================================================
+# 💧 ポイントの使いみち（アクアポイントと恐竜ポイントは共通 ／ お菓子ポイントはお菓子集め専用）
+# =====================================================
+SINGLE_TASK_POINTS = 3      # 単発のタスクを完了したときにもらえるポイント（アクアポイント・恐竜ポイントと共通）
+CANDY_COST_POINTS = 1       # お菓子を1個入れるのに必要な「お菓子ポイント」（お菓子集め専用。st.session_state.candy_points）
+
+
+def add_single_task(title: str) -> bool:
+    title = title.strip()
+    if not title:
+        return False
+    st.session_state.single_tasks.append({
+        "id": get_now_jst().strftime("%Y%m%d%H%M%S%f"),
+        "title": title, "completed": False, "completed_at": None,
+    })
+    return True
+
+
+def complete_single_task(task_id: str) -> bool:
+    """単発のタスクを完了にして、3ポイントを加算する（1つのタスクで1回だけ）。"""
+    for task in st.session_state.single_tasks:
+        if task["id"] == task_id and not task.get("completed"):
+            task["completed"] = True
+            task["completed_at"] = get_now_jst().strftime("%Y/%m/%d %H:%M")
+            st.session_state.aqua_points += SINGLE_TASK_POINTS
+            add_sticker_for_date(get_now_jst().strftime("%Y/%m/%d"))
+            return True
+    return False
+
+
+# =====================================================
 # 💾 セーブデータ（Supabaseクラウド連携）
 # =====================================================
 PERSISTENT_KEYS = [
@@ -1005,6 +1035,8 @@ PERSISTENT_KEYS = [
     "dino_race",
     "dino_event_log",
     "dino_unlocked_courses",
+    "single_tasks",
+    "candy_points",
 ]
 
 PERSISTENT_DEFAULTS = {
@@ -1044,6 +1076,8 @@ PERSISTENT_DEFAULTS = {
     "dino_race": {},
     "dino_event_log": [],
     "dino_unlocked_courses": [],
+    "single_tasks": [],
+    "candy_points": 0,
 }
 
 
@@ -1395,9 +1429,16 @@ def get_ippo_events_for_date(date_str: str) -> list:
             points = ag.get("points", 0)
             if ag.get("source") == "dino":
                 label = f"🦖 『{ag.get('target', '')}』{level}目標達成（💧{points}ポイント）"
+            elif ag.get("source") == "candy":
+                label = f"🍬 『{ag.get('target', '')}』{level}目標達成（🍬{points}お菓子ポイント）"
             else:
                 label = f"🐠 『{ag.get('target', '')}』{level}目標達成（💧{points}アクアポイント）"
             events.append((ag["date"].split(" ")[1], label))
+    # 単発のタスクの完了
+    for st_task in st.session_state.get("single_tasks", []):
+        completed_at = st_task.get("completed_at")
+        if st_task.get("completed") and completed_at and completed_at.startswith(date_str):
+            events.append((completed_at.split(" ")[1], f"✅ 単発タスク『{st_task.get('title', '')}』完了（💧{SINGLE_TASK_POINTS}ポイント）"))
     # 恐竜レースでの出来事（レベルアップ・力試しなど）
     for de in st.session_state.get("dino_event_log", []):
         if de["date"].startswith(date_str):
@@ -1599,6 +1640,9 @@ def render_schedule_and_events(date_str: str, editable: bool, clipboard_at_botto
     if editable:
         if not clipboard_at_bottom:
             render_schedule_clipboard(date_str)
+        schedule_notice = st.session_state.pop("schedule_notice", None)
+        if schedule_notice:
+            st.success(schedule_notice)
         col_plan_btn, col_record_btn = st.columns(2)
         with col_plan_btn:
             if st.button("📅 予定を立てる", use_container_width=True, key=f"open_plan_form_{date_str}"):
@@ -1649,6 +1693,33 @@ def render_schedule_and_events(date_str: str, editable: bool, clipboard_at_botto
                         index=color_options.index(current_color_name),
                         key=f"edit_sched_color_{date_str}_{edit_kind}_{edit_index}")
                     edit_color = SCHEDULE_COLORS[edit_color_name]
+
+                    # 予定の1コマを、そのまま「記録」にもコピーする
+                    if edit_kind == "planned":
+                        if st.button("✅ 予定通り！（このコマを記録にそのままコピー）", use_container_width=True,
+                                     key=f"as_planned_{date_str}_{edit_index}"):
+                            actual_entries = day_schedule.setdefault("actual", [])
+                            copied_entry = {
+                                "start": entry["start"], "end": entry["end"],
+                                "label": entry.get("label", ""), "color": entry.get("color", "#4CAF50"),
+                            }
+                            already = any(
+                                a.get("start") == copied_entry["start"] and a.get("end") == copied_entry["end"]
+                                and a.get("label", "") == copied_entry["label"]
+                                for a in actual_entries
+                            )
+                            if already:
+                                st.session_state.schedule_notice = "ℹ️ このコマは、すでに記録に入っています。"
+                            else:
+                                actual_entries.append(copied_entry)
+                                actual_entries.sort(key=lambda e: e["start"])
+                                st.session_state.schedule_notice = (
+                                    f"✅ 『{copied_entry['label']}』{copied_entry['start']}〜{copied_entry['end']} を記録にコピーしました！"
+                                )
+                            st.session_state.schedule_edit_target = None
+                            save_progress()
+                            st.rerun()
+                        st.caption("予定はそのまま残り、実際の記録にも同じコマが入ります。")
 
                     save_col, delete_col, cancel_col = st.columns(3)
                     with save_col:
@@ -2048,6 +2119,10 @@ if "dino_event_log" not in st.session_state:
     st.session_state.dino_event_log = []
 if "dino_unlocked_courses" not in st.session_state:
     st.session_state.dino_unlocked_courses = []
+if "single_tasks" not in st.session_state:
+    st.session_state.single_tasks = []
+if "candy_points" not in st.session_state:
+    st.session_state.candy_points = 0
 
 STICKER_CIRCLE_COLORS = {
     "赤": "🔴", "橙": "🟠", "黄": "🟡", "緑": "🟢",
@@ -2350,6 +2425,49 @@ elif st.session_state.page in [
     # --- 目標登録画面 ---
     if st.session_state.page == "target_page":
         st.title("🎯 目標登録画面")
+
+        # ===== 📝 単発のタスク（完了すると3ポイント） =====
+        with st.container(border=True):
+            st.markdown("### 📝 単発のタスク")
+            st.caption(f"1回きりのタスクを登録できます。完了を押すと **{SINGLE_TASK_POINTS}ポイント** もらえます（水族館・恐竜レース・お菓子集めと共通のポイント）。")
+            single_notice = st.session_state.pop("single_task_notice", None)
+            if single_notice:
+                play_aqua_point_sound(delay=0)
+                st.success(single_notice)
+
+            with st.form("single_task_form", clear_on_submit=True):
+                new_single_title = st.text_input("単発のタスク", placeholder="例：メールの返信、洗濯物をたたむ、薬局に行く")
+                if st.form_submit_button("➕ タスクを追加"):
+                    if add_single_task(new_single_title):
+                        save_progress()
+                        st.rerun()
+                    else:
+                        st.error("⚠️ タスクの内容を入力してください。")
+
+            open_tasks = [t for t in st.session_state.single_tasks if not t.get("completed")]
+            done_tasks = [t for t in st.session_state.single_tasks if t.get("completed")]
+            if not open_tasks:
+                st.caption("まだ未完了のタスクはありません。")
+            for task in open_tasks:
+                task_col, done_col, del_col = st.columns([5, 3, 1])
+                with task_col:
+                    st.write(f"📌 {task['title']}")
+                with done_col:
+                    if st.button(f"✅ 完了！ +{SINGLE_TASK_POINTS}pt", key=f"single_done_{task['id']}", use_container_width=True):
+                        if complete_single_task(task["id"]):
+                            st.session_state.single_task_notice = f"🎉 『{task['title']}』を完了！ {SINGLE_TASK_POINTS}ポイントゲット！"
+                            save_progress()
+                            st.rerun()
+                with del_col:
+                    if st.button("🗑️", key=f"single_del_{task['id']}", use_container_width=True):
+                        st.session_state.single_tasks = [t for t in st.session_state.single_tasks if t["id"] != task["id"]]
+                        save_progress()
+                        st.rerun()
+            if done_tasks and st.checkbox(f"完了したタスクを見る（{len(done_tasks)}件）", key="show_done_single_tasks"):
+                for task in reversed(done_tasks[-30:]):
+                    st.write(f"✅ {task['title']}　（{task.get('completed_at', '')}）")
+
+        st.write("---")
         st.write("まずは達成したい「大きな目標」を入力してください。")
 
         main_target_input = st.text_input("最終目標（例：テストで70点とる、など）", key="main_input")
@@ -2880,6 +2998,7 @@ elif st.session_state.page in [
 
         with main_col:
             st.subheader("🏆 達成した目標を選ぼう！")
+            st.caption(f"目標を達成すると「お菓子ポイント」がもらえます。そのポイントで、お菓子を1個（{CANDY_COST_POINTS}お菓子ポイント）ずつ瓶に入れよう！")
 
             if not st.session_state.target_list:
                 st.warning("⚠️ まだ目標が登録されていません！「目標登録画面」で目標を作ってきてね！")
@@ -2890,7 +3009,7 @@ elif st.session_state.page in [
                 selected_target_data = next(
                     t for t in st.session_state.target_list if t["title"] == selected_target_title)
 
-                level_options = [f"{lv}: {task} (🍬×{lv.split('.')[1]}個パワー)" for lv, task in
+                level_options = [f"{lv}: {task} (🍬{lv.split('.')[1]}お菓子ポイント)" for lv, task in
                                  selected_target_data["tasks"].items()]
                 selected_level_str = st.selectbox("⭐ どのレベルをクリアした？", level_options)
 
@@ -2904,10 +3023,16 @@ elif st.session_state.page in [
                 if selected_target_title:
                     play_achieve_sound()
                     st.session_state.praise_message = random.choice(praise_words)
-                    st.session_state.show_candy_buttons = True
-                    st.session_state.temp_candy_count = chosen_candy_power
+                    st.session_state.candy_points += chosen_candy_power
+                    st.session_state.aqua_goal_log.append({
+                        "date": get_now_jst().strftime("%Y/%m/%d %H:%M"),
+                        "target": selected_target_title, "level": chosen_lv_key, "task": chosen_task_text,
+                        "points": chosen_candy_power, "source": "candy",
+                    })
                     st.session_state.last_completed_task = f"【{selected_target_title} - {chosen_lv_key}】 {chosen_task_text}"
                     add_sticker_for_date(get_now_jst().strftime("%Y/%m/%d"))
+                    save_progress()
+                    st.info(f"🍬 {chosen_candy_power}お菓子ポイントゲット！ 右の「飴を選ぶ」でお菓子を入れよう！")
                 else:
                     st.error("⚠️ 達成する目標を上のメニューから選んでください！")
 
@@ -2965,41 +3090,41 @@ elif st.session_state.page in [
                                             unsafe_allow_html=True)
 
         with side_candy_col:
+            st.metric("🍬 お菓子ポイント", st.session_state.candy_points)
+            st.caption("お菓子集め専用のポイントです（水族館・恐竜レースのポイントとは別）。")
             st.markdown("### 🍬 飴を選ぶ")
-            if st.session_state.show_candy_buttons:
-                st.write(f"あと **{st.session_state.temp_candy_count}** 個 入れてね！")
-                candies_spec = [
-                    {"emoji": "🍬", "label": "定番キャンディ"},
-                    {"emoji": "🍭", "label": "渦巻きロリポップ"},
-                    {"emoji": "🍫", "label": "濃厚チョコブロック"},
-                    {"emoji": "🍩", "label": "サクサクドーナツ"},
-                    {"emoji": "🍪", "label": "チョコチップクッキー"}
-                ]
-                for candy in candies_spec:
-                    if st.button(f"{candy['emoji']}\n\n{candy['label']}", use_container_width=True,
-                                 key=f"btn_{candy['emoji']}"):
-                        play_click_sound()
-                        current_time_str = get_now_jst().strftime("%Y/%m/%d %H:%M")
+            st.caption(f"お菓子1個 ＝ {CANDY_COST_POINTS}お菓子ポイント")
+            can_buy_candy = st.session_state.candy_points >= CANDY_COST_POINTS
+            if not can_buy_candy:
+                st.warning("お菓子ポイントが足りないよ！ 目標を達成してポイントをためよう。")
+            candies_spec = [
+                {"emoji": "🍬", "label": "定番キャンディ"},
+                {"emoji": "🍭", "label": "渦巻きロリポップ"},
+                {"emoji": "🍫", "label": "濃厚チョコブロック"},
+                {"emoji": "🍩", "label": "サクサクドーナツ"},
+                {"emoji": "🍪", "label": "チョコチップクッキー"}
+            ]
+            for candy in candies_spec:
+                if st.button(f"{candy['emoji']}\n\n{candy['label']}", use_container_width=True,
+                             key=f"btn_{candy['emoji']}", disabled=not can_buy_candy):
+                    play_click_sound()
+                    current_time_str = get_now_jst().strftime("%Y/%m/%d %H:%M")
 
-                        if len(st.session_state.jar_candies) < st.session_state.jar_capacity:
-                            new_candy = {
-                                "emoji": candy["emoji"],
-                                "date": current_time_str,
-                                "task": st.session_state.last_completed_task
-                            }
-                            st.session_state.jar_candies.append(new_candy)
-                            st.session_state.all_candy_log.append(new_candy)
-
+                    if (len(st.session_state.jar_candies) < st.session_state.jar_capacity
+                            and st.session_state.candy_points >= CANDY_COST_POINTS):
+                        st.session_state.candy_points -= CANDY_COST_POINTS
+                        new_candy = {
+                            "emoji": candy["emoji"],
+                            "date": current_time_str,
+                            "task": f"{CANDY_COST_POINTS}お菓子ポイントで入れたお菓子"
+                        }
+                        st.session_state.jar_candies.append(new_candy)
+                        st.session_state.all_candy_log.append(new_candy)
                         st.toast(f"{candy['emoji']} を瓶に入れたよ！やったね！")
-                        st.session_state.temp_candy_count -= 1
 
-                        if st.session_state.temp_candy_count <= 0:
-                            st.session_state.show_candy_buttons = False
-                            st.session_state.praise_message = ""
-                        save_progress()
-                        st.rerun()
-            else:
-                st.caption("クエストを達成すると、ここに飴ボタンが出現するよ！")
+                    st.session_state.praise_message = ""
+                    save_progress()
+                    st.rerun()
 
     # --- 水族館ページ ---
     elif st.session_state.page == "aquarium_page":

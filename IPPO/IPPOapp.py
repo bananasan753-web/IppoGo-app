@@ -1,110 +1,160 @@
-                    st.caption(f"持っている数：{st.session_state.dino_food.get(food_key, 0)}個")
-                    if st.button("購入する", key=f"dino_buy_{food_key}", use_container_width=True):
-                        if st.session_state.aqua_points >= food["price"]:
-                            st.session_state.aqua_points -= food["price"]
-                            st.session_state.dino_food[food_key] = st.session_state.dino_food.get(food_key, 0) + 1
-                            save_progress()
-                            st.success(f"{food['emoji']} {food['name']}を買いました！")
-                            st.rerun()
-                        else:
-                            st.warning("ポイントが足りません！")
-
-            st.write("---")
-            st.markdown("#### 🌟 スペシャルダイス")
-            st.write("**スペシャルダイス** — 5ポイント ／ 1回だけ、1〜6から好きな目を選べます。")
-            st.caption(f"所持数：{int(st.session_state.get('dino_special_dice', 0))}個")
-            if st.button("🌟 スペシャルダイスを購入（5ポイント）", key="dino_buy_special_dice", use_container_width=True):
-                if st.session_state.aqua_points >= 5:
-                    st.session_state.aqua_points -= 5
-                    st.session_state.dino_special_dice = int(st.session_state.get("dino_special_dice", 0)) + 1
-                    save_progress()
-                    st.success("スペシャルダイスを1個購入しました！レースで好きな目を選んで使えます。")
+            if st.button("✨ この目標セットを登録する", type="primary"):
+                if lv1 and lv2 and lv3 and lv4 and lv5:
+                    new_target = {
+                        "title": main_target_input,
+                        "tasks": {"Lv.1": lv1, "Lv.2": lv2, "Lv.3": lv3, "Lv.4": lv4, "Lv.5": lv5},
+                        "completed": False,
+                    }
+                    st.session_state.target_list.append(new_target)
+                    play_click_sound()
+                    st.success(f"📌 目標『{main_target_input}』を登録しました！お菓子画面で選べるようになったよ！")
                     st.rerun()
                 else:
-                    st.warning("ポイントが足りません！")
+                    st.error("⚠️ 全レベルを入力してください。")
 
+        if st.session_state.target_list:
             st.write("---")
-            st.markdown("#### 🏁 コースショップ")
-            st.caption("ポイントで新しいすごろくコースを解放できます。")
-            for course_key in ("survival", "relax"):
-                course_data = DINO_COURSES[course_key]
-                owned_course = course_key in st.session_state.get("dino_unlocked_courses", [])
-                st.markdown(f"**{('🏆' if course_key == 'survival' else '🌸')} {course_data['name']}** — {course_data['price']}ポイント")
-                st.caption("バトルマスがたくさん！手ごわいサバイバル。" if course_key == "survival" else "和むイベントマスがたくさんある、のんびりコース。")
-                if owned_course:
-                    st.success("購入済み")
-                elif st.button(f"購入する（{course_data['price']}ポイント）", key=f"dino_course_buy_{course_key}", use_container_width=True):
-                    if st.session_state.aqua_points >= course_data["price"]:
-                        st.session_state.aqua_points -= course_data["price"]
-                        st.session_state.setdefault("dino_unlocked_courses", []).append(course_key)
-                        save_progress()
-                        st.success(f"{course_data['name']}を解放しました！")
-                        st.rerun()
+            st.markdown("## 🛡️ 登録済みのクエスト一覧")
+            for i, target_data in enumerate(st.session_state.target_list):
+                with st.expander(f"🎯 {target_data['title']}", expanded=True):
+
+                    # --- 編集モードと通常モードの切り替え ---
+                    if st.session_state.get("editing_target_index") == i:
+                        st.markdown("### ✏️ 目標の編集")
+                        edit_title = st.text_input("最終目標タイトル", value=target_data["title"],
+                                                   key=f"edit_title_{i}")
+                        edit_lv1 = st.text_input("Lv.1", value=target_data["tasks"].get("Lv.1", ""),
+                                                 key=f"edit_lv1_{i}")
+                        edit_lv2 = st.text_input("Lv.2", value=target_data["tasks"].get("Lv.2", ""),
+                                                 key=f"edit_lv2_{i}")
+                        edit_lv3 = st.text_input("Lv.3", value=target_data["tasks"].get("Lv.3", ""),
+                                                 key=f"edit_lv3_{i}")
+                        edit_lv4 = st.text_input("Lv.4", value=target_data["tasks"].get("Lv.4", ""),
+                                                 key=f"edit_lv4_{i}")
+                        edit_lv5 = st.text_input("Lv.5", value=target_data["tasks"].get("Lv.5", ""),
+                                                 key=f"edit_lv5_{i}")
+
+                        save_col, cancel_col = st.columns(2)
+                        with save_col:
+                            if st.button("💾 変更を保存", key=f"save_edit_{i}", type="primary",
+                                         use_container_width=True):
+                                if edit_title and edit_lv1 and edit_lv2 and edit_lv3 and edit_lv4 and edit_lv5:
+                                    play_click_sound(delay=0)
+                                    target_data["title"] = edit_title.strip()
+                                    target_data["tasks"] = {
+                                        "Lv.1": edit_lv1, "Lv.2": edit_lv2, "Lv.3": edit_lv3,
+                                        "Lv.4": edit_lv4, "Lv.5": edit_lv5
+                                    }
+                                    st.session_state.editing_target_index = None
+                                    st.success("目標を更新しました！")
+                                    st.rerun()
+                                else:
+                                    st.error("⚠️ すべての項目を入力してください。")
+                        with cancel_col:
+                            if st.button("キャンセル", key=f"cancel_edit_{i}", use_container_width=True):
+                                play_click_sound(delay=0)
+                                st.session_state.editing_target_index = None
+                                st.rerun()
+
                     else:
-                        st.warning("ポイントが足りません！")
+                        for lv, task in target_data["tasks"].items():
+                            st.info(f"**{lv}**: {task}")
 
-            st.write("---")
-            st.markdown("#### 🧪 能力アップアイテム")
-            stat_target_idx = st.selectbox(
-                "能力を上げる恐竜", list(range(len(st.session_state.dino_owned))),
-                format_func=lambda i: f"{DINO_SPECIES[st.session_state.dino_owned[i]['species']]['emoji']} {dino_display_name(st.session_state.dino_owned[i])}",
-                key="dino_stat_target",
-            )
-            for item in DINO_SHOP_DATA["stat_items"]:
-                st.markdown(f"**{item['emoji']} {item['name']}** — {item['price']}ポイント ／ 経験値 +{item['exp']} ／ 能力 +{item['amount']}")
-                if st.button(f"{item['name']}を購入して使う", key=f"dino_stat_buy_{item['id']}", use_container_width=True):
-                    if st.session_state.aqua_points >= item["price"]:
-                        st.session_state.aqua_points -= item["price"]
-                        target = st.session_state.dino_owned[stat_target_idx]
-                        stat_key = {"hp":"hp_bonus", "attack":"attack_bonus", "speed":"speed_bonus"}[item["stat"]]
-                        target[stat_key] = int(target.get(stat_key, 0)) + item["amount"]
-                        record_dino_growth(target, f"{item['emoji']} {item['name']}を使った！ {DINO_GROWTH_STATS[item['stat']]['label']} +{item['amount']}")
-                        add_dino_exp(target, item["exp"])
-                        add_dino_message(f"{item['emoji']} {dino_display_name(target)}に{item['name']}を使った！ 経験値 +{item['exp']}、{item['stat']} +{item['amount']}！")
-                        save_progress()
-                        st.rerun()
+                        st.write("")
+                        if target_data.get("completed", False):
+                            st.success("🎉 この目標は達成済みです！おめでとう！")
+                            if st.button("🔄 もう一度挑戦する", key=f"retry_target_{i}"):
+                                play_click_sound(delay=0)
+                                target_data["completed"] = False
+                                st.rerun()
+                        else:
+                            if st.button("🏆 最終目標を達成した！", type="primary", key=f"complete_target_{i}"):
+                                play_achieve_sound(delay=0)
+                                target_data["completed"] = True
+                                now = get_now_jst()
+                                now_datetime_str = now.strftime("%Y/%m/%d %H:%M")
+                                today_date_str = now.strftime("%Y/%m/%d")
+                                st.session_state.goal_complete_log.append({
+                                    "date": now_datetime_str,
+                                    "title": target_data["title"],
+                                })
+                                add_sticker_for_date(today_date_str)
+                                st.rerun()
+
+                    st.write("")
+                    st.write("---")
+                    current_deadline = target_data.get("deadline")
+                    if current_deadline:
+                        deadline_display = datetime.strptime(current_deadline, "%Y/%m/%d").strftime("%Y年%m月%d日")
+                        is_daily_mode = target_data.get("reminder_mode") == "daily"
+                        reminder_mode_label = "答えた後も毎日聞く" if is_daily_mode else "その日だけ聞く"
+
+                        if target_data.get("deadline_reminder_stopped"):
+                            st.caption(f"🎯 チャレンジ期限：{deadline_display}（リマインドは停止中）")
+                        elif is_daily_mode:
+                            daily_log = target_data.get("deadline_daily_log", [])
+                            st.caption(
+                                f"🎯 チャレンジ期限：{deadline_display}〜（{reminder_mode_label}／これまでの回答数：{len(daily_log)}回）")
+                        elif target_data.get("deadline_answered"):
+                            st.caption(
+                                f"🎯 チャレンジ期限：{deadline_display}（結果：{target_data.get('deadline_result', '?')} 報告済み）")
+                        else:
+                            st.caption(
+                                f"🎯 チャレンジ期限：{deadline_display} まで（{reminder_mode_label}／この日になったら結果を聞くよ）")
+
+                        if st.button("期限を解除する", key=f"clear_deadline_{i}"):
+                            play_click_sound(delay=0)
+                            target_data["deadline"] = None
+                            target_data["deadline_answered"] = False
+                            target_data["deadline_result"] = None
+                            target_data["reminder_mode"] = "once"
+                            target_data["deadline_reminder_stopped"] = False
+                            target_data["deadline_daily_log"] = []
+                            st.rerun()
                     else:
-                        st.warning("ポイントが足りません！")
+                        with st.expander("🎯 この日までチャレンジ！を設定する"):
+                            new_deadline = st.date_input("いつまでに頑張る？", value=get_now_jst().date(),
+                                                         key=f"deadline_input_{i}")
+                            new_reminder_mode = st.radio(
+                                "結果はいつ聞く？",
+                                options=["once", "daily"],
+                                format_func=lambda
+                                    m: "その日だけ聞く" if m == "once" else "答えた後も毎日聞く（繰り返しチェックイン）",
+                                key=f"deadline_mode_{i}",
+                            )
+                            if st.button("この日を設定する", key=f"set_deadline_{i}"):
+                                play_click_sound(delay=0)
+                                target_data["deadline"] = new_deadline.strftime("%Y/%m/%d")
+                                target_data["deadline_answered"] = False
+                                target_data["deadline_result"] = None
+                                target_data["reminder_mode"] = new_reminder_mode
+                                target_data["deadline_reminder_stopped"] = False
+                                target_data["deadline_daily_log"] = []
+                                st.rerun()
 
-            st.write("---")
-            st.markdown("#### 🍇 木の実を食べる")
-            st.caption("力試しの勝利でもらった木の実を食べると、対応する能力が上がるよ！")
-            berry_target_idx = st.selectbox(
-                "木の実を食べる恐竜", list(range(len(st.session_state.dino_owned))),
-                format_func=lambda i: f"{DINO_SPECIES[st.session_state.dino_owned[i]['species']]['emoji']} {dino_display_name(st.session_state.dino_owned[i])}（Lv.{dino_level(st.session_state.dino_owned[i])}）",
-                key="dino_berry_target",
-            )
-            for berry_key, berry in DINO_BERRIES.items():
-                stock = st.session_state.get("dino_berries", {}).get(berry_key, 0)
-                amount = 2 if berry_key.endswith("_plus") else 1
-                if st.button(f"{berry['emoji']} {berry['name']}（残り{stock}個・{berry['label']}+{amount}）を食べる",
-                             disabled=stock <= 0, key=f"dino_berry_eat_{berry_key}", use_container_width=True):
-                    eat_dino_berry(st.session_state.dino_owned[berry_target_idx], berry_key)
-                    st.rerun()
-
-            st.write("---")
-            st.markdown("#### 🍽️ 餌をあげる")
-            owned_dinos = st.session_state.dino_owned
-            feed_index = st.selectbox(
-                "どの恐竜にあげる？", list(range(len(owned_dinos))),
-                format_func=lambda i: f"{DINO_SPECIES[owned_dinos[i]['species']]['emoji']} {dino_display_name(owned_dinos[i])}（Lv.{dino_level(owned_dinos[i])}）",
-                key="dino_feed_target",
-            )
-            for food_key, food in DINO_FOOD.items():
-                stock = st.session_state.dino_food.get(food_key, 0)
-                if st.button(f"{food['emoji']} {food['name']}をあげる（残り{stock}個・経験値+{food['exp']}）",
-                             disabled=stock <= 0, key=f"dino_feed_{food_key}", use_container_width=True):
-                    target = owned_dinos[feed_index]
-                    st.session_state.dino_food[food_key] -= 1
-                    add_dino_message(f"{food['emoji']} {dino_display_name(target)}は{food['name']}をもぐもぐ！ 経験値 +{food['exp']}")
-                    queue_dino_sound("feed")
-                    add_dino_exp(target, food["exp"])
-                    save_progress()
-                    st.rerun()
-
-
-# =====================================================
-# 💾 Supabase への自動セーブ
-# =====================================================
-if st.session_state.get("game_started"):
-    save_progress()
+                    st.write("---")
+                    # 操作ボタンエリア（編集・複製・削除）
+                    if st.session_state.get("confirm_delete_target_index") == i:
+                        st.warning(f"『{target_data['title']}』を削除しますか？この操作は取り消せません。")
+                        del_confirm_col, del_cancel_col = st.columns(2)
+                        with del_confirm_col:
+                            if st.button("🗑️ 削除する", key=f"confirm_delete_target_yes_{i}"):
+                                play_click_sound(delay=0)
+                                st.session_state.target_list.pop(i)
+                                st.session_state.confirm_delete_target_index = None
+                                st.rerun()
+                        with del_cancel_col:
+                            if st.button("やめる", key=f"confirm_delete_target_no_{i}"):
+                                play_click_sound(delay=0)
+                                st.session_state.confirm_delete_target_index = None
+                                st.rerun()
+                    else:
+                        col_edit, col_copy, col_del = st.columns(3)
+                        with col_edit:
+                            if st.button("✏️ 編集", key=f"edit_target_{i}", use_container_width=True):
+                                play_click_sound(delay=0)
+                                st.session_state.editing_target_index = i
+                                st.rerun()
+                        with col_copy:
+                            if st.button("📋 複製", key=f"copy_target_{i}", use_container_width=True):
+                                play_click_sound(delay=0)

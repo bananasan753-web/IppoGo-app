@@ -1455,65 +1455,53 @@ def get_ippo_events_for_date(date_str: str) -> list:
 
 
 def build_schedule_print_html(date_strings: list, include_planned: bool, include_actual: bool) -> str:
-    """選択した最大7日分の予定・記録を印刷しやすいカード形式のHTMLにする。"""
-    sections = []
+    # 最大7日分の帯グラフ。空の日も空欄グラフを描く。
     kinds = []
     if include_planned:
-        kinds.append(("planned", "📅 予定"))
+        kinds.append(("planned", "📅 予定", "#4CAF50"))
     if include_actual:
-        kinds.append(("actual", "✅ 記録"))
+        kinds.append(("actual", "✅ 記録", "#2196F3"))
 
-    ordered_dates = sorted(set(date_strings), key=lambda value: datetime.strptime(value, "%Y/%m/%d"))
-    for date_str in ordered_dates[:7]:
-        day = st.session_state.daily_schedule.get(date_str, {"planned": [], "actual": []})
-        day_sections = []
-        date_label = datetime.strptime(date_str, "%Y/%m/%d").strftime("%Y年%m月%d日（%a）")
-        for kind, title in kinds:
-            entries = sorted(day.get(kind, []), key=lambda entry: entry.get("start", "00:00"))
-            if entries:
-                rows = []
-                for entry in entries:
-                    start = html.escape(str(entry.get("start", "")))
-                    end = html.escape(str(entry.get("end", "")))
-                    label = html.escape(str(entry.get("label", "")))
-                    color = str(entry.get("color", "#4CAF50" if kind == "planned" else "#2196F3"))
-                    if not (len(color) == 7 and color.startswith("#") and all(c in "0123456789abcdefABCDEF" for c in color[1:])):
-                        color = "#4CAF50" if kind == "planned" else "#2196F3"
-                    rows.append(
-                        f'<div class="entry" style="border-left-color:{color}">'
-                        f'<span class="time">{start}〜{end}</span>'
-                        f'<span class="entry-label">{label}</span></div>'
-                    )
-                body = "".join(rows)
-            else:
-                body = '<p class="empty">登録されていません</p>'
-            day_sections.append(f'<section><h3>{title}</h3>{body}</section>')
-        sections.append(
-            f'<article class="day-card"><h2>{html.escape(date_label)}</h2>'
-            f'{"".join(day_sections)}</article>'
-        )
+    def make_band(entries, fallback_color):
+        height, width, left = 720, 250, 52
+        parts = [f'<rect x="{left}" y="0" width="{width}" height="{height}" fill="#fff" stroke="#555" stroke-width="1.5"/>']
+        for half in range(49):
+            mins = half * 30
+            y = height * mins / 1440
+            major = mins % 60 == 0
+            parts.append(f'<line x1="{left}" y1="{y:.1f}" x2="{left+width}" y2="{y:.1f}" stroke="{"#aaa" if major else "#e5e5e5"}" stroke-width="{"1.2" if major else ".7"}/>')
+            if major:
+                parts.append(f'<text x="{left-5}" y="{y+4:.1f}" text-anchor="end" font-size="11">{mins//60:02d}:00</text>')
+        for e in sorted(entries or [], key=lambda x: x.get('start', '00:00')):
+            try:
+                a = time_to_minutes(e.get('start', '00:00'))
+                b = time_to_minutes(e.get('end', '00:00'))
+                if not (0 <= a < b <= 1440):
+                    continue
+            except Exception:
+                continue
+            y1, y2 = height*a/1440, height*b/1440
+            color = str(e.get('color', fallback_color))
+            if not (len(color)==7 and color.startswith('#') and all(c in '0123456789abcdefABCDEF' for c in color[1:])):
+                color = fallback_color
+            label = html.escape(str(e.get('label','')))
+            parts.append(f'<rect x="{left+3}" y="{y1:.1f}" width="{width-6}" height="{max(y2-y1,4):.1f}" fill="{color}" fill-opacity=".88" stroke="#333" stroke-width=".5"/>')
+            if y2-y1 >= 15:
+                parts.append(f'<text x="{left+width/2}" y="{(y1+y2)/2+4:.1f}" text-anchor="middle" font-size="11" fill="#fff" stroke="#222" stroke-width=".6" paint-order="stroke">{label}</text>')
+        return f'<svg class="band" viewBox="0 0 {left+width+5} {height}" role="img">{"".join(parts)}</svg>'
 
-    return f"""<!DOCTYPE html>
-<html lang="ja"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
-<style>
-*{{box-sizing:border-box}} body{{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;color:#222;margin:0;padding:14px;background:#f5f7fa}}
-.toolbar{{display:flex;justify-content:space-between;align-items:center;margin:0 auto 14px;max-width:1100px}}
-.toolbar h1{{font-size:22px;margin:0}} .print-button{{border:0;border-radius:8px;background:#1769aa;color:#fff;font-size:16px;font-weight:700;padding:10px 18px;cursor:pointer}}
-.days{{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;max-width:1100px;margin:0 auto}}
-.day-card{{background:#fff;border:1px solid #ccd3dc;border-radius:10px;padding:12px;break-inside:avoid;page-break-inside:avoid;min-width:0}}
-.day-card h2{{font-size:17px;margin:0 0 8px;padding-bottom:6px;border-bottom:2px solid #345}}
-.day-card section{{margin-top:9px}} .day-card h3{{font-size:14px;margin:0 0 5px}}
-.entry{{display:flex;gap:8px;border-left:5px solid #4caf50;padding:5px 7px;margin:4px 0;background:#f7f8fa;align-items:flex-start}}
-.time{{font-weight:700;white-space:nowrap;font-size:12px}} .entry-label{{font-size:13px;overflow-wrap:anywhere}}
-.empty{{color:#777;font-size:12px;margin:4px 0}} .note{{max-width:1100px;margin:0 auto 10px;color:#555;font-size:12px}}
-@media(max-width:650px){{.days{{grid-template-columns:1fr}}}}
-@page{{size:A4 portrait;margin:10mm}}
-@media print{{body{{padding:0;background:#fff}}.toolbar,.note{{display:none!important}}.days{{gap:7mm;max-width:none}}.day-card{{border:1px solid #888;border-radius:0;padding:8px}}.entry{{background:#fff;print-color-adjust:exact;-webkit-print-color-adjust:exact}}}}
-</style></head><body>
-<div class="toolbar"><h1>IPPO 一日のスケジュール</h1><button class="print-button" onclick="window.focus();window.print()">🖨️ 印刷する</button></div>
-<p class="note">選択した日付のスケジュールです。ブラウザーの印刷画面から印刷してください。</p>
-<div class="days">{"".join(sections)}</div>
-</body></html>"""
+    cards=[]
+    ordered_dates=sorted(set(date_strings), key=lambda v: datetime.strptime(v, '%Y/%m/%d'))[:7]
+    for date_str in ordered_dates:
+        day=st.session_state.daily_schedule.get(date_str, {"planned": [], "actual": []})
+        date_label=datetime.strptime(date_str, '%Y/%m/%d').strftime('%Y年%m月%d日（%a）')
+        columns=[]
+        for key,title,color in kinds:
+            columns.append(f'<section><h3>{title}</h3>{make_band(day.get(key, []), color)}</section>')
+        cards.append(f'<article class="day-card"><h2>{html.escape(date_label)}</h2><div class="bands">{"".join(columns)}</div></article>')
+    return f'''<!DOCTYPE html><html lang="ja"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><style>
+*{{box-sizing:border-box}}body{{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;color:#222;margin:0;padding:14px;background:#f5f7fa}}.toolbar{{display:flex;justify-content:space-between;align-items:center;max-width:1100px;margin:0 auto 12px}}.toolbar h1{{font-size:22px;margin:0}}.print-button{{padding:10px 18px;background:#1769aa;color:white;border:0;border-radius:8px;font-weight:bold;font-size:16px}}.days{{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;max-width:1100px;margin:auto}}.day-card{{background:white;border:1px solid #aaa;padding:10px;break-inside:avoid;page-break-inside:avoid}}.day-card h2{{font-size:16px;margin:0 0 8px;border-bottom:2px solid #345;padding-bottom:5px}}.bands{{display:grid;grid-template-columns:repeat({max(len(kinds),1)},minmax(0,1fr));gap:8px}}section{{min-width:0}}h3{{font-size:14px;margin:2px 0 4px}}.band{{width:100%;height:auto;display:block}}@media(max-width:650px){{.days{{grid-template-columns:1fr}}}}@page{{size:A4 portrait;margin:8mm}}@media print{{body{{padding:0;background:#fff}}.toolbar{{display:none}}.days{{gap:5mm;max-width:none}}.day-card{{padding:6px;border:1px solid #777}}.band{{print-color-adjust:exact;-webkit-print-color-adjust:exact}}}}
+</style></head><body><div class="toolbar"><h1>IPPO スケジュール印刷</h1><button class="print-button" onclick="window.focus();window.print()">🖨️ 印刷する</button></div><div class="days">{"".join(cards)}</div></body></html>'''
 
 
 def render_schedule_clipboard(date_str: str):
@@ -2453,7 +2441,8 @@ elif st.session_state.page == "menu_select":
 # =====================================================
 elif st.session_state.page in [
     "target_page", "calendar_page", "stage_page",
-    "candy_page", "aquarium_page", "dino_page", "schedule_page"
+    "candy_page", "aquarium_page", "dino_page", "schedule_page",
+    "future_schedule_page", "schedule_print_page"
 ]:
 
     # サイドバーメニュー
@@ -2969,123 +2958,101 @@ elif st.session_state.page in [
     # --- 一日のスケジュール画面 ---
     elif st.session_state.page == "schedule_page":
         st.title("📊 一日のスケジュール")
-        st.write("日付を自由に選んで、今日や未来の日の予定を立てたり、実際の記録を残したりできます。")
-        st.markdown("### 📅 未来の予定を立てる")
-
         today_dt = get_now_jst().date()
-        today_str_jst = today_dt.strftime("%Y/%m/%d")
-        if "schedule_view_date" not in st.session_state:
-            st.session_state.schedule_view_date = today_str_jst
-
-        # 日付選択は今日以降。日付を変えるだけで、その日の予定・記録に切り替わります。
-        try:
-            initial_schedule_date = datetime.strptime(
-                st.session_state.schedule_view_date, "%Y/%m/%d").date()
-        except (ValueError, TypeError):
-            initial_schedule_date = today_dt
-        if initial_schedule_date < today_dt:
-            initial_schedule_date = today_dt
-        if "schedule_date_picker" not in st.session_state:
-            st.session_state.schedule_date_picker = initial_schedule_date
-        elif st.session_state.schedule_date_picker < today_dt:
-            st.session_state.schedule_date_picker = today_dt
-
-        selected_schedule_date = st.date_input(
-            "📅 未来の予定を立てる日付を選んでください",
-            min_value=today_dt,
-            key="schedule_date_picker",
-        )
-        view_date = selected_schedule_date.strftime("%Y/%m/%d")
-        st.session_state.schedule_view_date = view_date
-        st.caption(f"📅 対象日：{selected_schedule_date.strftime('%Y年%m月%d日')}")
-
-        print_col, spacer_col = st.columns([1, 3])
-        with print_col:
-            if st.button("🖨️ 印刷", type="secondary", use_container_width=True,
-                         key="open_schedule_print_panel"):
-                st.session_state.schedule_print_open = True
-                st.session_state.schedule_print_dates = [view_date]
-                st.session_state.schedule_print_date_picker = selected_schedule_date
+        today_str = today_dt.strftime("%Y/%m/%d")
+        st.caption(f"📅 今日：{today_dt.strftime('%Y年%m月%d日')}")
+        nav1, nav2 = st.columns(2)
+        with nav1:
+            if st.button("📅 未来の予定を立てる", type="primary", use_container_width=True, key="go_future_schedule"):
+                st.session_state.page = "future_schedule_page"
+                st.rerun()
+        with nav2:
+            if st.button("🖨️ 印刷", use_container_width=True, key="go_schedule_print_from_daily"):
+                st.session_state.schedule_print_dates = [today_str]
                 st.session_state.schedule_print_include_planned = True
                 st.session_state.schedule_print_include_actual = True
-                st.session_state.schedule_print_preview = False
+                st.session_state.page = "schedule_print_page"
                 st.rerun()
+        st.markdown(f"### 📅 {today_dt.strftime('%Y年%m月%d日')} のスケジュール")
+        render_schedule_and_events(today_str, editable=True, clipboard_at_bottom=True)
 
-        # 印刷する日付と内容を選ぶパネル。最大7日分をまとめて印刷できます。
-        if st.session_state.get("schedule_print_open", False):
-            with st.container(border=True):
-                st.markdown("### 🖨️ 印刷する内容を選択")
-                st.caption("日付を追加して、最大7日分をひとつにまとめられます。予定・記録はチェックで選べます。")
+    # --- 未来の予定を立てる専用ページ ---
+    elif st.session_state.page == "future_schedule_page":
+        st.title("📅 未来の予定を立てる")
+        today_dt = get_now_jst().date()
+        if "schedule_future_date" not in st.session_state:
+            st.session_state.schedule_future_date = today_dt
+        if st.session_state.schedule_future_date < today_dt:
+            st.session_state.schedule_future_date = today_dt
+        selected = st.date_input("予定を立てる日付", min_value=today_dt, key="schedule_future_date")
+        date_str = selected.strftime("%Y/%m/%d")
+        st.caption(f"選択した日付：{selected.strftime('%Y年%m月%d日')}")
+        nav1, nav2, nav3 = st.columns(3)
+        with nav1:
+            if st.button("↩️ 一日のスケジュールへ", use_container_width=True, key="future_back_daily"):
+                st.session_state.page = "schedule_page"
+                st.rerun()
+        with nav2:
+            if st.button("🖨️ 印刷", use_container_width=True, key="go_schedule_print_from_future"):
+                st.session_state.schedule_print_dates = [date_str]
+                st.session_state.schedule_print_include_planned = True
+                st.session_state.schedule_print_include_actual = True
+                st.session_state.page = "schedule_print_page"
+                st.rerun()
+        with nav3:
+            st.caption("予定は当日になっても保存されています")
+        render_schedule_and_events(date_str, editable=True, clipboard_at_bottom=True)
 
-                if "schedule_print_dates" not in st.session_state:
-                    st.session_state.schedule_print_dates = [view_date]
-                if "schedule_print_date_picker" not in st.session_state:
-                    st.session_state.schedule_print_date_picker = selected_schedule_date
-
-                print_date_col, add_date_col = st.columns([3, 1])
-                with print_date_col:
-                    print_selected_date = st.date_input(
-                        "追加する日付", key="schedule_print_date_picker")
-                with add_date_col:
-                    st.write("")
-                    st.write("")
-                    if st.button("➕ 日付を追加", use_container_width=True,
-                                 key="add_schedule_print_date"):
-                        date_to_add = print_selected_date.strftime("%Y/%m/%d")
-                        if date_to_add in st.session_state.schedule_print_dates:
-                            st.warning("その日付はすでに追加されています。")
-                        elif len(st.session_state.schedule_print_dates) >= 7:
-                            st.warning("印刷できる日付は最大7日分です。")
-                        else:
-                            st.session_state.schedule_print_dates.append(date_to_add)
-                            st.session_state.schedule_print_preview = False
-                            st.rerun()
-
-                st.markdown("**印刷する日付（最大7日）**")
-                if not st.session_state.schedule_print_dates:
-                    st.caption("まだ日付が選ばれていません。")
-                for date_item in list(st.session_state.schedule_print_dates):
-                    date_row_col, remove_col = st.columns([5, 1])
-                    with date_row_col:
-                        formatted_date = datetime.strptime(date_item, "%Y/%m/%d").strftime("%Y年%m月%d日")
-                        st.write(f"📅 {formatted_date}")
-                    with remove_col:
-                        if st.button("削除", key=f"remove_print_date_{date_item}",
-                                     use_container_width=True):
-                            st.session_state.schedule_print_dates.remove(date_item)
-                            st.session_state.schedule_print_preview = False
-                            st.rerun()
-
-                st.markdown("**印刷する内容**")
-                type_col1, type_col2 = st.columns(2)
-                with type_col1:
-                    include_planned = st.checkbox("📅 予定", key="schedule_print_include_planned")
-                with type_col2:
-                    include_actual = st.checkbox("✅ 記録", key="schedule_print_include_actual")
-
-                preview_col, close_col = st.columns([3, 1])
-                with preview_col:
-                    if st.button("🖨️ 印刷用プレビューを作成", type="primary", use_container_width=True,
-                                 disabled=(not st.session_state.schedule_print_dates or not (include_planned or include_actual)),
-                                 key="create_schedule_print_preview"):
-                        st.session_state.schedule_print_preview = True
-                        st.rerun()
-                with close_col:
-                    if st.button("閉じる", use_container_width=True, key="close_schedule_print_panel"):
-                        st.session_state.schedule_print_open = False
-                        st.session_state.schedule_print_preview = False
-                        st.rerun()
-
-                if not (include_planned or include_actual):
-                    st.info("「予定」か「記録」、または両方にチェックを入れてください。")
-
-                if st.session_state.get("schedule_print_preview", False) and (include_planned or include_actual):
-                    print_html = build_schedule_print_html(
-                        st.session_state.schedule_print_dates, include_planned, include_actual)
-                    st.markdown("#### 印刷プレビュー")
-                    st.components.v1.html(print_html, height=850, scrolling=True)
-
-        render_schedule_and_events(view_date, editable=True, clipboard_at_bottom=True)
+    # --- 印刷設定・プレビュー専用ページ ---
+    elif st.session_state.page == "schedule_print_page":
+        st.title("🖨️ スケジュール印刷")
+        st.caption("日付を最大7日分選び、予定・記録の帯グラフを印刷できます。空の日も書き込み用の空白グラフとして印刷されます。")
+        today_dt = get_now_jst().date()
+        if "schedule_print_dates" not in st.session_state or not st.session_state.schedule_print_dates:
+            st.session_state.schedule_print_dates = [today_dt.strftime("%Y/%m/%d")]
+        if "schedule_print_date_picker" not in st.session_state:
+            st.session_state.schedule_print_date_picker = today_dt
+        pc1, pc2 = st.columns([3,1])
+        with pc1:
+            add_date = st.date_input("追加する日付", key="schedule_print_date_picker")
+        with pc2:
+            st.write("")
+            if st.button("➕ 日付を追加", use_container_width=True, key="print_add_date_page"):
+                value=add_date.strftime("%Y/%m/%d")
+                if value in st.session_state.schedule_print_dates:
+                    st.warning("その日付はすでに選択されています。")
+                elif len(st.session_state.schedule_print_dates) >= 7:
+                    st.warning("日付は最大7日分までです。")
+                else:
+                    st.session_state.schedule_print_dates.append(value)
+                    st.rerun()
+        st.markdown("**印刷する日付**")
+        for value in list(st.session_state.schedule_print_dates):
+            c1,c2=st.columns([5,1])
+            with c1:
+                st.write("📅 " + datetime.strptime(value,"%Y/%m/%d").strftime("%Y年%m月%d日"))
+            with c2:
+                if st.button("削除", key=f"print_remove_page_{value}"):
+                    st.session_state.schedule_print_dates.remove(value)
+                    st.rerun()
+        c1,c2=st.columns(2)
+        with c1:
+            include_planned=st.checkbox("📅 予定", key="schedule_print_include_planned")
+        with c2:
+            include_actual=st.checkbox("✅ 記録", key="schedule_print_include_actual")
+        if not (include_planned or include_actual):
+            st.info("「予定」か「記録」、または両方にチェックしてください。")
+        if st.button("🔄 印刷プレビューを更新", type="primary", use_container_width=True,
+                     disabled=(not st.session_state.schedule_print_dates or not (include_planned or include_actual)),
+                     key="refresh_schedule_print_page"):
+            st.session_state.schedule_print_preview = True
+        if st.session_state.get("schedule_print_preview", True) and st.session_state.schedule_print_dates and (include_planned or include_actual):
+            print_html=build_schedule_print_html(st.session_state.schedule_print_dates,include_planned,include_actual)
+            st.markdown("### 印刷プレビュー（帯グラフ）")
+            st.components.v1.html(print_html,height=900,scrolling=True)
+        if st.button("↩️ スケジュールに戻る", use_container_width=True, key="back_from_schedule_print"):
+            st.session_state.page="schedule_page"
+            st.rerun()
 
     # --- お菓子集めステージ ---
     elif st.session_state.page == "candy_page":

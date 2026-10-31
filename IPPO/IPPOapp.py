@@ -1,5 +1,5 @@
 import streamlit as st
-from datetime import datetime, date
+from datetime import datetime, date, timedelta
 import zoneinfo
 import random
 import html
@@ -20,7 +20,7 @@ def get_now_jst():
     return datetime.now(JST)
 
 
-# --- メニュー選択ボタンなどの文字を大きくするCSS ---
+# --- メニュー選択ボタンなどの文字を大きくするCSS ＆ 印刷用CSS ---
 st.markdown("""
     <style>
     div[data-testid="stColumn"] button p {
@@ -41,6 +41,13 @@ st.markdown("""
     .aqua-fish-burst span { position:absolute; bottom:-60px; font-size:30px; animation:aqua-rise 2.2s ease-out forwards; animation-delay:var(--delay); left:var(--left); }
     @keyframes aqua-rise { 0% { transform:translateY(0) rotate(0deg); opacity:0; } 12% { opacity:1; } 100% { transform:translateY(-220px) rotate(var(--rotate)); opacity:0; } }
     @keyframes aqua-pop { 0% { transform:scale(.7); opacity:0; } 70% { transform:scale(1.08); opacity:1; } 100% { transform:scale(1); opacity:1; } }
+    
+    /* 印刷時のスタイル調整 */
+    @media print {
+        body { background: white !important; color: black !important; }
+        .stSidebar, button, header, footer { display: none !important; }
+        .print-container { page-break-after: always; break-after: page; }
+    }
     </style>
     """, unsafe_allow_html=True)
 
@@ -82,9 +89,6 @@ def jar_size_label(capacity: int) -> str:
 # =====================================================
 # 🐠 水族館ステージ
 # =====================================================
-# =====================================================
-# 🐠 魚データ（data/fish.jsonから読み込み）
-# =====================================================
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 FISH_DATA_PATH = os.path.join(BASE_DIR, "data", "fish.json")
 
@@ -105,9 +109,6 @@ AQUA_SHOP_FISH = [
     if fish.get("shop", False)
 ]
 
-# 1cmからさらに1cm育つたびに獲得する豪華度
-# 2.0cm、3.0cm、4.0cm…に到達するたび、その魚の☆数ぶん豪華度を加算。
-# 初期1.0cmには成長による豪華度ボーナスはない。
 AQUA_GROWTH_BONUS = {1: 1, 2: 2, 3: 3, 4: 4, 5: 5}
 
 AQUA_DECORATIONS = [
@@ -118,15 +119,6 @@ AQUA_DECORATIONS = [
     {"id": "treasure", "name": "宝箱", "emoji": "💎", "price": 12, "score": 8},
 ]
 
-# =====================================================
-# 🪸 飾りガチャ（data/goods.jsonから読み込み）
-# =====================================================
-# goods.json の形式（リスト）:
-#   {"id": "jellyfish_lamp", "name": "クラゲランプ", "emoji": "🪼", "stars": 3, "weight": 10}
-#   stars  : 1〜5（そのまま豪華度になる）
-#   weight : 出やすさ（大きいほど出やすい。省略時は1）
-#   gacha  : false にするとガチャから外せる（省略時はtrue）
-# ※ idはショップの飾り（seaweed等）や他のグッズと重ならないようにしてください。
 AQUA_DECOR_GACHA_PRICE = 5  # 飾りガチャ1回に必要なIPPOポイント
 GOODS_DATA_PATH = os.path.join(BASE_DIR, "data", "goods.json")
 
@@ -171,7 +163,6 @@ AQUA_FOOD = {
 
 
 def get_fish_stars(fish: dict) -> int:
-    """旧データのN/R/SRも星に移行し、既存の魚を失わない。"""
     if "stars" in fish:
         return max(1, min(5, int(fish["stars"])))
     match = next((f for f in AQUA_GACHA_FISH + AQUA_SHOP_FISH
@@ -186,26 +177,22 @@ def fish_display_name(fish: dict) -> str:
 
 
 def normalize_aqua_fish():
-    """既存データも魚種別A/B/Cの表示名と展示設定に移行。"""
     counts = {}
     for fish in st.session_state.get("aqua_fish", []):
         species = fish.get("id", fish.get("name", "unknown"))
         counts[species] = counts.get(species, 0) + 1
         ordinal = counts[species]
-        # 既存のデフォルト名は保存済みのカスタム名を上書きしない
         fish.setdefault("default_name", f"{fish.get('name', '魚')}{fish_letter(ordinal)}")
         fish.setdefault("custom_name", "")
         fish.setdefault("display", True)
 
 
 def normalize_aqua_decorations():
-    """既存の飾りデータにも展示設定（display）を付ける。旧データは展示中として扱う。"""
     for decor in st.session_state.get("aqua_decorations", []):
         decor.setdefault("display", True)
 
 
 def toggle_decoration_display(index: int):
-    """飾りの「展示する」チェックが変わったときに呼ばれる。"""
     decorations = st.session_state.get("aqua_decorations", [])
     if 0 <= index < len(decorations):
         decorations[index]["display"] = bool(st.session_state.get(f"aqua_decor_show_{index}", True))
@@ -221,7 +208,6 @@ def fish_letter(number: int) -> str:
 
 
 def obtain_aqua_fish(species: dict) -> tuple[bool, int]:
-    """同種5匹まで。超過時は星数ぶん豪華度に変換。"""
     owned = sum(f.get("id") == species["id"] for f in st.session_state.aqua_fish)
     if owned >= 5:
         bonus = species["stars"]
@@ -241,14 +227,11 @@ def obtain_aqua_fish(species: dict) -> tuple[bool, int]:
 
 
 def give_fish_food(fish_index: int, food_key: str, count: int = 1, play_sound: bool = True):
-    """餌の成長ポイントを加算し、5ポイントごとに0.1cm成長させる。"""
     fish = st.session_state.aqua_fish[fish_index]
     old_size_mm = float(fish.get("size_mm", 10.0))
     points = AQUA_FOOD[food_key]["feed_points"] * count
     fish["feed_points"] = fish.get("feed_points", 0) + points
 
-    # 5成長ポイント = 0.1cm。
-    # 初期値は1.0cmなので、最初の5ポイントで1.1cmになる。
     growth_steps = fish["feed_points"] // 5
     fish["size_mm"] = round(10.0 + growth_steps * 1.0, 1)
     queue_aqua_growth_notification(fish, old_size_mm, fish["size_mm"])
@@ -263,7 +246,6 @@ def give_fish_food(fish_index: int, food_key: str, count: int = 1, play_sound: b
 
 
 def queue_aqua_growth_notification(fish: dict, old_size_mm: float, new_size_mm: float):
-    """魚の成長演出をキューに入れる。1cm刻みの到達時は特別演出も付ける。"""
     old_cm = old_size_mm / 10.0
     new_cm = new_size_mm / 10.0
     if new_cm <= old_cm:
@@ -278,13 +260,10 @@ def queue_aqua_growth_notification(fish: dict, old_size_mm: float, new_size_mm: 
             queue.append({"type":"milestone", "name":name, "cm":cm, "emoji":fish.get("emoji","🐟")})
 
 def render_aqua_growth_notifications():
-    """餌やり欄に魚の成長メッセージを表示し、成長に応じた効果音を鳴らす。"""
     queue = st.session_state.get("aqua_growth_notifications", [])
     if not queue:
         return
 
-    # 0.1cm成長ごとに正解音、整数cm到達時には歓声と拍手を鳴らす。
-    # 1cm到達時は「0.1cm成長」の通知も同時に存在するため、両方を順番に再生する。
     has_small_growth = any(notice.get("type") == "growth" for notice in queue)
     has_milestone = any(notice.get("type") == "milestone" for notice in queue)
 
@@ -312,7 +291,6 @@ def render_aqua_growth_notifications():
             )
             st.markdown(message, unsafe_allow_html=True)
 
-    # 表示・効果音ともに一度だけ。
     st.session_state.aqua_growth_notifications = []
 
 
@@ -320,13 +298,10 @@ def get_aqua_tank_score() -> int:
     fish_score = len(st.session_state.get("aqua_fish", [])) * 5
     decor_score = sum(d.get("score", 1) for d in st.session_state.get("aqua_decorations", []))
 
-    # 初期1.0cmは成長ボーナス0。
-    # 2.0cmに到達すると1回、3.0cmに到達するとさらに1回…というように、
-    # 「整数cmに到達した回数」×「その魚の☆数」を加算する。
     growth_score = 0
     for fish in st.session_state.get("aqua_fish", []):
         size_mm = max(10, int(round(float(fish.get("size_mm", 10.0)))))
-        reached_cm = max(0, size_mm // 10 - 1)  # 1cm→0、2cm→1、3cm→2…
+        reached_cm = max(0, size_mm // 10 - 1)
         stars = get_fish_stars(fish)
         growth_score += reached_cm * AQUA_GROWTH_BONUS.get(stars, stars)
 
@@ -343,11 +318,9 @@ def get_aqua_tank_level() -> dict:
 
 
 def sync_aqua_tank_history():
-    """達成した水槽レベルを一度だけ記録する。過去の到達日は推測しない。"""
     history = st.session_state.get("aqua_tank_history")
     score = get_aqua_tank_score()
     if history is None:
-        # 旧データ移行時、既に到達済みのLvは日付不明として保持する。
         history = {str(entry["level"]): None for entry in AQUA_TANK_LEVELS
                    if score >= entry["required"]}
         if not st.session_state.get("aqua_fish") and not st.session_state.get("aqua_decorations"):
@@ -367,7 +340,6 @@ def sync_aqua_tank_history():
 
 
 def add_aqua_reward(level: int, source: str):
-    """旧バージョン互換：目標Lv.達成を交換券として記録する。"""
     st.session_state.aqua_reward_queue.append({
         "level": level,
         "source": source,
@@ -418,14 +390,12 @@ def feed_selected_fish(fish_index: int, food_key: str) -> bool:
 # =====================================================
 # 🦖 恐竜レース（すごろく）
 # =====================================================
-# ・お菓子集め・水族館・恐竜レースは、すべてIPPOポイントを共有します。
-# ・新しい恐竜を増やすときは DINO_SPECIES に1つ書き足してください。
 DINO_DICE_COST = 3          # サイコロ1回に必要なIPPOポイント
 DINO_MAX_LEVEL = 10
 DINO_BATTLE_WIN_EXP = 6
 DINO_BATTLE_LOSE_EXP = 2
 DINO_SPECIAL_USES = 2
-DINO_BATTLE_PRACTICE_EXP = 0  # 模型との練習では経験値・報酬なし
+DINO_BATTLE_PRACTICE_EXP = 0
 
 DINO_BERRIES = {
     "hp": {"name": "いのちの木の実", "emoji": "❤️", "stat": "hp", "label": "最大HP"},
@@ -434,7 +404,7 @@ DINO_BERRIES = {
     "attack_plus": {"name": "大きなちからの木の実", "emoji": "💥", "stat": "attack", "label": "攻撃力"},
     "speed": {"name": "はやさの木の実", "emoji": "💨", "stat": "speed", "label": "素早さ"},
     "speed_plus": {"name": "大きなはやさの木の実", "emoji": "🌪️", "stat": "speed", "label": "素早さ"},
-}        # 固有技は1回の力試しで使える回数
+}
 
 DINO_DATA_PATH = os.path.join(BASE_DIR, "data", "dino.json")
 DINO_SHOP_DATA_PATH = os.path.join(BASE_DIR, "data", "dino_shop.json")
@@ -449,7 +419,6 @@ DINO_FOOD = {
     "feast": {"name": "ごちそう肉", "emoji": "🍗", "price": 5, "exp": 8},
 }
 
-# 野良恐竜（力試しの相手）
 WILD_DINOS = [
     {"name": "コンプソグナトゥス", "emoji": "🦎"},
     {"name": "アンキロサウルス", "emoji": "🐢"},
@@ -458,7 +427,6 @@ WILD_DINOS = [
     {"name": "ティラノサウルス", "emoji": "🦖"},
 ]
 
-# コース。1マス＝100m。ready=Falseのコースは「準備中」表示になります。
 DINO_COURSES = {
     "beginner": {"name": "はじめての恐竜レース", "tier": "🟢 初級", "distance_km": 5, "ready": True},
     "intermediate": {"name": "恐竜ロードレース", "tier": "🟡 中級", "distance_km": 10, "ready": False},
@@ -472,7 +440,6 @@ DINO_SOUND_PRIORITY = {"click": 0, "feed": 1, "points": 1, "achieve": 2, "finish
 
 
 def dino_exp_for_level(level: int) -> int:
-    """そのレベルに必要な累計経験値。Lv2=10、Lv3=30、Lv4=60…"""
     return 10 * level * (level - 1) // 2
 
 
@@ -502,12 +469,10 @@ def dino_speed(dino: dict) -> int:
     return dino_level(dino) + int(dino.get("speed_bonus", 0))
 
 def dino_power_bonus(level: int) -> int:
-    """Lv4でダメージ+1、Lv7で+2、Lv10で+3。"""
     return (level - 1) // 3
 
 
 def dino_passive_chance(level: int) -> float:
-    """固有能力が発動する確率。Lv1で20%、Lv10で47%。"""
     return min(0.5, 0.20 + 0.03 * (level - 1))
 
 
@@ -537,7 +502,6 @@ def get_dino_partner():
 
 
 def ensure_dino_data():
-    """初期恐竜3種を配る。足りない項目も補う。"""
     if not st.session_state.dino_owned:
         st.session_state.dino_owned = [
             {"id": f"{key}_1", "species": key, "exp": 0, "custom_name": ""}
@@ -578,7 +542,6 @@ DINO_GROWTH_LOG_MAX = 200
 
 
 def record_dino_growth(dino: dict, text: str):
-    """成長履歴に1行追加する（最新200件まで保存）。"""
     log = dino.setdefault("growth_log", [])
     log.append({"date": get_now_jst().strftime("%Y/%m/%d %H:%M"), "text": text})
     if len(log) > DINO_GROWTH_LOG_MAX:
@@ -594,7 +557,6 @@ def add_dino_exp(dino: dict, amount: int):
     if new_level <= old_level:
         return
     name = dino_display_name(dino)
-    # 1レベル上がるごとに、HP・攻撃力・素早さのどれか1つがランダムで+1
     for reached in range(old_level + 1, new_level + 1):
         stat_key = random.choice(list(DINO_GROWTH_STATS))
         info = DINO_GROWTH_STATS[stat_key]
@@ -606,16 +568,13 @@ def add_dino_exp(dino: dict, amount: int):
 
 
 def build_dino_board(course_key: str) -> dict:
-    """特別マスの配置。コースごとに固定（毎回同じ盤面）。戻るマスはありません。"""
     goal = dino_course_goal(course_key)
     rnd = random.Random(f"dino-board-{course_key}")
     mode = DINO_COURSES[course_key].get("mode", "")
 
-    # ゆるレースはゴール以外の全マスがイベントマス。
     if mode == "relax":
         return {position: "event" for position in range(1, goal)}
 
-    # 初級5kmコースは全50マスのうち、ゴールを除く20マスを特別マスにする。
     if course_key == "beginner" and goal == 50:
         positions = sorted(rnd.sample(range(1, goal), 20))
         kinds = ["boost", "again", "food", "battle"] * 5
@@ -642,7 +601,7 @@ def render_dino_board(course_key: str, pos: int, token: str) -> str:
     cells = []
     for start in range(1, goal + 1, per_row):
         nums = list(range(start, min(start + per_row, goal + 1)))
-        if ((start - 1) // per_row) % 2 == 1:   # すごろく風に1行ごと折り返す
+        if ((start - 1) // per_row) % 2 == 1:
             nums.reverse()
         for n in nums:
             if n == goal:
@@ -682,7 +641,6 @@ def finish_dino_race(course_key: str):
 
 
 def advance_dino(course_key: str, steps: int, partner: dict) -> int:
-    """前にだけ進む（戻るマスはありません）。進んだ分だけ経験値が入る。"""
     race = get_dino_race(course_key)
     new_pos = min(dino_course_goal(course_key), race["pos"] + max(0, steps))
     gained = new_pos - race["pos"]
@@ -710,7 +668,7 @@ def apply_dino_square(course_key: str, partner: dict):
             finish_dino_race(course_key)
     elif kind == "again":
         race["free_rolls"] += 1
-        add_dino_message("🎲 もう一回サイコロが振れるよ！（ポイントはかからない！）")
+        add_dino_message("🎲 もう一回サイコロが振れるよ！（IPPOポイントはかからない！）")
     elif kind == "food":
         food_key = random.choices(["meat", "feast"], weights=[7, 3])[0]
         st.session_state.dino_food[food_key] = st.session_state.dino_food.get(food_key, 0) + 1
@@ -746,8 +704,8 @@ def roll_dino_dice(course_key: str, special_dice_value=None):
     elif race["free_rolls"] > 0:
         race["free_rolls"] -= 1
         dice = random.randint(1, 6)
-    elif st.session_state.ippo_points >= DINO_DICE_COST:
-        st.session_state.ippo_points -= DINO_DICE_COST
+    elif st.session_state.aqua_points >= DINO_DICE_COST:
+        st.session_state.aqua_points -= DINO_DICE_COST
         dice = random.randint(1, 6)
     else:
         add_dino_message("⚠️ IPPOポイントが足りません！ 目標を達成してIPPOポイントを貯めよう。")
@@ -760,11 +718,10 @@ def roll_dino_dice(course_key: str, special_dice_value=None):
         add_dino_message(f"🎲 サイコロの目は {dice}！ {dice}マス進む！")
     else:
         add_dino_message(f"🎲 {dice}マス進む！")
-    # サイコロの出目と移動数は必ず一致。固有能力による追加移動はしない。
     if species_key == "velociraptor" and random.random() < chance:
         bonus_points = random.randint(1, 3)
-        st.session_state.ippo_points += bonus_points
-        add_dino_message(f"🦖 ヴェロキラプトルが仲間を呼んだ！ 仲間たちから {bonus_points} IPPOポイントもらった！")
+        st.session_state.aqua_points += bonus_points
+        add_dino_message(f"🦖 ヴェロキラプトルが仲間を呼んだ！ 仲間たちから {bonus_points}IPPOポイントもらった！")
         queue_dino_sound("points")
 
     gained = advance_dino(course_key, steps, partner)
@@ -783,7 +740,6 @@ def restart_dino_race(course_key: str):
     save_progress()
 
 
-# ---------------- バトル（力試し） ----------------
 def start_dino_battle(course_key: str, partner: dict):
     race = get_dino_race(course_key)
     enemy = race["pending_battle"]
@@ -801,7 +757,6 @@ def start_dino_battle(course_key: str, partner: dict):
 
 
 def start_dino_practice_battle(partner: dict):
-    """いつでも挑戦できる模型との練習バトル。報酬目当ての周回を防ぐため報酬なし。"""
     level = dino_level(partner)
     enemy = {"name": "練習用の模型恐竜", "emoji": "🦖", "level": level,
              "max_hp": max(12, dino_max_hp(partner)), "speed": max(1, dino_speed(partner)), "attack": dino_attack(partner)}
@@ -833,12 +788,11 @@ def skip_dino_battle(course_key: str):
     enemy = race["pending_battle"]
     race["pending_battle"] = None
     if enemy:
-        add_dino_message(f"👋 {enemy['emoji']} {enemy['name']}は見送った。さあ、先へ進もう！")
+        add_dino_message(f"👋 {enemy['emoji']} {enemy['name']}は見送った。さあ、先へ進ろう！")
     save_progress()
 
 
 def dino_special_attack(species_key: str, bonus: int, pname: str):
-    """固有技。(敵へのダメージ, 自分へのダメージ, 回復量, 表示テキスト) を返す。"""
     special = DINO_SPECIES[species_key]["special_name"]
     if species_key == "velociraptor":
         hits = [random.randint(1, 3) for _ in range(random.randint(2, 5))]
@@ -873,7 +827,6 @@ def resolve_dino_battle_turn(partner: dict, action: str):
     log = [f"👀 {ename}は『{enemy_label}』を選んだ！"]
     to_enemy = to_player = heal = 0
 
-    # --- 自分の行動 ---
     if action == "attack":
         if enemy_action == "defend":
             damage = random.randint(4, 8) + bonus_e
@@ -892,14 +845,13 @@ def resolve_dino_battle_turn(partner: dict, action: str):
             log.append("🛡️ おたがい守りを固めて、にらみ合い…")
         else:
             log.append(f"🛡️ {pname}は身構えたが、強打は防ぎきれない！")
-    else:  # special
+    else:
         battle["special_left"] -= 1
         damage, recoil, heal, text = dino_special_attack(partner["species"], bonus_p, pname)
         to_enemy += damage
         to_player += recoil
         log.append(text)
 
-    # --- 相手の行動 ---
     if enemy_action == "attack" and action != "defend":
         damage = random.randint(1, 5) + bonus_e
         to_player += damage
@@ -909,16 +861,13 @@ def resolve_dino_battle_turn(partner: dict, action: str):
         to_player += damage
         log.append(f"💥 {ename}の強打！ {damage}ダメージ！")
 
-    # 防御は素早さに関係なく最優先。攻撃同士なら素早さの高い側が先に動き、
-    # 先手で相手を倒した場合は相手の攻撃を受けない。
     if action != "defend" and enemy_action != "defend":
         player_speed = dino_speed(partner)
         enemy_speed = int(enemy.get("speed", enemy["level"]))
         if player_speed > enemy_speed and to_enemy >= battle["enemy_hp"]:
             to_player = 0
-        elif enemy_speed > player_speed and to_player >= battle["player_hp"]:
+        elif enemy_speed > player_speed and to_enemy >= battle["player_hp"]:
             to_enemy = 0
-    # 素早さが高いほど相手の攻撃をかわしやすい（差1ごとに+5%、最大35%）。
     player_speed = dino_speed(partner)
     enemy_speed = int(enemy.get("speed", enemy["level"]))
     incoming_attack = to_player
@@ -964,9 +913,8 @@ def resolve_dino_battle_turn(partner: dict, action: str):
     save_progress()
 
 
-
 # =====================================================
-# 💎 IPPOポイント（お菓子集め・水族館・恐竜レースで共通）
+# 💧 IPPOポイントの処理（お菓子・水族館・恐竜すべて共通）
 # =====================================================
 SINGLE_TASK_POINTS = 3      # 単発のタスクを完了したときにもらえるIPPOポイント
 CANDY_COST_POINTS = 1       # お菓子を1個入れるのに必要なIPPOポイント
@@ -984,12 +932,11 @@ def add_single_task(title: str) -> bool:
 
 
 def complete_single_task(task_id: str) -> bool:
-    """単発のタスクを完了にして、3ポイントを加算する（1つのタスクで1回だけ）。"""
     for task in st.session_state.single_tasks:
         if task["id"] == task_id and not task.get("completed"):
             task["completed"] = True
             task["completed_at"] = get_now_jst().strftime("%Y/%m/%d %H:%M")
-            st.session_state.ippo_points += SINGLE_TASK_POINTS
+            st.session_state.aqua_points += SINGLE_TASK_POINTS
             add_sticker_for_date(get_now_jst().strftime("%Y/%m/%d"))
             return True
     return False
@@ -1016,9 +963,9 @@ PERSISTENT_KEYS = [
     "calendar_notes",
     "sticker_type",
     "sticker_color",
-    "daily_schedule",  # 一日のスケジュール（予定／記録）
-    "schedule_templates",  # 自分用スケジュールテンプレート（最大5件）
-    "ippo_points",
+    "daily_schedule",
+    "schedule_templates",
+    "aqua_points",
     "aqua_reward_queue",
     "aqua_fish",
     "aqua_decorations",
@@ -1058,7 +1005,7 @@ PERSISTENT_DEFAULTS = {
     "sticker_color": "赤",
     "daily_schedule": {},
     "schedule_templates": [],
-    "ippo_points": 0,
+    "aqua_points": 0,
     "aqua_reward_queue": [],
     "aqua_fish": [],
     "aqua_decorations": [],
@@ -1080,7 +1027,6 @@ PERSISTENT_DEFAULTS = {
 
 
 def check_user_exists(uid: str) -> bool:
-    """Supabaseに指定ユーザーのデータが存在するか確認する"""
     try:
         response = supabase.table("user_data").select("id").eq("id", uid).execute()
         return bool(response.data and len(response.data) > 0)
@@ -1089,11 +1035,6 @@ def check_user_exists(uid: str) -> bool:
 
 
 def load_progress(uid) -> bool:
-    """
-    Supabaseから指定ユーザーのデータを読み込む。
-    成功したらTrue、データが見つからなかった／通信に失敗した場合はFalseを返す。
-    ★重要：失敗時に黙って進捗をリセットしない（誤ってセーブデータを上書きする事故を防ぐため）。
-    """
     try:
         response = supabase.table("user_data").select("*").eq("id", uid).execute()
         if response.data and len(response.data) > 0:
@@ -1105,15 +1046,6 @@ def load_progress(uid) -> bool:
                     default_val = PERSISTENT_DEFAULTS[key]
                     st.session_state[key] = type(default_val)(default_val) if isinstance(default_val,
                                                                                          (list, dict)) else default_val
-
-            # 旧データでは「アクアポイント」と「お菓子ポイント」が別管理だったため、
-            # 初回移行時に両方を合算して共通のIPPOポイントへ引き継ぐ。
-            if "ippo_points" in saved_data:
-                st.session_state.ippo_points = int(saved_data.get("ippo_points", 0) or 0)
-            else:
-                old_aqua_points = int(saved_data.get("aqua_points", 0) or 0)
-                old_candy_points = int(saved_data.get("candy_points", 0) or 0)
-                st.session_state.ippo_points = old_aqua_points + old_candy_points
             return True
         return False
     except Exception as e:
@@ -1122,7 +1054,6 @@ def load_progress(uid) -> bool:
 
 
 def save_progress():
-    """現在の進捗を Supabase に保存する"""
     uid = st.session_state.get("current_user")
     if not uid:
         return
@@ -1142,7 +1073,6 @@ def save_progress():
 
 
 def reset_progress_in_memory():
-    """メモリ上の進捗を初期値に戻す"""
     for key, default_value in PERSISTENT_DEFAULTS.items():
         if isinstance(default_value, (list, dict)):
             st.session_state[key] = type(default_value)(default_value)
@@ -1151,7 +1081,6 @@ def reset_progress_in_memory():
 
 
 def reset_progress():
-    """進捗を初期化しSupabaseからも削除する"""
     uid = st.session_state.get("current_user")
     reset_progress_in_memory()
     if uid:
@@ -1159,52 +1088,6 @@ def reset_progress():
             supabase.table("user_data").delete().eq("id", uid).execute()
         except Exception:
             pass
-
-
-# =====================================================
-# 🏃 ランニングコース共通設定 & SVG処理
-# =====================================================
-RUNNING_COURSES = {
-    "village": {"name": "一歩村一周コース", "distance": 30, "tier": "🟢 初級", "bonus": None, "ready": True},
-    "town": {"name": "その調子！二歩町巡り", "distance": 40, "tier": "🟢 初級", "bonus": None, "ready": True},
-    "downtown": {"name": "進め三歩市街道", "distance": 50, "tier": "🟢 初級", "bonus": None, "ready": False},
-    "prefecture": {"name": "信じて進む四歩県道", "distance": 70, "tier": "🟡 中級", "bonus": "skip", "ready": False},
-    "nation": {"name": "君ならできる五歩国道", "distance": 90, "tier": "🟡 中級", "bonus": "skip", "ready": False},
-    "continent": {"name": "焦らず行こう六歩大陸路", "distance": 120, "tier": "🟡 中級", "bonus": "skip", "ready": False},
-    "world": {"name": "よくがんばった七歩世界道", "distance": 150, "tier": "🔴 上級", "bonus": "extra_run",
-              "ready": False},
-    "space": {"name": "誇っていい八歩宇宙路", "distance": 200, "tier": "🔴 上級", "bonus": "extra_run", "ready": False},
-    "galaxy": {"name": "どこまでも行ける九歩銀河道", "distance": 300, "tier": "🔴 上級", "bonus": "extra_run",
-               "ready": False},
-}
-RUNNING_TIER_ORDER = ["🟢 初級", "🟡 中級", "🔴 上級"]
-
-COURSE_PRAISE_WORDS = [
-    "いいペース！このまま行こう！🏃‍♂️", "足取り軽やか！絶好調だね！✨", "その調子！ゴールがだんだん近づいてきたよ🏘️",
-    "ナイスラン！着実に進んでる！👏", "素晴らしい！景色も変わってきたね🌳", "すごい集中力！止まらないその勢い！🔥",
-    "順調そのもの！自分を信じて！💪", "いいね！今日も一歩前進だ！🌟", "力強い一歩！道は繋がってるよ🛤️",
-    "グッドラン！次のポイントまであと少し！🚀",
-]
-COURSE_LATE_PRAISE_WORDS = [
-    "頑張れ！ラストスパートだ！🔥", "休憩も大事！さすがだね！☕", "ゴールが見えてきたよ！あと少し！🏁",
-    "ここが踏ん張りどころ！いけるよ！💪", "疲れたら深呼吸してこう！焦らなくて大丈夫🍃",
-]
-COURSE_BONUS_MESSAGES = {
-    "skip": "🚀 ショートカット発見！さらに+{km}km進んだ！",
-    "extra_run": "💨 絶好調ラン！さらに+{km}km走れた！",
-}
-BONUS_CHANCE = 0.20
-BONUS_KM_RANGE = (2, 5)
-
-
-def maybe_apply_bonus(course_key: str):
-    course = RUNNING_COURSES.get(course_key, {})
-    bonus_type = course.get("bonus")
-    if not bonus_type or random.random() >= BONUS_CHANCE:
-        return 0, None
-    bonus_km = random.randint(*BONUS_KM_RANGE)
-    message = COURSE_BONUS_MESSAGES.get(bonus_type, "").format(km=bonus_km)
-    return bonus_km, message
 
 
 def render_candy_jar_svg(candies: list, capacity: int) -> str:
@@ -1283,7 +1166,6 @@ SCHEDULE_COLORS = {
 
 
 def time_to_minutes(hhmm) -> int:
-    """'HH:MM' 文字列 または datetime.time を、0時からの経過分数に変換する"""
     if hasattr(hhmm, "hour"):
         return hhmm.hour * 60 + hhmm.minute
     h, m = hhmm.split(":")
@@ -1297,12 +1179,10 @@ def minutes_to_hhmm(total_minutes: int) -> str:
 
 
 def schedule_time_options(step_minutes: int = 5) -> list:
-    """分の候補（通常は5分刻み）。"""
     return list(range(0, 60, step_minutes))
 
 
 def schedule_time_selectbox(label: str, value: str, key: str) -> str:
-    """開始・終了時刻を「時」「分」の2つの選択欄で指定する。"""
     try:
         initial_hour, initial_minute = map(int, str(value).split(":")[:2])
         if not (0 <= initial_hour <= 23 and 0 <= initial_minute <= 59):
@@ -1310,7 +1190,6 @@ def schedule_time_selectbox(label: str, value: str, key: str) -> str:
     except (ValueError, TypeError):
         initial_hour, initial_minute = 0, 0
 
-    # 過去に1分単位で登録した時刻も、編集時に失わないようにする。
     minute_options = schedule_time_options(5)
     if initial_minute not in minute_options:
         minute_options = sorted(minute_options + [initial_minute])
@@ -1332,18 +1211,12 @@ def schedule_time_selectbox(label: str, value: str, key: str) -> str:
 
 
 def render_day_bar_svg(entries: list, bar_width: int = 150, height: int = 720) -> str:
-    """
-    24時間分の縦長の帯グラフ（0時始まり）をSVGで描画する。
-    30分ごとに小目盛り、1時間ごとに大目盛り＋時刻ラベルを表示する。
-    entries: [{"start": "HH:MM", "end": "HH:MM", "label": str, "color": "#rrggbb"}, ...]
-    """
     label_area = 62
     total_width = bar_width + label_area
     svg_parts = [
         f'<rect x="{label_area}" y="0" width="{bar_width}" height="{height}" fill="#fafafa" stroke="#333" stroke-width="1.8" />'
     ]
 
-    # 30分ごとの小目盛り、1時間ごとの大目盛り
     for half_hour in range(0, 49):
         minutes = half_hour * 30
         y = height * minutes / (24 * 60)
@@ -1380,14 +1253,12 @@ def render_day_bar_svg(entries: list, bar_width: int = 150, height: int = 720) -
             f'fill="{color}" stroke="#ffffff" stroke-width="1" opacity="0.92" rx="3">'
             f'<title>{tooltip}</title></rect>'
         )
-        # グラフ上にも予定名を表示（短時間の予定でも読めるよう中央配置）
         text_y = y1 + max(seg_height / 2 + 4, 14)
         display_label = str(label)
         max_chars = max(4, int((bar_width - 18) / 11))
         if len(display_label) > max_chars:
             display_label = display_label[:max_chars - 1] + "…"
         safe_display = display_label.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;").replace('"', "&quot;")
-        # 背景色に左右されにくいよう、白文字＋黒い半透明の縁取り
         svg_parts.append(
             f'<text x="{label_area + bar_width / 2:.1f}" y="{text_y:.1f}" text-anchor="middle" '
             f'font-size="13" font-weight="bold" fill="#ffffff" stroke="#333333" stroke-width="3" paint-order="stroke" '
@@ -1398,19 +1269,7 @@ def render_day_bar_svg(entries: list, bar_width: int = 150, height: int = 720) -
             f'style="display:block; max-width:100%;">' + "".join(svg_parts) + "</svg>")
 
 
-
-def find_schedule_matches(planned: list, actual: list) -> list:
-    """予定と記録で、開始・終了時刻が完全に一致する組み合わせを探す"""
-    matches = []
-    for p in planned:
-        for a in actual:
-            if p["start"] == a["start"] and p["end"] == a["end"]:
-                matches.append((p, a))
-    return matches
-
-
 def get_ippo_events_for_date(date_str: str) -> list:
-    """その日のIPPO内イベント（お菓子・ランニング・目標達成など）を時刻順にまとめて返す"""
     events = []
     for c in st.session_state.get("all_candy_log", []):
         if c["date"].startswith(date_str):
@@ -1429,24 +1288,16 @@ def get_ippo_events_for_date(date_str: str) -> list:
     for g in st.session_state.get("goal_complete_log", []):
         if g["date"].startswith(date_str):
             events.append((g["date"].split(" ")[1], f"🏆 『{g.get('title', '')}』目標達成"))
-    # 水族館側で達成した目標も、お菓子集めと同じようにイベント記録へ表示する
     for ag in st.session_state.get("aqua_goal_log", []):
         if ag["date"].startswith(date_str):
             level = ag.get("level", "")
             points = ag.get("points", 0)
-            if ag.get("source") == "dino":
-                label = f"🦖 『{ag.get('target', '')}』{level}目標達成（💎{points} IPPOポイント）"
-            elif ag.get("source") == "candy":
-                label = f"🍬 『{ag.get('target', '')}』{level}目標達成（💎{points} IPPOポイント）"
-            else:
-                label = f"🐠 『{ag.get('target', '')}』{level}目標達成（💎{points} IPPOポイント）"
+            label = f"✨ 『{ag.get('target', '')}』{level}目標達成（💧{points}IPPOポイント）"
             events.append((ag["date"].split(" ")[1], label))
-    # 単発のタスクの完了
     for st_task in st.session_state.get("single_tasks", []):
         completed_at = st_task.get("completed_at")
         if st_task.get("completed") and completed_at and completed_at.startswith(date_str):
-            events.append((completed_at.split(" ")[1], f"✅ 単発タスク『{st_task.get('title', '')}』完了（💎{SINGLE_TASK_POINTS} IPPOポイント）"))
-    # 恐竜レースでの出来事（レベルアップ・力試しなど）
+            events.append((completed_at.split(" ")[1], f"✅ 単発タスク『{st_task.get('title', '')}』完了（💧{SINGLE_TASK_POINTS}IPPOポイント）"))
     for de in st.session_state.get("dino_event_log", []):
         if de["date"].startswith(date_str):
             events.append((de["date"].split(" ")[1], de["text"]))
@@ -1454,70 +1305,7 @@ def get_ippo_events_for_date(date_str: str) -> list:
     return events
 
 
-def build_schedule_print_html(date_strings: list, include_planned: bool, include_actual: bool) -> str:
-    """選択した最大7日分の予定・記録を印刷しやすいカード形式のHTMLにする。"""
-    sections = []
-    kinds = []
-    if include_planned:
-        kinds.append(("planned", "📅 予定"))
-    if include_actual:
-        kinds.append(("actual", "✅ 記録"))
-
-    ordered_dates = sorted(set(date_strings), key=lambda value: datetime.strptime(value, "%Y/%m/%d"))
-    for date_str in ordered_dates[:7]:
-        day = st.session_state.daily_schedule.get(date_str, {"planned": [], "actual": []})
-        day_sections = []
-        date_label = datetime.strptime(date_str, "%Y/%m/%d").strftime("%Y年%m月%d日（%a）")
-        for kind, title in kinds:
-            entries = sorted(day.get(kind, []), key=lambda entry: entry.get("start", "00:00"))
-            if entries:
-                rows = []
-                for entry in entries:
-                    start = html.escape(str(entry.get("start", "")))
-                    end = html.escape(str(entry.get("end", "")))
-                    label = html.escape(str(entry.get("label", "")))
-                    color = str(entry.get("color", "#4CAF50" if kind == "planned" else "#2196F3"))
-                    if not (len(color) == 7 and color.startswith("#") and all(c in "0123456789abcdefABCDEF" for c in color[1:])):
-                        color = "#4CAF50" if kind == "planned" else "#2196F3"
-                    rows.append(
-                        f'<div class="entry" style="border-left-color:{color}">'
-                        f'<span class="time">{start}〜{end}</span>'
-                        f'<span class="entry-label">{label}</span></div>'
-                    )
-                body = "".join(rows)
-            else:
-                body = '<p class="empty">登録されていません</p>'
-            day_sections.append(f'<section><h3>{title}</h3>{body}</section>')
-        sections.append(
-            f'<article class="day-card"><h2>{html.escape(date_label)}</h2>'
-            f'{"".join(day_sections)}</article>'
-        )
-
-    return f"""<!DOCTYPE html>
-<html lang="ja"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
-<style>
-*{{box-sizing:border-box}} body{{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;color:#222;margin:0;padding:14px;background:#f5f7fa}}
-.toolbar{{display:flex;justify-content:space-between;align-items:center;margin:0 auto 14px;max-width:1100px}}
-.toolbar h1{{font-size:22px;margin:0}} .print-button{{border:0;border-radius:8px;background:#1769aa;color:#fff;font-size:16px;font-weight:700;padding:10px 18px;cursor:pointer}}
-.days{{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;max-width:1100px;margin:0 auto}}
-.day-card{{background:#fff;border:1px solid #ccd3dc;border-radius:10px;padding:12px;break-inside:avoid;page-break-inside:avoid;min-width:0}}
-.day-card h2{{font-size:17px;margin:0 0 8px;padding-bottom:6px;border-bottom:2px solid #345}}
-.day-card section{{margin-top:9px}} .day-card h3{{font-size:14px;margin:0 0 5px}}
-.entry{{display:flex;gap:8px;border-left:5px solid #4caf50;padding:5px 7px;margin:4px 0;background:#f7f8fa;align-items:flex-start}}
-.time{{font-weight:700;white-space:nowrap;font-size:12px}} .entry-label{{font-size:13px;overflow-wrap:anywhere}}
-.empty{{color:#777;font-size:12px;margin:4px 0}} .note{{max-width:1100px;margin:0 auto 10px;color:#555;font-size:12px}}
-@media(max-width:650px){{.days{{grid-template-columns:1fr}}}}
-@page{{size:A4 portrait;margin:10mm}}
-@media print{{body{{padding:0;background:#fff}}.toolbar,.note{{display:none!important}}.days{{gap:7mm;max-width:none}}.day-card{{border:1px solid #888;border-radius:0;padding:8px}}.entry{{background:#fff;print-color-adjust:exact;-webkit-print-color-adjust:exact}}}}
-</style></head><body>
-<div class="toolbar"><h1>IPPO 一日のスケジュール</h1><button class="print-button" onclick="window.focus();window.print()">🖨️ 印刷する</button></div>
-<p class="note">選択した日付のスケジュールです。ブラウザーの印刷画面から印刷してください。</p>
-<div class="days">{"".join(sections)}</div>
-</body></html>"""
-
-
 def render_schedule_clipboard(date_str: str):
-    """予定だけをコピーし、別の日へ貼り付ける（記録はコピーしない）。"""
     schedule = st.session_state.daily_schedule.setdefault(date_str, {"planned": [], "actual": []})
     clipboard = st.session_state.get("schedule_clipboard")
     with st.container(border=True):
@@ -1549,8 +1337,6 @@ def render_schedule_clipboard(date_str: str):
                 "貼り付け方法", ["既存の予定に追加", "既存の予定を置き換え"],
                 key=f"paste_mode_{date_str}",
             )
-            if paste_mode == "既存の予定を置き換え" and schedule["planned"]:
-                st.warning("この日の既存の予定は消えます。実際の記録は残ります。")
             confirm_col, cancel_col = st.columns(2)
             with confirm_col:
                 if st.button("貼り付けを確定", type="primary", use_container_width=True,
@@ -1571,7 +1357,6 @@ def render_schedule_clipboard(date_str: str):
 
 
 def render_schedule_templates(date_str: str):
-    """最大5件のテンプレートを編集し、選択日の予定・記録へ独立して貼り付ける。"""
     templates = st.session_state.setdefault("schedule_templates", [])
     if templates is None:
         templates = []
@@ -1618,10 +1403,8 @@ def render_schedule_templates(date_str: str):
                     st.error("名前を入力してください。")
 
         st.markdown("**🕒 テンプレートの内容**")
-        if not entries:
-            st.caption("まだ項目がありません。下のフォームから追加できます。")
         for i, entry in enumerate(entries):
-            with st.expander(f"{entry['start']}〜{entry['end']}　{entry.get('label', '')}", expanded=False):
+            with st.expander(f"{entry['start']}〜{entry['end']} {entry.get('label', '')}", expanded=False):
                 with st.form(f"template_edit_{date_str}_{template_id}_{i}"):
                     label = st.text_input("内容", value=entry.get("label", ""))
                     start = st.text_input("開始時刻（HH:MM）", value=entry["start"])
@@ -1638,7 +1421,7 @@ def render_schedule_templates(date_str: str):
                         st.rerun()
                     if save_item:
                         if not label.strip() or not valid_template_time_range(start, end):
-                            st.error("内容と正しい時刻を入力してください（開始は終了より前）。")
+                            st.error("内容と正しい時刻を入力してください。")
                         else:
                             entries[i] = {"label": label.strip(), "start": start, "end": end, "color": SCHEDULE_COLORS[color_name]}
                             entries.sort(key=lambda e: e["start"])
@@ -1656,7 +1439,7 @@ def render_schedule_templates(date_str: str):
             color_name = st.selectbox("色", list(SCHEDULE_COLORS), index=3)
             if st.form_submit_button("➕ 項目を追加"):
                 if not label.strip() or not valid_template_time_range(start, end):
-                    st.error("内容と正しい時刻を入力してください（開始は終了より前）。")
+                    st.error("内容と正しい時刻を入力してください。")
                 else:
                     entries.append({"label": label.strip(), "start": start, "end": end, "color": SCHEDULE_COLORS[color_name]})
                     entries.sort(key=lambda e: e["start"])
@@ -1668,7 +1451,6 @@ def render_schedule_templates(date_str: str):
         with st.form(f"template_paste_{date_str}_{template_id}"):
             destination = st.radio("貼り付け先", ["📅 予定", "✅ 記録"], horizontal=True)
             paste_mode = st.radio("貼り付け方法", ["既存の内容に追加", "既存の内容を置き換え"])
-            st.caption("置き換えを選ぶと、選んだ貼り付け先の内容だけが置き換わります。もう一方は残ります。")
             if st.form_submit_button("📋 テンプレートを貼り付け", disabled=not entries):
                 key = "planned" if destination == "📅 予定" else "actual"
                 copied = copy.deepcopy(entries)
@@ -1690,7 +1472,6 @@ def render_schedule_templates(date_str: str):
 
 
 def valid_template_time_range(start: str, end: str) -> bool:
-    """時刻がHH:MM形式かつ同一日内で開始＜終了か検証する。"""
     try:
         a = datetime.strptime(start, "%H:%M")
         b = datetime.strptime(end, "%H:%M")
@@ -1700,10 +1481,6 @@ def valid_template_time_range(start: str, end: str) -> bool:
 
 
 def render_schedule_and_events(date_str: str, editable: bool, clipboard_at_bottom: bool = False):
-    """
-    指定した日の「予定／記録」帯グラフと、隣にIPPOイベントログを表示する。
-    editable=True の場合は、予定・記録の追加に加えて既存項目の編集・削除ができる。
-    """
     day_schedule = st.session_state.daily_schedule.setdefault(date_str, {"planned": [], "actual": []})
 
     if editable:
@@ -1726,7 +1503,6 @@ def render_schedule_and_events(date_str: str, editable: bool, clipboard_at_botto
                 st.session_state.schedule_edit_target = None
                 st.rerun()
 
-        # 既存項目を押したときの編集・削除フォーム
         edit_target = st.session_state.get("schedule_edit_target")
         if edit_target and edit_target.get("date") == date_str:
             edit_kind = edit_target["kind"]
@@ -1748,7 +1524,7 @@ def render_schedule_and_events(date_str: str, editable: bool, clipboard_at_botto
                             "終了時刻", entry["end"],
                             key=f"edit_sched_end_{date_str}_{edit_kind}_{edit_index}")
                     edit_label = st.text_input(
-                        "内容（なんでもOK）", value=entry.get("label", ""),
+                        "内容", value=entry.get("label", ""),
                         key=f"edit_sched_label_{date_str}_{edit_kind}_{edit_index}")
                     current_color = entry.get("color", "#4CAF50" if edit_kind == "planned" else "#2196F3")
                     color_options = list(SCHEDULE_COLORS.keys())
@@ -1757,13 +1533,12 @@ def render_schedule_and_events(date_str: str, editable: bool, clipboard_at_botto
                         color_options[3 if edit_kind == "planned" else 4]
                     )
                     edit_color_name = st.selectbox(
-                        "色（10色から選択）",
+                        "色",
                         options=color_options,
                         index=color_options.index(current_color_name),
                         key=f"edit_sched_color_{date_str}_{edit_kind}_{edit_index}")
                     edit_color = SCHEDULE_COLORS[edit_color_name]
 
-                    # 予定の1コマを、そのまま「記録」にもコピーする
                     if edit_kind == "planned":
                         if st.button("✅ 予定通り！（このコマを記録にそのままコピー）", use_container_width=True,
                                      key=f"as_planned_{date_str}_{edit_index}"):
@@ -1782,13 +1557,10 @@ def render_schedule_and_events(date_str: str, editable: bool, clipboard_at_botto
                             else:
                                 actual_entries.append(copied_entry)
                                 actual_entries.sort(key=lambda e: e["start"])
-                                st.session_state.schedule_notice = (
-                                    f"✅ 『{copied_entry['label']}』{copied_entry['start']}〜{copied_entry['end']} を記録にコピーしました！"
-                                )
+                                st.session_state.schedule_notice = f"✅ 記録にコピーしました！"
                             st.session_state.schedule_edit_target = None
                             save_progress()
                             st.rerun()
-                        st.caption("予定はそのまま残り、実際の記録にも同じコマが入ります。")
 
                     save_col, delete_col, cancel_col = st.columns(3)
                     with save_col:
@@ -1823,7 +1595,6 @@ def render_schedule_and_events(date_str: str, editable: bool, clipboard_at_botto
                             st.session_state.schedule_edit_target = None
                             st.rerun()
 
-        # 削除確認
         delete_target = st.session_state.get("schedule_delete_target")
         if delete_target and delete_target.get("date") == date_str:
             delete_kind = delete_target["kind"]
@@ -1832,7 +1603,7 @@ def render_schedule_and_events(date_str: str, editable: bool, clipboard_at_botto
             if 0 <= delete_index < len(entries):
                 target_entry = entries[delete_index]
                 with st.container(border=True):
-                    st.warning(f"「{target_entry.get('label', '')}（{target_entry['start']}〜{target_entry['end']}）」を削除しますか？")
+                    st.warning(f"「{target_entry.get('label', '')}」を削除しますか？")
                     confirm_col, cancel_col = st.columns(2)
                     with confirm_col:
                         if st.button("🗑️ 削除する", type="primary", use_container_width=True,
@@ -1863,12 +1634,12 @@ def render_schedule_and_events(date_str: str, editable: bool, clipboard_at_botto
                     end_time = schedule_time_selectbox(
                         "終了時刻", "10:00",
                         key=f"sched_end_{date_str}_{form_kind}")
-                label_text = st.text_input("内容（なんでもOK）", key=f"sched_label_{date_str}_{form_kind}",
-                                           placeholder="例：数学の宿題、読書、休憩 など")
+                label_text = st.text_input("内容", key=f"sched_label_{date_str}_{form_kind}",
+                                           placeholder="例：勉強、休憩 など")
                 color_options = list(SCHEDULE_COLORS.keys())
                 default_color_index = 3 if form_kind == "planned" else 4
                 color_pick_name = st.selectbox(
-                    "色（10色から選択）",
+                    "色",
                     options=color_options,
                     index=default_color_index,
                     key=f"sched_color_{date_str}_{form_kind}")
@@ -1904,21 +1675,20 @@ def render_schedule_and_events(date_str: str, editable: bool, clipboard_at_botto
                     st.markdown("##### 🖱️ 項目を押して編集・削除")
                 for i, entry in enumerate(day_schedule[kind]):
                     color = entry.get("color", "#4CAF50" if kind == "planned" else "#2196F3")
-                    button_label = f"{icon} {entry['start']}〜{entry['end']}　{entry.get('label', '')}"
+                    button_label = f"{icon} {entry['start']}〜{entry['end']} {entry.get('label', '')}"
                     if editable:
                         if st.button(button_label, use_container_width=True, key=f"schedule_entry_button_{date_str}_{kind}_{i}"):
                             play_click_sound(delay=0)
                             st.session_state.schedule_edit_target = {"date": date_str, "kind": kind, "index": i}
                             st.session_state.schedule_delete_target = None
                             st.rerun()
-                        # ボタンの左に色を表示する代わりに、直下に色チップを表示
                         st.markdown(
                             f'<div style="height:5px;background:{color};border-radius:4px;margin:-8px 0 6px 0;"></div>',
                             unsafe_allow_html=True)
                     else:
                         st.markdown(
                             f'<div style="border-left:8px solid {color};padding:6px 8px;margin:4px 0;">'
-                            f'<b>{entry["start"]}〜{entry["end"]}</b>　{entry.get("label", "")}</div>',
+                            f'<b>{entry["start"]}〜{entry["end"]}</b> {entry.get("label", "")}</div>',
                             unsafe_allow_html=True)
             else:
                 st.caption("まだ登録されていません。")
@@ -1928,7 +1698,7 @@ def render_schedule_and_events(date_str: str, editable: bool, clipboard_at_botto
         events_today = get_ippo_events_for_date(date_str)
         if events_today:
             for event_time, event_label in events_today:
-                st.write(f"⏰ {event_time}　{event_label}")
+                st.write(f"⏰ {event_time} {event_label}")
         else:
             st.caption("この日はまだイベントの記録がありません。")
 
@@ -1938,7 +1708,6 @@ def render_schedule_and_events(date_str: str, editable: bool, clipboard_at_botto
 
     if editable:
         render_schedule_templates(date_str)
-
 
 
 # =====================================================
@@ -1990,7 +1759,6 @@ def play_jar_full_sound(delay: float = 0):
 
 
 def play_aqua_point_sound(delay: float = 0):
-    """IPPOポイント獲得時の効果音。"""
     if _aqua_point_sound_b64 is None:
         return
     sound_html = f'<audio autoplay="true" style="display:none;"><source src="data:audio/mp3;base64,{_aqua_point_sound_b64}" type="audio/mp3"></audio>'
@@ -2000,7 +1768,6 @@ def play_aqua_point_sound(delay: float = 0):
 
 
 def play_aqua_feed_sound(delay: float = 0):
-    """魚に餌を渡したときの効果音。"""
     if _aqua_feed_sound_b64 is None:
         return
     sound_html = f'<audio autoplay="true" style="display:none;"><source src="data:audio/mp3;base64,{_aqua_feed_sound_b64}" type="audio/mp3"></audio>'
@@ -2010,7 +1777,6 @@ def play_aqua_feed_sound(delay: float = 0):
 
 
 def play_aqua_gacha_sound(stars: int, delay: float = 0):
-    """ガチャの☆数に応じた効果音。☆1〜2=ペタッ、☆3=きらーん1。"""
     sound_b64 = _aqua_gacha_low_sound_b64 if stars <= 2 else _aqua_gacha_three_sound_b64
     if sound_b64 is None:
         return
@@ -2021,14 +1787,14 @@ def play_aqua_gacha_sound(stars: int, delay: float = 0):
 
 
 # =====================================================
-# 1. 記憶の部屋（セッション状態）の初期化
+# 1. セッション状態の初期化
 # =====================================================
 now_jst = get_now_jst()
 
 if "page" not in st.session_state:
     st.session_state.page = "title"
 if "login_step" not in st.session_state:
-    st.session_state.login_step = "title"  # 'title', 'login_input', 'confirm'
+    st.session_state.login_step = "title"
 if "temp_user_id" not in st.session_state:
     st.session_state.temp_user_id = ""
 if "current_user" not in st.session_state:
@@ -2080,7 +1846,6 @@ if "course_complete_log" not in st.session_state:
 if "active_course_key" not in st.session_state:
     st.session_state.active_course_key = "village"
 
-# 📊 一日のスケジュール（予定／記録）
 if "daily_schedule" not in st.session_state:
     st.session_state.daily_schedule = {}
 if "schedule_templates" not in st.session_state or st.session_state.schedule_templates is None:
@@ -2092,74 +1857,14 @@ if "schedule_edit_target" not in st.session_state:
 if "schedule_delete_target" not in st.session_state:
     st.session_state.schedule_delete_target = None
 
-COMPANIONS = {
-    "cat": {"emoji": "🐱", "name": "ねこ"},
-    "dog": {"emoji": "🐶", "name": "いぬ"},
-    "bird": {"emoji": "🐦", "name": "とり"},
-}
-
-COMPANION_MESSAGES = {
-    "cat": [
-        "ふーん、やるじゃない。…べつに、感心してないけど。",
-        "まあまあね。無理しない程度に頑張りなさいよ。",
-        "ふぁ…（あくび）褒めてほしいなら、褒めてあげる。えらいわよ。",
-        "悪くないじゃない。次も、まあ期待しててあげる。",
-        "…気が向いたから、隣を歩いてあげてるだけだから。",
-        "頑張るあんたを見てると、まあ悪くないなって思うのよね。",
-        "誰のためでもなく、あんたのためなんだからね。",
-    ],
-    "dog": [
-        "うおおおすごいすごい！！やったねやったね！！🐾",
-        "きみのこと、ずっと信じてたよ！！最高だ！！",
-        "もっと行こう！！ぼく、どこまでもついていくよ！！",
-        "しっぽ振るのが止まらないよ！！すごいすごい！！",
-        "きみが頑張る姿、ぼくの元気の源だよ！ありがとう！",
-        "できたね！！えらいえらい！！なでてあげたい気分！！",
-        "よーし、次のご褒美探しに行こう！！ぼくも一緒だよ！",
-    ],
-    "bird": [
-        "風が気持ちいいね〜。きみの一歩、ちゃんと空まで届いてるよ🕊️",
-        "高いところから見てたよ。ちゃんと前に進んでる、大丈夫。",
-        "さえずるくらい嬉しいことがあったみたいだね♪",
-        "羽を休める時間も大事。無理せずゆっくりね。",
-        "その調子。景色がどんどん変わっていくの、見えてる？",
-        "小さな一歩も、飛び立つ前の助走みたいなものだよ。",
-        "今日の空、きみの頑張りにちょうどいい色してるよ。",
-    ],
-}
-
-COMPANION_COMPLETE_MESSAGES = {
-    "cat": [
-        "…やるじゃない。最初から出来ると思ってたけどね。",
-        "はぁ…お疲れさま。よくやったわね、本当に。",
-        "べ、別に感動なんてしてないんだから！…ちょっとだけよ。",
-        "やっと着いたわね。…隣にいられて、悪くなかったわ。",
-        "次はどこ行くの？…付き合ってあげてもいいけど。",
-    ],
-    "dog": [
-        "やったーーー！！！ゴールだ！！最高だよ！！🎉",
-        "きみ、本当にすごいよ！！誇らしいよ！！",
-        "ずっと一緒に走れて幸せだった！！ありがとう！！",
-        "抱きつきたいくらい嬉しい！！よく頑張ったね！！",
-        "次のコースも一緒に行こうね！！絶対だよ！！",
-    ],
-    "bird": [
-        "ここまで飛んできたね。振り返ってごらん、素敵な道のりだったよ🕊️",
-        "空の色が変わった気がする。きみが変わったからかな。",
-        "ゴールは終わりじゃなくて、次の風の始まりだよ。",
-        "静かに、でも確かに。ここまで来たこと、誇っていいよ。",
-        "また新しい空へ、一緒に飛んでいこうね。",
-    ],
-}
-
 if "companion" not in st.session_state:
     st.session_state.companion = None
 if "show_companion_picker" not in st.session_state:
     st.session_state.show_companion_picker = False
 if "goal_complete_log" not in st.session_state:
     st.session_state.goal_complete_log = []
-if "ippo_points" not in st.session_state:
-    st.session_state.ippo_points = 0
+if "aqua_points" not in st.session_state:
+    st.session_state.aqua_points = 0
 if "aqua_reward_queue" not in st.session_state:
     st.session_state.aqua_reward_queue = []
 if "aqua_fish" not in st.session_state:
@@ -2276,7 +1981,6 @@ if st.session_state.page == "title":
     st.subheader("〜完璧主義をハックする、最初の一歩アプリ〜")
     st.write("")
 
-    # ステップ1：はじめから / つづきから 選択画面
     if st.session_state.login_step == "title":
         col_new, col_continue = st.columns(2)
         with col_new:
@@ -2293,13 +1997,11 @@ if st.session_state.page == "title":
                 st.session_state.login_step = "login_input"
                 st.rerun()
 
-    # ステップ2：ユーザーID入力画面
     elif st.session_state.login_step == "login_input":
         if st.session_state.get("login_mode") == "new":
             st.markdown("### 🆕 新しく始めるユーザー名を入力してください")
             input_name = st.text_input("ユーザー名（またはID）", key="input_user_name_new")
 
-            # ★修正①：すでに同じ名前のセーブデータがある場合は警告する
             name_already_exists = bool(input_name.strip()) and check_user_exists(input_name.strip())
             if name_already_exists:
                 st.warning("⚠️ その名前のセーブデータはすでにあります。このまま進むと上書きされて消えてしまいます。")
@@ -2313,7 +2015,6 @@ if st.session_state.page == "title":
                         st.session_state.current_user = input_name.strip()
                         reset_progress_in_memory()
                         if name_already_exists:
-                            # 上書きする場合は、Supabase側の古いレコードも削除してから真っさらにする
                             try:
                                 supabase.table("user_data").delete().eq("id", st.session_state.current_user).execute()
                             except Exception:
@@ -2330,7 +2031,7 @@ if st.session_state.page == "title":
                     st.session_state.login_step = "title"
                     st.rerun()
 
-        else:  # continue モード
+        else:
             st.markdown("### ▶️ 前ログインしたときの名前（ID）を入力してください")
             input_name = st.text_input("ユーザー名（またはID）", key="input_user_name_continue")
 
@@ -2354,7 +2055,6 @@ if st.session_state.page == "title":
                     st.session_state.login_step = "title"
                     st.rerun()
 
-    # ステップ3：データの確認画面（はい／いいえ）
     elif st.session_state.login_step == "confirm":
         st.success(f"🎉 **{st.session_state.temp_user_id}** さんのセーブデータが見つかりました！")
         st.markdown("### このデータで続けますか？")
@@ -2364,7 +2064,6 @@ if st.session_state.page == "title":
         with col_yes:
             if st.button("はい", type="primary", use_container_width=True):
                 play_click_sound(delay=0)
-                # ★修正②：読み込みに失敗した場合は、進めずにその場でエラーを見せる
                 load_ok = load_progress(st.session_state.temp_user_id)
                 if load_ok:
                     st.session_state.current_user = st.session_state.temp_user_id
@@ -2375,7 +2074,6 @@ if st.session_state.page == "title":
                 else:
                     st.error(
                         "⚠️ データの読み込みに失敗しました。進捗を上書きしないよう、ここで止めています。"
-                        "少し時間をおいてから、もう一度お試しください。"
                     )
 
         with col_no:
@@ -2388,7 +2086,6 @@ if st.session_state.page == "title":
     st.write("")
     st.write("")
 
-    # タイトル画面設定エリア
     if st.session_state.get("current_user"):
         spacer_col, settings_col = st.columns([3, 1])
         with settings_col:
@@ -2456,7 +2153,6 @@ elif st.session_state.page in [
     "candy_page", "aquarium_page", "dino_page", "schedule_page"
 ]:
 
-    # サイドバーメニュー
     with st.sidebar:
         st.title("👤 ユーザー情報")
         st.info(f"ログイン中: **{st.session_state.current_user}**")
@@ -2493,7 +2189,6 @@ elif st.session_state.page in [
     if st.session_state.page == "target_page":
         st.title("🎯 目標登録画面")
 
-        # ===== 📝 単発のタスク（完了すると3ポイント） =====
         with st.container(border=True):
             st.markdown("### 📝 単発のタスク")
             st.caption(f"1回きりのタスクを登録できます。完了を押すと **{SINGLE_TASK_POINTS} IPPOポイント** もらえます。")
@@ -2503,7 +2198,7 @@ elif st.session_state.page in [
                 st.success(single_notice)
 
             with st.form("single_task_form", clear_on_submit=True):
-                new_single_title = st.text_input("単発のタスク", placeholder="例：メールの返信、洗濯物をたたむ、薬局に行く")
+                new_single_title = st.text_input("単発のタスク", placeholder="例：メールの返信、洗濯物をたたむ")
                 if st.form_submit_button("➕ タスクを追加"):
                     if add_single_task(new_single_title):
                         save_progress()
@@ -2520,7 +2215,7 @@ elif st.session_state.page in [
                 with task_col:
                     st.write(f"📌 {task['title']}")
                 with done_col:
-                    if st.button(f"✅ 完了！ +{SINGLE_TASK_POINTS} IPPOポイント", key=f"single_done_{task['id']}", use_container_width=True):
+                    if st.button(f"✅ 完了！ +{SINGLE_TASK_POINTS}pt", key=f"single_done_{task['id']}", use_container_width=True):
                         if complete_single_task(task["id"]):
                             st.session_state.single_task_notice = f"🎉 『{task['title']}』を完了！ {SINGLE_TASK_POINTS} IPPOポイントゲット！"
                             save_progress()
@@ -2532,7 +2227,7 @@ elif st.session_state.page in [
                         st.rerun()
             if done_tasks and st.checkbox(f"完了したタスクを見る（{len(done_tasks)}件）", key="show_done_single_tasks"):
                 for task in reversed(done_tasks[-30:]):
-                    st.write(f"✅ {task['title']}　（{task.get('completed_at', '')}）")
+                    st.write(f"✅ {task['title']} （{task.get('completed_at', '')}）")
 
         st.write("---")
         st.write("まずは達成したい「大きな目標」を入力してください。")
@@ -2558,7 +2253,7 @@ elif st.session_state.page in [
                     }
                     st.session_state.target_list.append(new_target)
                     play_click_sound()
-                    st.success(f"📌 目標『{main_target_input}』を登録しました！お菓子画面で選べるようになったよ！")
+                    st.success(f"📌 目標『{main_target_input}』を登録しました！")
                     st.rerun()
                 else:
                     st.error("⚠️ 全レベルを入力してください。")
@@ -2569,7 +2264,6 @@ elif st.session_state.page in [
             for i, target_data in enumerate(st.session_state.target_list):
                 with st.expander(f"🎯 {target_data['title']}", expanded=True):
 
-                    # --- 編集モードと通常モードの切り替え ---
                     if st.session_state.get("editing_target_index") == i:
                         st.markdown("### ✏️ 目標の編集")
                         edit_title = st.text_input("最終目標タイトル", value=target_data["title"],
@@ -2651,7 +2345,7 @@ elif st.session_state.page in [
                                 f"🎯 チャレンジ期限：{deadline_display}（結果：{target_data.get('deadline_result', '?')} 報告済み）")
                         else:
                             st.caption(
-                                f"🎯 チャレンジ期限：{deadline_display} まで（{reminder_mode_label}／この日になったら結果を聞くよ）")
+                                f"🎯 チャレンジ期限：{deadline_display} まで")
 
                         if st.button("期限を解除する", key=f"clear_deadline_{i}"):
                             play_click_sound(delay=0)
@@ -2684,7 +2378,6 @@ elif st.session_state.page in [
                                 st.rerun()
 
                     st.write("---")
-                    # 操作ボタンエリア（編集・複製・削除）
                     if st.session_state.get("confirm_delete_target_index") == i:
                         st.warning(f"『{target_data['title']}』を削除しますか？この操作は取り消せません。")
                         del_confirm_col, del_cancel_col = st.columns(2)
@@ -2743,7 +2436,7 @@ elif st.session_state.page in [
                             play_click_sound(delay=0)
                             record_deadline_answer(t, result_label)
                             st.rerun()
-                st.caption("正直に選んでね。0%でもチャレンジしたこと自体がすごいことだよ🌱")
+                st.caption("正直に選んでね。")
                 if st.button("🔕 このリマインドをやめる", key=f"banner_stop_reminder_{idx}"):
                     play_click_sound(delay=0)
                     t["deadline_reminder_stopped"] = True
@@ -2841,34 +2534,6 @@ elif st.session_state.page in [
 
         st.write("---")
 
-        deadline_start_targets = [
-            (idx, t) for idx, t in enumerate(st.session_state.target_list)
-            if t.get("deadline") == selected_date_str
-        ]
-        for idx, t in deadline_start_targets:
-            is_daily_mode = t.get("reminder_mode") == "daily"
-            if t.get("deadline_reminder_stopped"):
-                st.caption(f"🎯 『{t['title']}』この日がチャレンジ期限でした（リマインドは停止済み）")
-            elif is_daily_mode:
-                st.caption(f"🎯 『{t['title']}』この日からチャレンジ開始！（毎日チェックイン形式）")
-            elif t.get("deadline_answered"):
-                st.info(f"🎯 『{t['title']}』チャレンジ結果：**{t.get('deadline_result', '?')}** 達成")
-            elif should_prompt_deadline_today(t):
-                st.info(f"🎯 『{t['title']}』の結果はまだ聞けていません。ページ上部で回答できます👆")
-            else:
-                st.caption(f"🎯 『{t['title']}』この日までチャレンジ！（この日になったら結果を聞くよ）")
-
-        daily_checkin_entries_today = []
-        for idx, t in enumerate(st.session_state.target_list):
-            for entry in t.get("deadline_daily_log", []):
-                if entry["date"] == selected_date_str:
-                    daily_checkin_entries_today.append((t, entry))
-        for t, entry in daily_checkin_entries_today:
-            st.info(f"🎯 『{t['title']}』この日のチェックイン結果：**{entry['result']}**")
-
-        if deadline_start_targets or daily_checkin_entries_today:
-            st.write("---")
-
         daily_candies = [c for c in st.session_state.all_candy_log if c["date"].startswith(selected_date_str)]
         daily_jar_completions = [j for j in st.session_state.jar_complete_log if
                                  j["date"].startswith(selected_date_str)]
@@ -2904,45 +2569,8 @@ elif st.session_state.page in [
 
         st.write("---")
 
-        # 📊 選択した日のスケジュールは過去の日付も編集可能
         st.markdown("### 📊 その日のスケジュール")
         render_schedule_and_events(selected_date_str, editable=True)
-
-        st.write("---")
-
-        if daily_goal_completions:
-            for g in daily_goal_completions:
-                st.success(f"🏆✨ 『{g['title']}』の目標達成記念日！（{g['date'].split(' ')[1]}）")
-
-        if daily_jar_completions:
-            for jar in daily_jar_completions:
-                size_label = jar.get("size_label", JAR_SIZE_LABELS.get(jar["capacity"], "?"))
-                st.success(f"🍯✨ お菓子のビン({size_label})完成✨（{jar['date'].split(' ')[1]}）")
-
-        if daily_course_completions:
-            for v in daily_course_completions:
-                st.success(f"🏁✨ 『{v.get('course', 'コース')}』完走達成✨（{v['date'].split(' ')[1]}）")
-
-        if daily_candies:
-            st.success(f"🎉 この日は **{len(daily_candies)}個** のお菓子をゲットしました！！")
-            for item in daily_candies:
-                with st.container(border=True):
-                    st.markdown(f"#### {item['emoji']} 放り込んだお菓子（{item['date'].split(' ')[1]}）")
-                    st.write(f"**クリアしたクエスト：** {item['task']}")
-
-        if daily_runs:
-            st.success(f"🎉 この日は合計 **{sum(r['km'] for r in daily_runs)}km** 走りました！！")
-            for run in daily_runs:
-                with st.container(border=True):
-                    st.markdown(
-                        f"#### 🏃 {run.get('course', 'ランニング')}：{run['km']}km 進んだ（{run['date'].split(' ')[1]}）")
-                    st.write(f"**クリアしたクエスト：** {run['task']}")
-                    if run.get("companion"):
-                        st.write(f"**一緒に走った相棒：** 🐾 {run['companion']}")
-
-        if not (
-                daily_candies or daily_jar_completions or daily_runs or daily_course_completions or daily_goal_completions):
-            st.info("この日の記録はありません")
 
     # --- ステージ画面 ---
     elif st.session_state.page == "stage_page":
@@ -2966,139 +2594,97 @@ elif st.session_state.page in [
                 st.session_state.page = "dino_page"
                 st.rerun()
 
-    # --- 一日のスケジュール画面 ---
+    # --- 一日のスケジュール画面（未来の予定選択・印刷機能対応） ---
     elif st.session_state.page == "schedule_page":
         st.title("📊 一日のスケジュール")
-        st.write("日付を自由に選んで、今日や未来の日の予定を立てたり、実際の記録を残したりできます。")
-        st.markdown("### 📅 未来の予定を立てる")
+        st.write("「予定」と「記録」を縦の帯グラフで見比べられます。未来の好きな日付を選んでスケジュールを立てることもできます。")
 
         today_dt = get_now_jst().date()
-        today_str_jst = today_dt.strftime("%Y/%m/%d")
-        if "schedule_view_date" not in st.session_state:
-            st.session_state.schedule_view_date = today_str_jst
 
-        # 日付選択は今日以降。日付を変えるだけで、その日の予定・記録に切り替わります。
-        try:
-            initial_schedule_date = datetime.strptime(
-                st.session_state.schedule_view_date, "%Y/%m/%d").date()
-        except (ValueError, TypeError):
-            initial_schedule_date = today_dt
-        if initial_schedule_date < today_dt:
-            initial_schedule_date = today_dt
-        if "schedule_date_picker" not in st.session_state:
-            st.session_state.schedule_date_picker = initial_schedule_date
-        elif st.session_state.schedule_date_picker < today_dt:
-            st.session_state.schedule_date_picker = today_dt
+        # 未来の予定を立てるための日付ピッカー（デフォルトは今日）
+        if "schedule_picker_date" not in st.session_state:
+            st.session_state.schedule_picker_date = today_dt
 
-        selected_schedule_date = st.date_input(
-            "📅 未来の予定を立てる日付を選んでください",
-            min_value=today_dt,
-            key="schedule_date_picker",
+        selected_date = st.date_input(
+            "📅 スケジュールを表示・編集する日付を選ぶ",
+            value=st.session_state.schedule_picker_date,
+            key="schedule_date_picker_widget"
         )
-        view_date = selected_schedule_date.strftime("%Y/%m/%d")
-        st.session_state.schedule_view_date = view_date
-        st.caption(f"📅 対象日：{selected_schedule_date.strftime('%Y年%m月%d日')}")
+        st.session_state.schedule_picker_date = selected_date
+        view_date_str = selected_date.strftime("%Y/%m/%d")
 
-        print_col, spacer_col = st.columns([1, 3])
-        with print_col:
-            if st.button("🖨️ 印刷", type="secondary", use_container_width=True,
-                         key="open_schedule_print_panel"):
-                st.session_state.schedule_print_open = True
-                st.session_state.schedule_print_dates = [view_date]
-                st.session_state.schedule_print_date_picker = selected_schedule_date
-                st.session_state.schedule_print_include_planned = True
-                st.session_state.schedule_print_include_actual = True
-                st.session_state.schedule_print_preview = False
+        st.markdown(f"### 📌 {selected_date.strftime('%Y年%m月%d日')} のスケジュール")
+        
+        # --- 印刷ボタンと設定コーナー ---
+        with st.expander("🖨️ 印刷設定・プレビュー（最大7日分）", expanded=False):
+            st.markdown("選択した日付から最大7日分のスケジュールを並べて印刷することができます。")
+            print_days_count = st.slider("並べる日数", min_value=1, max_value=7, value=1, key="print_days_count")
+            print_content_type = st.radio(
+                "印刷する内容",
+                ["予定だけ", "記録だけ", "両方"],
+                index=0,
+                horizontal=True,
+                key="print_content_type"
+            )
+
+            if st.button("🖨️ この条件で印刷プレビュー表示", type="primary"):
+                st.session_state.show_print_view = True
                 st.rerun()
 
-        # 印刷する日付と内容を選ぶパネル。最大7日分をまとめて印刷できます。
-        if st.session_state.get("schedule_print_open", False):
-            with st.container(border=True):
-                st.markdown("### 🖨️ 印刷する内容を選択")
-                st.caption("日付を追加して、最大7日分をひとつにまとめられます。予定・記録はチェックで選べます。")
+        # 印刷プレビューモードが有効な場合の表示
+        if st.session_state.get("show_print_view", False):
+            st.markdown("---")
+            st.markdown("## 🖨️ スケジュール印刷プレビュー")
+            st.info("ブラウザの印刷機能（Ctrl + P または Cmd + P）を使って、この画面を印刷してください。")
+            
+            if st.button("❌ プレビューを閉じる"):
+                st.session_state.show_print_view = False
+                st.rerun()
 
-                if "schedule_print_dates" not in st.session_state:
-                    st.session_state.schedule_print_dates = [view_date]
-                if "schedule_print_date_picker" not in st.session_state:
-                    st.session_state.schedule_print_date_picker = selected_schedule_date
+            days_to_print = st.session_state.get("print_days_count", 1)
+            content_type = st.session_state.get("print_content_type", "予定だけ")
 
-                print_date_col, add_date_col = st.columns([3, 1])
-                with print_date_col:
-                    print_selected_date = st.date_input(
-                        "追加する日付", key="schedule_print_date_picker")
-                with add_date_col:
-                    st.write("")
-                    st.write("")
-                    if st.button("➕ 日付を追加", use_container_width=True,
-                                 key="add_schedule_print_date"):
-                        date_to_add = print_selected_date.strftime("%Y/%m/%d")
-                        if date_to_add in st.session_state.schedule_print_dates:
-                            st.warning("その日付はすでに追加されています。")
-                        elif len(st.session_state.schedule_print_dates) >= 7:
-                            st.warning("印刷できる日付は最大7日分です。")
+            print_cols = st.columns(min(days_to_print, 3))
+            for i in range(days_to_print):
+                target_dt = selected_date + timedelta(days=i)
+                t_str = target_dt.strftime("%Y/%m/%d")
+                day_schedule = st.session_state.daily_schedule.setdefault(t_str, {"planned": [], "actual": []})
+                
+                col_idx = i % min(days_to_print, 3)
+                with print_cols[col_idx]:
+                    st.markdown(f"<div class='print-container'>", unsafe_allow_html=True)
+                    st.markdown(f"#### 📅 {target_dt.strftime('%m月%d日 (%a)')}")
+                    
+                    if content_type in ["予定だけ", "両方"]:
+                        st.markdown("**【予定】**")
+                        if day_schedule["planned"]:
+                            for p in day_schedule["planned"]:
+                                st.markdown(f"- {p['start']}~{p['end']}: {p['label']}")
                         else:
-                            st.session_state.schedule_print_dates.append(date_to_add)
-                            st.session_state.schedule_print_preview = False
-                            st.rerun()
+                            st.caption("予定なし")
 
-                st.markdown("**印刷する日付（最大7日）**")
-                if not st.session_state.schedule_print_dates:
-                    st.caption("まだ日付が選ばれていません。")
-                for date_item in list(st.session_state.schedule_print_dates):
-                    date_row_col, remove_col = st.columns([5, 1])
-                    with date_row_col:
-                        formatted_date = datetime.strptime(date_item, "%Y/%m/%d").strftime("%Y年%m月%d日")
-                        st.write(f"📅 {formatted_date}")
-                    with remove_col:
-                        if st.button("削除", key=f"remove_print_date_{date_item}",
-                                     use_container_width=True):
-                            st.session_state.schedule_print_dates.remove(date_item)
-                            st.session_state.schedule_print_preview = False
-                            st.rerun()
+                    if content_type in ["記録だけ", "両方"]:
+                        st.markdown("**【記録】**")
+                        if day_schedule["actual"]:
+                            for a in day_schedule["actual"]:
+                                st.markdown(f"- {a['start']}~{a['end']}: {a['label']}")
+                        else:
+                            st.caption("記録なし")
+                    st.markdown("</div>", unsafe_allow_html=True)
+            st.markdown("---")
 
-                st.markdown("**印刷する内容**")
-                type_col1, type_col2 = st.columns(2)
-                with type_col1:
-                    include_planned = st.checkbox("📅 予定", key="schedule_print_include_planned")
-                with type_col2:
-                    include_actual = st.checkbox("✅ 記録", key="schedule_print_include_actual")
-
-                preview_col, close_col = st.columns([3, 1])
-                with preview_col:
-                    if st.button("🖨️ 印刷用プレビューを作成", type="primary", use_container_width=True,
-                                 disabled=(not st.session_state.schedule_print_dates or not (include_planned or include_actual)),
-                                 key="create_schedule_print_preview"):
-                        st.session_state.schedule_print_preview = True
-                        st.rerun()
-                with close_col:
-                    if st.button("閉じる", use_container_width=True, key="close_schedule_print_panel"):
-                        st.session_state.schedule_print_open = False
-                        st.session_state.schedule_print_preview = False
-                        st.rerun()
-
-                if not (include_planned or include_actual):
-                    st.info("「予定」か「記録」、または両方にチェックを入れてください。")
-
-                if st.session_state.get("schedule_print_preview", False) and (include_planned or include_actual):
-                    print_html = build_schedule_print_html(
-                        st.session_state.schedule_print_dates, include_planned, include_actual)
-                    st.markdown("#### 印刷プレビュー")
-                    st.components.v1.html(print_html, height=850, scrolling=True)
-
-        render_schedule_and_events(view_date, editable=True, clipboard_at_bottom=True)
+        render_schedule_and_events(view_date_str, editable=True, clipboard_at_bottom=True)
 
     # --- お菓子集めステージ ---
     elif st.session_state.page == "candy_page":
         st.title("🍬 魔法のお菓子瓶ステージ")
 
-        # 選択した瓶の大きさは保存済みの jar_capacity を使用し、画面を開き直しても維持する。
         jar_names = {30: "小さめの瓶", 50: "普通の瓶", 100: "特大の瓶"}
         current_capacity = st.session_state.jar_capacity
         if current_capacity not in jar_names:
             current_capacity = 30
-            st.session_state.jar_capacity = current_capacity
+            st.session_state.jar_capacity = 30
         st.markdown(f"### 🏺 挑戦中：{jar_names[current_capacity]}（{current_capacity}個入り）")
-        st.caption("選んだ瓶は完成後もそのまま！ 別の大きさにしたいときだけ変更できます。")
 
         if st.button("⚙️ 瓶の大きさを変更する", key="open_jar_size_change"):
             st.session_state.show_jar_size_change = not st.session_state.get("show_jar_size_change", False)
@@ -3131,18 +2717,16 @@ elif st.session_state.page in [
             "おめでとう！！°˖✧◝(⁰▿⁰)◜✧˖° 本当に素晴らしい一歩だよ！",
             "凄い！よく頑張ったね！！(∩´狂｀)∩", "もしや君は天才…？✨",
             "グッジョブ！！頑張った自分を褒めてあげてね！💪", "最高！！その調子、その調子！♬٩(*^∀^*)۶♬",
-            "素晴らしい！今日も未来が変わったね！🌟", "やったね！ハードルを乗り越えた君に拍手！👏👏",
-            "最高！100点満点！！👑", "ナイス！！流石だね！！🔥", "凄ーい！山を乗り越えたあなたはもっと強くなるよ🗻！"
         ]
 
         main_col, side_candy_col = st.columns([3, 1])
 
         with main_col:
             st.subheader("🏆 達成した目標を選ぼう！")
-            st.caption(f"目標を達成するとIPPOポイントがもらえます。そのポイントで、お菓子を1個（{CANDY_COST_POINTS} IPPOポイント）ずつ瓶に入れよう！")
+            st.caption(f"目標を達成すると「IPPOポイント」がもらえます。そのポイントで、お菓子を1個（{CANDY_COST_POINTS} IPPOポイント）ずつ瓶に入れよう！")
 
             if not st.session_state.target_list:
-                st.warning("⚠️ まだ目標が登録されていません！「目標登録画面」で目標を作ってきてね！")
+                st.warning("⚠️ まだ目標が登録されていません！「目標登録画面」で目標を作ってね！")
                 selected_target_title = None
             else:
                 target_titles = [t["title"] for t in st.session_state.target_list]
@@ -3150,7 +2734,7 @@ elif st.session_state.page in [
                 selected_target_data = next(
                     t for t in st.session_state.target_list if t["title"] == selected_target_title)
 
-                level_options = [f"{lv}: {task} (💎{lv.split('.')[1]} IPPOポイント)" for lv, task in
+                level_options = [f"{lv}: {task} (💧{lv.split('.')[1]} IPPOポイント)" for lv, task in
                                  selected_target_data["tasks"].items()]
                 selected_level_str = st.selectbox("⭐ どのレベルをクリアした？", level_options)
 
@@ -3164,7 +2748,7 @@ elif st.session_state.page in [
                 if selected_target_title:
                     play_achieve_sound()
                     st.session_state.praise_message = random.choice(praise_words)
-                    st.session_state.ippo_points += chosen_candy_power
+                    st.session_state.aqua_points += chosen_candy_power
                     st.session_state.aqua_goal_log.append({
                         "date": get_now_jst().strftime("%Y/%m/%d %H:%M"),
                         "target": selected_target_title, "level": chosen_lv_key, "task": chosen_task_text,
@@ -3173,7 +2757,7 @@ elif st.session_state.page in [
                     st.session_state.last_completed_task = f"【{selected_target_title} - {chosen_lv_key}】 {chosen_task_text}"
                     add_sticker_for_date(get_now_jst().strftime("%Y/%m/%d"))
                     save_progress()
-                    st.info(f"💎 {chosen_candy_power} IPPOポイントゲット！ 右の「飴を選ぶ」でお菓子を入れよう！")
+                    st.info(f"🍬 {chosen_candy_power} IPPOポイントゲット！ 右の「飴を選ぶ」でお菓子を入れよう！")
                 else:
                     st.error("⚠️ 達成する目標を上のメニューから選んでください！")
 
@@ -3231,13 +2815,12 @@ elif st.session_state.page in [
                                             unsafe_allow_html=True)
 
         with side_candy_col:
-            st.metric("💎 IPPOポイント", st.session_state.ippo_points)
-            st.caption("お菓子集め・水族館・恐竜レースで共通のIPPOポイントです。")
+            st.metric("💧 IPPOポイント", st.session_state.aqua_points)
             st.markdown("### 🍬 飴を選ぶ")
             st.caption(f"お菓子1個 ＝ {CANDY_COST_POINTS} IPPOポイント")
-            can_buy_candy = st.session_state.ippo_points >= CANDY_COST_POINTS
+            can_buy_candy = st.session_state.aqua_points >= CANDY_COST_POINTS
             if not can_buy_candy:
-                st.warning("IPPOポイントが足りないよ！ 目標を達成してIPPOポイントをためよう。")
+                st.warning("IPPOポイントが足りないよ！ 目標を達成してポイントをためよう。")
             candies_spec = [
                 {"emoji": "🍬", "label": "定番キャンディ"},
                 {"emoji": "🍭", "label": "渦巻きロリポップ"},
@@ -3252,12 +2835,12 @@ elif st.session_state.page in [
                     current_time_str = get_now_jst().strftime("%Y/%m/%d %H:%M")
 
                     if (len(st.session_state.jar_candies) < st.session_state.jar_capacity
-                            and st.session_state.ippo_points >= CANDY_COST_POINTS):
-                        st.session_state.ippo_points -= CANDY_COST_POINTS
+                            and st.session_state.aqua_points >= CANDY_COST_POINTS):
+                        st.session_state.aqua_points -= CANDY_COST_POINTS
                         new_candy = {
                             "emoji": candy["emoji"],
                             "date": current_time_str,
-                            "task": f"{CANDY_COST_POINTS} IPPOポイントで入れたお菓子"
+                            "task": f"IPPOポイントで入れたお菓子"
                         }
                         st.session_state.jar_candies.append(new_candy)
                         st.session_state.all_candy_log.append(new_candy)
@@ -3279,18 +2862,16 @@ elif st.session_state.page in [
         next_text = "MAX" if next_req is None else f"あと {next_req - tank_score}ポイント"
         st.markdown(f"### 🌊 水槽 Lv.{tank['level']}『{tank['name']}』")
         st.caption(f"豪華度 {tank_score} ／ 次の水槽Lvまで：{next_text}")
-        st.caption("🌊 展示水槽（魚一覧で展示・非展示を切り替えられます）")
         st.markdown(render_aquarium_tank(), unsafe_allow_html=True)
 
         stat1, stat2, stat3 = st.columns(3)
         with stat1:
-            st.metric("💎 IPPOポイント", st.session_state.ippo_points)
+            st.metric("💧 IPPOポイント", st.session_state.aqua_points)
         with stat2:
             st.metric("🐟 飼っている魚", len(st.session_state.aqua_fish))
         with stat3:
             st.metric("🪸 飾り", len(st.session_state.aqua_decorations))
 
-        # --- 今までに集めた魚やアイテム ---
         with st.expander("📦 今までに集めた魚やアイテム"):
             owned_fish = st.session_state.aqua_fish
             owned_decors = st.session_state.aqua_decorations
@@ -3307,22 +2888,20 @@ elif st.session_state.page in [
                     fish_species.setdefault(f.get("id", f.get("name", "魚")), []).append(f)
                 for members in fish_species.values():
                     first = members[0]
-                    st.write(f"{first.get('emoji', '🐟')} {first.get('name', '魚')}　{'☆' * get_fish_stars(first)}　**{len(members)}/5匹**")
-                st.caption("魚の名前や展示の切り替えは、下の「GETした魚一覧・餌やり」でできます。")
+                    st.write(f"{first.get('emoji', '🐟')} {first.get('name', '魚')} {'☆' * get_fish_stars(first)} **{len(members)}/5匹**")
 
             st.markdown("#### 🪸 飾り")
             if not owned_decors:
-                st.caption("まだ飾りがありません。水槽ショップで買ってみよう！")
+                st.caption("まだ飾りがありません。")
             else:
                 shown_decors = sum(1 for d in owned_decors if d.get("display", True))
                 st.write(f"合計 **{len(owned_decors)}個**（展示中 {shown_decors}個 ／ 非展示 {len(owned_decors) - shown_decors}個）")
-                st.caption("チェックを入れた飾りだけが展示水槽に飾られます。")
                 decor_groups = {}
                 for i, d in enumerate(owned_decors):
                     decor_groups.setdefault(d.get("id", d.get("name", "飾り")), []).append(i)
                 for indices in decor_groups.values():
                     first = owned_decors[indices[0]]
-                    st.write(f"{first.get('emoji', '🪸')} {first.get('name', '飾り')}　**{len(indices)}個**")
+                    st.write(f"{first.get('emoji', '🪸')} {first.get('name', '飾り')} **{len(indices)}個**")
                     for n, i in enumerate(indices, 1):
                         st.checkbox(
                             f"{first.get('emoji', '🪸')} {first.get('name', '飾り')}{n} を展示する",
@@ -3341,18 +2920,18 @@ elif st.session_state.page in [
         st.subheader("🏆 達成した目標を選ぼう！")
         st.caption("目標を達成してIPPOポイントをゲットしよう！")
         if not st.session_state.target_list:
-            st.warning("⚠️ まだ目標が登録されていません！『目標登録』で目標を作ってね！")
+            st.warning("⚠️ まだ目標が登録されていません！")
         else:
             aqua_target_titles = [t["title"] for t in st.session_state.target_list]
             aqua_target_title = st.selectbox("🎯 どの目標を達成した？", aqua_target_titles, key="aqua_target_select")
             aqua_target_data = next(t for t in st.session_state.target_list if t["title"] == aqua_target_title)
-            aqua_level_options = [f"{lv}: {task} (💎{int(lv.replace('Lv.', '').replace('Lv', ''))} IPPOポイント)" for lv, task in aqua_target_data["tasks"].items()]
+            aqua_level_options = [f"{lv}: {task} (💧{int(lv.replace('Lv.', '').replace('Lv', ''))} IPPOポイント)" for lv, task in aqua_target_data["tasks"].items()]
             aqua_level_str = st.selectbox("⭐ どのレベルをクリアした？", aqua_level_options, key="aqua_level_select")
             aqua_lv_key = aqua_level_str.split(":")[0]
             aqua_task_text = aqua_target_data["tasks"][aqua_lv_key]
             if st.button("➕ この1歩を達成した！", type="primary", key="aqua_achieve_button"):
                 earned_ap = int(aqua_lv_key.replace("Lv.", "").replace("Lv", ""))
-                st.session_state.ippo_points += earned_ap
+                st.session_state.aqua_points += earned_ap
                 play_aqua_point_sound(delay=0)
                 st.session_state.aqua_goal_log.append({
                     "date": get_now_jst().strftime("%Y/%m/%d %H:%M"),
@@ -3365,17 +2944,6 @@ elif st.session_state.page in [
                 save_progress()
                 st.success(f"🎉 目標達成！ {earned_ap} IPPOポイントを獲得したよ！")
 
-        # 旧バージョンで貯めた交換券は、既存ユーザーのポイントを失わないよう移行できる。
-        if st.session_state.aqua_reward_queue:
-            with st.expander("🎟️ 以前のバージョンで貯めた交換券"):
-                st.write(f"未交換：{len(st.session_state.aqua_reward_queue)}枚（合計 {sum(int(ticket.get('level', 1)) for ticket in st.session_state.aqua_reward_queue)} IPPOポイント）")
-                if st.button("以前の交換券をまとめて交換", key="aqua_legacy_exchange"):
-                    st.session_state.ippo_points += sum(int(ticket.get("level", 1)) for ticket in st.session_state.aqua_reward_queue)
-                    play_aqua_point_sound(delay=0)
-                    st.session_state.aqua_reward_queue = []
-                    save_progress()
-                    st.rerun()
-
         st.write("---")
         shop_tab, gacha_tab, food_tab, decor_tab, decor_gacha_tab = st.tabs(["🐟 魚ショップ", "🎁 魚ガチャ", "🍚 餌ショップ", "🪸 水槽ショップ", "🎰 飾りガチャ"])
 
@@ -3384,11 +2952,11 @@ elif st.session_state.page in [
             shop_cols = st.columns(2)
             for idx, fish_data in enumerate(AQUA_SHOP_FISH):
                 with shop_cols[idx % 2]:
-                    st.markdown(f"### {fish_data['emoji']} {fish_data['name']}　{'☆' * fish_data['stars']}")
-                    st.write(f"💎 {fish_data['price']} IPPOポイント")
+                    st.markdown(f"### {fish_data['emoji']} {fish_data['name']} {'☆' * fish_data['stars']}")
+                    st.write(f"💧 {fish_data['price']} IPPOポイント")
                     if st.button("購入する", key=f"buy_shop_fish_{fish_data['id']}", use_container_width=True):
-                        if st.session_state.ippo_points >= fish_data["price"]:
-                            st.session_state.ippo_points -= fish_data["price"]
+                        if st.session_state.aqua_points >= fish_data["price"]:
+                            st.session_state.aqua_points -= fish_data["price"]
                             obtained, bonus = obtain_aqua_fish(fish_data)
                             sync_aqua_tank_history()
                             save_progress()
@@ -3404,8 +2972,8 @@ elif st.session_state.page in [
             st.markdown("#### 🎁 ガチャ限定の魚")
             st.write("1回 **5 IPPOポイント**。ショップにはいない魚が出ます！")
             if st.button("🎁 5 IPPOポイントでガチャを回す！", type="primary", use_container_width=True, key="aqua_gacha"):
-                if st.session_state.ippo_points >= 5:
-                    st.session_state.ippo_points -= 5
+                if st.session_state.aqua_points >= 5:
+                    st.session_state.aqua_points -= 5
                     got = random.choices(AQUA_GACHA_FISH, weights=[f["weight"] for f in AQUA_GACHA_FISH], k=1)[0]
                     play_aqua_gacha_sound(get_fish_stars(got), delay=0)
                     obtained, bonus = obtain_aqua_fish(got)
@@ -3418,7 +2986,6 @@ elif st.session_state.page in [
                     st.rerun()
                 else:
                     st.warning("IPPOポイントが足りません！")
-            st.caption("ガチャとショップでは魚の種類を分けています。")
 
         with food_tab:
             st.markdown("#### 🍚 魚を育てる餌")
@@ -3426,24 +2993,16 @@ elif st.session_state.page in [
             for idx, (food_key, food) in enumerate(AQUA_FOOD.items()):
                 with food_cols[idx]:
                     st.markdown(f"### {food['emoji']} {food['name']}")
-                    if food_key == "bundle":
-                        st.write(f"展示水槽の魚全員に1回ずつ ／ {food['price']} IPPOポイント")
-                    elif food_key == "grand_bundle":
-                        st.write(f"所持している魚全員（非展示も含む）に1回ずつ ／ {food['price']} IPPOポイント")
-                        st.write(f"1匹につき **+{food['feed_points']}成長ポイント**（魚が多いほどお得！）")
-                    else:
-                        st.write(f"{food['pack']}回分 ／ {food['price']} IPPOポイント")
-                        st.write(f"1回の餌やりで **+{food['feed_points']}成長ポイント**")
+                    st.write(f"{food['price']} IPPOポイント")
                     if st.button("購入する", key=f"buy_food_{food_key}", use_container_width=True):
-                        if st.session_state.ippo_points >= food["price"]:
-                            st.session_state.ippo_points -= food["price"]
+                        if st.session_state.aqua_points >= food["price"]:
+                            st.session_state.aqua_points -= food["price"]
                             st.session_state.aqua_food_inventory[food_key] = st.session_state.aqua_food_inventory.get(food_key, 0) + food["pack"]
                             save_progress()
-                            st.success(f"{food['name']}を{food['pack']}回分購入しました！")
+                            st.success(f"{food['name']}を購入しました！")
                             st.rerun()
                         else:
                             st.warning("IPPOポイントが足りません！")
-            st.write(f"通常餌：{st.session_state.aqua_food_inventory.get('normal', 0)}回　／　高級餌：{st.session_state.aqua_food_inventory.get('premium', 0)}回　／　みんなの餌の塊：{st.session_state.aqua_food_inventory.get('bundle', 0)}個　／　全体の餌の塊：{st.session_state.aqua_food_inventory.get('grand_bundle', 0)}個")
 
         with decor_tab:
             st.markdown("#### 🪸 水槽の飾り")
@@ -3453,8 +3012,8 @@ elif st.session_state.page in [
                     st.markdown(f"### {decor['emoji']} {decor['name']}")
                     st.write(f"{decor['price']} IPPOポイント ／ 豪華度 +{decor['score']}")
                     if st.button("飾る", key=f"buy_decor_{decor['id']}", use_container_width=True):
-                        if st.session_state.ippo_points >= decor["price"]:
-                            st.session_state.ippo_points -= decor["price"]
+                        if st.session_state.aqua_points >= decor["price"]:
+                            st.session_state.aqua_points -= decor["price"]
                             st.session_state.aqua_decorations.append({"id": decor["id"], "name": decor["name"], "emoji": decor["emoji"], "score": decor["score"], "display": True})
                             sync_aqua_tank_history()
                             save_progress()
@@ -3465,22 +3024,19 @@ elif st.session_state.page in [
 
         with decor_gacha_tab:
             st.markdown("#### 🎰 ガチャ限定の飾り")
-            st.write(f"1回 **{AQUA_DECOR_GACHA_PRICE} IPPOポイント**。水槽ショップにはない飾りが出ます！")
-            st.caption("☆の数がそのまま豪華度になります（☆1なら+1、☆3なら+3、☆5なら+5）。")
-
-            # 直前のガチャ結果は、画面更新後にここで表示・効果音を鳴らす
+            st.write(f"1回 **{AQUA_DECOR_GACHA_PRICE} IPPOポイント**。")
             decor_result = st.session_state.pop("aqua_decor_gacha_result", None)
             if decor_result:
                 play_aqua_gacha_sound(decor_result["stars"], delay=0)
-                st.success(f"🎉 {'☆' * decor_result['stars']}！ {decor_result['emoji']} {decor_result['name']}が出ました！（豪華度 +{decor_result['stars']}）")
+                st.success(f"🎉 {'☆' * decor_result['stars']}！ {decor_result['emoji']} {decor_result['name']}が出ました！")
 
             if not AQUA_GACHA_DECORATIONS:
-                st.info("🚧 飾りガチャは準備中です！（data/goods.json にガチャの飾りを入れると遊べます）")
+                st.info("🚧 飾りガチャは準備中です！")
             else:
                 if st.button(f"🎰 {AQUA_DECOR_GACHA_PRICE} IPPOポイントで飾りガチャを回す！", type="primary",
                              use_container_width=True, key="aqua_decor_gacha"):
-                    if st.session_state.ippo_points >= AQUA_DECOR_GACHA_PRICE:
-                        st.session_state.ippo_points -= AQUA_DECOR_GACHA_PRICE
+                    if st.session_state.aqua_points >= AQUA_DECOR_GACHA_PRICE:
+                        st.session_state.aqua_points -= AQUA_DECOR_GACHA_PRICE
                         got = random.choices(AQUA_GACHA_DECORATIONS,
                                              weights=[g["weight"] for g in AQUA_GACHA_DECORATIONS], k=1)[0]
                         st.session_state.aqua_decorations.append({
@@ -3493,11 +3049,9 @@ elif st.session_state.page in [
                         st.rerun()
                     else:
                         st.warning("IPPOポイントが足りません！")
-            st.caption("ガチャで出た飾りは、そのまま水槽に飾られます。「今までに集めた魚やアイテム」で展示のON/OFFができます。")
 
         st.write("---")
         st.markdown("### 🐟 GETした魚一覧・餌やり")
-        # 魚の成長通知はここ（餌やり欄）に表示する。
         render_aqua_growth_notifications()
         if not st.session_state.aqua_fish:
             st.info("まずはショップかガチャで魚を迎えよう！")
@@ -3506,183 +3060,19 @@ elif st.session_state.page in [
             species_groups = {}
             for i, fish in enumerate(fish_list):
                 species_groups.setdefault(fish.get("id", fish.get("name", "魚")), []).append(i)
-            st.caption("魚の種類を開くと、1匹ずつ名前・展示設定を変更できます。餌は下から複数選択できます。")
             for species_id, indices in species_groups.items():
                 first = fish_list[indices[0]]
-                with st.expander(f"{first.get('emoji', '🐟')} {first.get('name', '魚')}　{'☆' * get_fish_stars(first)}　（{len(indices)}/5匹）"):
+                with st.expander(f"{first.get('emoji', '🐟')} {first.get('name', '魚')} {'☆' * get_fish_stars(first)} （{len(indices)}/5匹）"):
                     for i in indices:
                         fish = fish_list[i]
-                        st.markdown(f"**{fish_display_name(fish)}**　{fish.get('size_mm', 10.0) / 10:.2f}cm　成長 {fish.get('feed_points', 0) % 5}/5pt")
-                        col_name, col_display = st.columns([3, 1])
-                        with col_name:
-                            new_name = st.text_input("名前（空欄ならデフォルト名）", value=fish.get("custom_name", ""),
-                                                     key=f"aqua_fish_name_{i}", placeholder=fish.get("default_name", "魚"))
-                        with col_display:
-                            show = st.checkbox("展示する", value=fish.get("display", True), key=f"aqua_fish_show_{i}")
+                        st.markdown(f"**{fish_display_name(fish)}** {fish.get('size_mm', 10.0) / 10:.2f}cm")
+                        new_name = st.text_input("名前", value=fish.get("custom_name", ""),
+                                                 key=f"aqua_fish_name_{i}", placeholder=fish.get("default_name", "魚"))
+                        show = st.checkbox("展示する", value=fish.get("display", True), key=f"aqua_fish_show_{i}")
                         if new_name != fish.get("custom_name", "") or show != fish.get("display", True):
                             fish["custom_name"] = new_name.strip()
                             fish["display"] = show
                             save_progress()
-                    st.caption("この種類は最大5匹まで所持できます。")
-            st.markdown("#### 🍚 餌やり")
-            st.info("💡 展示中の魚はここから直接餌をあげられます。展示していない魚は、下の「複数の魚にまとめて餌をあげる」から選んでください。")
-
-            normal_stock = st.session_state.aqua_food_inventory.get("normal", 0)
-            premium_stock = st.session_state.aqua_food_inventory.get("premium", 0)
-            bundle_stock = st.session_state.aqua_food_inventory.get("bundle", 0)
-            grand_bundle_stock = st.session_state.aqua_food_inventory.get("grand_bundle", 0)
-
-            # 展示中の魚だけ、直接餌をあげられるように表示する。
-            displayed_fish_indices = [
-                i for i, fish in enumerate(fish_list)
-                if fish.get("display", True)
-            ]
-            if displayed_fish_indices:
-                st.markdown("##### 🐠 展示中の魚に直接餌をあげる")
-                for i in displayed_fish_indices:
-                    fish = fish_list[i]
-                    stars = get_fish_stars(fish)
-                    size_cm = fish.get("size_mm", 10.0) / 10
-                    progress = fish.get("feed_points", 0) % 5
-                    st.markdown(
-                        f"**{fish_display_name(fish)}**　{'☆' * stars}　"
-                        f"現在 **{size_cm:.1f}cm**　（次の0.1cmまで {progress}/5pt）"
-                    )
-                    feed_col1, feed_col2, feed_col3 = st.columns([2, 2, 2])
-                    with feed_col1:
-                        if st.button(
-                            f"🫧 通常餌をあげる（残り {normal_stock}）",
-                            disabled=normal_stock <= 0,
-                            key=f"aqua_feed_one_normal_{i}",
-                            use_container_width=True,
-                        ):
-                            st.session_state.aqua_food_inventory["normal"] -= 1
-                            give_fish_food(i, "normal")
-                            sync_aqua_tank_history()
-                            save_progress()
-                            st.rerun()
-                    with feed_col2:
-                        if st.button(
-                            f"✨ 高級餌をあげる（残り {premium_stock}）",
-                            disabled=premium_stock <= 0,
-                            key=f"aqua_feed_one_premium_{i}",
-                            use_container_width=True,
-                        ):
-                            st.session_state.aqua_food_inventory["premium"] -= 1
-                            give_fish_food(i, "premium")
-                            sync_aqua_tank_history()
-                            save_progress()
-                            st.rerun()
-                    with feed_col3:
-                        st.write(f"成長ポイント：**{fish.get('feed_points', 0) % 5}/5**")
-            else:
-                st.caption("現在、展示中の魚はいません。下のまとめて餌やりから魚を選べます。")
-
-            st.markdown("##### 👥 複数の魚にまとめて餌をあげる")
-            st.caption("展示していない魚も、ここから選んで餌をあげられます。展示中の魚もまとめて選択できます。")
-            fish_indices = st.multiselect(
-                "① 餌をあげる魚を選ぶ",
-                options=list(range(len(fish_list))),
-                format_func=lambda i: f"{fish_list[i]['emoji']} {fish_display_name(fish_list[i])}（{'☆' * get_fish_stars(fish_list[i])}・{fish_list[i].get('size_mm', 10.0) / 10:.1f}cm・{'展示中' if fish_list[i].get('display', True) else '非展示'}）",
-                key="aqua_feed_fish_choices",
-            )
-            st.caption("② 選んだ魚1匹あたりに、何個あげるか指定します。")
-            col_n, col_p = st.columns(2)
-            with col_n:
-                normal_count = st.number_input(
-                    "🫧 通常餌（1匹あたり）",
-                    min_value=0,
-                    max_value=normal_stock,
-                    value=0,
-                    step=1,
-                    key="aqua_feed_normal_count",
-                )
-            with col_p:
-                premium_count = st.number_input(
-                    "✨ 高級餌（1匹あたり）",
-                    min_value=0,
-                    max_value=premium_stock,
-                    value=0,
-                    step=1,
-                    key="aqua_feed_premium_count",
-                )
-            needed_normal = len(fish_indices) * normal_count
-            needed_premium = len(fish_indices) * premium_count
-            if fish_indices:
-                st.write(f"③ 必要な餌：通常 **{needed_normal}個** ／ 高級 **{needed_premium}個**")
-            else:
-                st.caption("魚を選ぶと必要な餌の数が表示されます。")
-            if st.button(
-                "🐟 選んだ魚にまとめて餌をあげる",
-                type="primary",
-                disabled=not fish_indices or (normal_count + premium_count == 0),
-                key="aqua_feed_selected",
-                use_container_width=True,
-            ):
-                if needed_normal > normal_stock or needed_premium > premium_stock:
-                    st.warning("選んだ魚の数に対して餌が足りません。数を調整してね！")
-                else:
-                    st.session_state.aqua_food_inventory["normal"] -= needed_normal
-                    st.session_state.aqua_food_inventory["premium"] -= needed_premium
-                    for i in fish_indices:
-                        if normal_count:
-                            give_fish_food(i, "normal", normal_count, play_sound=False)
-                        if premium_count:
-                            give_fish_food(i, "premium", premium_count, play_sound=False)
-                    play_aqua_feed_sound(delay=0)
-                    sync_aqua_tank_history()
-                    save_progress()
-                    st.success(f"🐠 {len(fish_indices)}匹に餌をあげました！")
-                    st.rerun()
-
-            st.write("---")
-            st.markdown("#### 🍙 みんなの餌の塊")
-            displayed_indices = [i for i, fish in enumerate(fish_list) if fish.get("display", True)]
-            st.caption("展示水槽にいる魚だけに、1匹あたり+3成長ポイント。")
-            st.write(f"展示中：{len(displayed_indices)}匹 ／ 持っている餌の塊：**{bundle_stock}個**")
-            if st.button("🍙 展示水槽の魚全員にあげる",
-                         disabled=bundle_stock == 0 or not displayed_indices,
-                         key="aqua_feed_bundle", use_container_width=True):
-                if st.session_state.aqua_food_inventory.get("bundle", 0) > 0 and displayed_indices:
-                    st.session_state.aqua_food_inventory["bundle"] -= 1
-                    for i in displayed_indices:
-                        give_fish_food(i, "bundle", play_sound=False)
-                    play_aqua_feed_sound(delay=0)
-                    sync_aqua_tank_history()
-                    save_progress()
-                    st.success(f"🎉 展示中の{len(displayed_indices)}匹に餌をあげました！")
-                    st.rerun()
-
-            st.markdown("#### 🎁 全体の餌の塊")
-            st.caption("非展示の魚も含め、所持しているすべての魚に1匹あたり+3成長ポイント。")
-            st.write(f"持っている全体の餌の塊：**{grand_bundle_stock}個**")
-            if st.button("🎁 所持している魚全員にあげる",
-                         disabled=grand_bundle_stock == 0,
-                         key="aqua_feed_grand_bundle", use_container_width=True):
-                if st.session_state.aqua_food_inventory.get("grand_bundle", 0) > 0:
-                    st.session_state.aqua_food_inventory["grand_bundle"] -= 1
-                    for i in range(len(fish_list)):
-                        give_fish_food(i, "grand_bundle", play_sound=False)
-                    play_aqua_feed_sound(delay=0)
-                    sync_aqua_tank_history()
-                    save_progress()
-                    st.success(f"🎉 所持している{len(fish_list)}匹全員に餌をあげました！")
-                    st.rerun()
-
-        st.write("---")
-        st.markdown("### 📈 水槽レベルアップ条件")
-        # 達成済みのレベルと、現在のレベルの一つ上だけ公開する。
-        for level_data in AQUA_TANK_LEVELS:
-            level = level_data["level"]
-            if level <= tank["level"]:
-                achieved = tank_history.get(str(level))
-                date_text = f"達成日：{achieved}" if achieved else "達成日：記録なし（旧データ）"
-                st.write(f"✅ **Lv.{level} {level_data['name']}**：豪華度 {level_data['required']} ／ {date_text}")
-            elif level == tank["level"] + 1:
-                remaining = max(0, level_data["required"] - tank_score)
-                st.info(f"🔓 次の水槽 **Lv.{level} {level_data['name']}**：豪華度 {level_data['required']} 必要（あと {remaining}）")
-        if tank["level"] == AQUA_TANK_LEVELS[-1]["level"]:
-            st.success("🏆 最高レベルに到達！")
 
     # --- 恐竜レースページ ---
     elif st.session_state.page == "dino_page":
@@ -3690,7 +3080,6 @@ elif st.session_state.page in [
         ensure_dino_data()
         partner = get_dino_partner()
 
-        # 効果音・演出は、画面更新後に一度だけ
         dino_sound_kind = st.session_state.pop("dino_sound", None)
         if dino_sound_kind == "finish":
             play_jar_full_sound(delay=0)
@@ -3704,12 +3093,9 @@ elif st.session_state.page in [
         elif dino_sound_kind == "click":
             play_click_sound(delay=0)
 
-        st.caption("サイコロで進むすごろくレース！ 1マス＝100m。戻るマスはないので、安心して進もう🦖")
-
-        # ポイント・パートナー表示
         info1, info2, info3 = st.columns(3)
         with info1:
-            st.metric("💎 IPPOポイント", st.session_state.ippo_points)
+            st.metric("💧 IPPOポイント", st.session_state.aqua_points)
         with info2:
             if partner:
                 st.metric("🤝 パートナー", f"{DINO_SPECIES[partner['species']]['emoji']} {dino_display_name(partner)}")
@@ -3718,17 +3104,15 @@ elif st.session_state.page in [
         with info3:
             st.metric("🎲 サイコロ1回", f"{DINO_DICE_COST} IPPOポイント")
 
-        # 目標を達成して共通のIPPOポイントをゲット
         with st.expander("🏆 目標を達成してIPPOポイントをゲット！"):
-            st.caption("達成した目標のレベルぶんだけIPPOポイントがもらえます。")
             if not st.session_state.target_list:
-                st.warning("⚠️ まだ目標が登録されていません！『目標登録』で目標を作ってね！")
+                st.warning("⚠️ まだ目標が登録されていません！")
             else:
                 dino_target_titles = [t["title"] for t in st.session_state.target_list]
                 dino_target_title = st.selectbox("🎯 どの目標を達成した？", dino_target_titles, key="dino_target_select")
                 dino_target_data = next(t for t in st.session_state.target_list if t["title"] == dino_target_title)
                 dino_level_options = [
-                    f"{lv}: {task} (💎{int(lv.replace('Lv.', '').replace('Lv', ''))} IPPOポイント)"
+                    f"{lv}: {task} (💧{int(lv.replace('Lv.', '').replace('Lv', ''))} IPPOポイント)"
                     for lv, task in dino_target_data["tasks"].items()
                 ]
                 dino_level_str = st.selectbox("⭐ どのレベルをクリアした？", dino_level_options, key="dino_level_select")
@@ -3736,7 +3120,7 @@ elif st.session_state.page in [
                 dino_task_text = dino_target_data["tasks"][dino_lv_key]
                 if st.button("➕ この1歩を達成した！", type="primary", key="dino_achieve_button"):
                     dino_earned = int(dino_lv_key.replace("Lv.", "").replace("Lv", ""))
-                    st.session_state.ippo_points += dino_earned
+                    st.session_state.aqua_points += dino_earned
                     st.session_state.aqua_goal_log.append({
                         "date": get_now_jst().strftime("%Y/%m/%d %H:%M"),
                         "target": dino_target_title, "level": dino_lv_key, "task": dino_task_text,
@@ -3748,7 +3132,6 @@ elif st.session_state.page in [
                     save_progress()
                     st.rerun()
 
-        # 直前の出来事（サイコロの結果など）
         dino_messages = st.session_state.pop("dino_messages", [])
         if dino_messages:
             with st.container(border=True):
@@ -3757,7 +3140,6 @@ elif st.session_state.page in [
 
         race_tab, dino_tab, dino_shop_tab = st.tabs(["🏁 レース", "🦖 恐竜たち", "🍖 恐竜ショップ"])
 
-        # ---------------- レース ----------------
         with race_tab:
             course_keys = ["beginner", "intermediate", "advanced"] + [
                 k for k in ("survival", "relax")
@@ -3770,7 +3152,7 @@ elif st.session_state.page in [
             )
             course = DINO_COURSES[course_key]
             if not course["ready"]:
-                st.info(f"🚧 {course['tier']} {course['name']} は現在準備中です！お楽しみに！")
+                st.info(f"🚧 {course['tier']} {course['name']} は現在準備中です！")
             elif partner is None:
                 st.warning("🤝 まずは『恐竜たち』タブで、一緒に走るパートナーを選んでね！")
             else:
@@ -3779,32 +3161,27 @@ elif st.session_state.page in [
                 partner_species = DINO_SPECIES[partner["species"]]
                 partner_level = dino_level(partner)
                 st.markdown(f"#### {partner_species['emoji']} {dino_display_name(partner)}（Lv.{partner_level}）と一緒に走ろう！")
-                st.write(f"📍 現在地：**{race['pos'] * 100}m / {goal * 100}m**（{race['pos']}/{goal}マス）　🏁 完走 {race['laps']}回")
+                st.write(f"📍 現在地：**{race['pos'] * 100}m / {goal * 100}m**")
                 st.progress(min(race["pos"] / goal, 1.0))
                 st.markdown(render_dino_board(course_key, race["pos"], partner_species["emoji"]), unsafe_allow_html=True)
-                st.caption("💨 追い風　🎲 もう一回　🍖 食べ物　⚔️ バトル（力試し・挑むかは自由）　🏁 ゴール")
                 st.write("")
 
-                # 模型恐竜との練習はレース進行に関係なくいつでも開始できる
                 if st.session_state.get("dino_battle") is None and st.button(
-                    "🧸 模型の恐竜と練習バトル（いつでも挑戦・報酬なし）",
+                    "🧸 模型の恐竜と練習バトル（いつでも挑戦）",
                     use_container_width=True, key="dino_practice_battle"):
                     start_dino_practice_battle(partner)
                     st.rerun()
 
                 battle = st.session_state.get("dino_battle")
                 if battle:
-                    # ===== バトル中 =====
                     enemy = battle["enemy"]
                     st.markdown(f"### ⚔️ 力試し！ vs {enemy['emoji']} {enemy['name']}（Lv.{enemy['level']}）")
                     col_me, col_enemy = st.columns(2)
                     with col_me:
                         st.markdown(f"**{partner_species['emoji']} {dino_display_name(partner)}**")
-                        st.caption(f"HP {battle['player_hp']} / {battle['player_max_hp']}")
                         st.progress(battle["player_hp"] / battle["player_max_hp"])
                     with col_enemy:
                         st.markdown(f"**{enemy['emoji']} {enemy['name']}**")
-                        st.caption(f"HP {battle['enemy_hp']} / {enemy['max_hp']}")
                         st.progress(battle["enemy_hp"] / enemy["max_hp"])
                     with st.container(border=True):
                         for line in battle["log"]:
@@ -3817,7 +3194,6 @@ elif st.session_state.page in [
                             st.rerun()
                     else:
                         special_left = battle.get("special_left", 0)
-                        st.caption(f"🌟 固有技『{partner_species['special_name']}』：{partner_species['special_text']}（この力試しであと {special_left}回）")
                         battle_actions = [
                             ("attack", "⚔️ こうげき"), ("defend", "🛡️ ぼうぎょ"),
                             ("special", f"🌟 固有技({special_left})"), ("flee", "🏃 にげる"),
@@ -3828,16 +3204,10 @@ elif st.session_state.page in [
                                              disabled=(action_key == "special" and special_left <= 0)):
                                     resolve_dino_battle_turn(partner, action_key)
                                     st.rerun()
-                        with st.expander("📖 戦い方のルール"):
-                            st.write("⚔️ **こうげき**：1〜5のダメージ。ただし相手がぼうぎょだと反撃される！")
-                            st.write("🛡️ **ぼうぎょ**：相手がこうげきなら攻撃を止めて大きな反撃！ でも相手が固有技・強打のときは防げない。")
-                            st.write(f"🌟 **固有技**：恐竜ごとの特別な技。ぼうぎょされても止められない。1回の力試しで{DINO_SPECIAL_USES}回まで。")
-                            st.write("🏃 **にげる**：いつでも安全に逃げられる。")
 
                 elif race["pending_battle"]:
-                    # ===== バトルマスに到着（挑むかどうかは自由）=====
                     pending = race["pending_battle"]
-                    st.warning(f"⚔️ 野良の {pending['emoji']} {pending['name']}（Lv.{pending['level']}）があらわれた！ 力試しに挑戦する？")
+                    st.warning(f"⚔️ 野良の {pending['emoji']} {pending['name']}（Lv.{pending['level']}）があらわれた！")
                     fight_col, skip_col = st.columns(2)
                     with fight_col:
                         if st.button("⚔️ 力試しに挑む！", type="primary", use_container_width=True, key="dino_battle_accept"):
@@ -3849,16 +3219,14 @@ elif st.session_state.page in [
                             st.rerun()
 
                 elif race["finished"]:
-                    # ===== ゴール =====
-                    st.success(f"🏁 『{course['name']}』を完走しました！ よくがんばったね！")
+                    st.success(f"🏁 『{course['name']}』を完走しました！")
                     if st.button("🔄 もう一度走る", type="primary", use_container_width=True, key=f"dino_restart_{course_key}"):
                         restart_dino_race(course_key)
                         st.rerun()
 
                 else:
-                    # ===== サイコロ =====
                     free_rolls = race["free_rolls"]
-                    can_roll = free_rolls > 0 or st.session_state.ippo_points >= DINO_DICE_COST
+                    can_roll = free_rolls > 0 or st.session_state.aqua_points >= DINO_DICE_COST
                     if free_rolls > 0:
                         dice_label = f"🎲 サイコロを振る！（無料・あと{free_rolls}回）"
                     else:
@@ -3867,55 +3235,16 @@ elif st.session_state.page in [
                                  disabled=not can_roll, key=f"dino_roll_{course_key}"):
                         roll_dino_dice(course_key)
                         st.rerun()
-                    if not can_roll:
-                        st.caption("IPPOポイントが足りません。上の『目標を達成してIPPOポイントをゲット！』でIPPOポイントを貯めよう！")
-                    special_stock = int(st.session_state.get("dino_special_dice", 0))
-                    if special_stock > 0:
-                        special_value = st.selectbox("🌟 スペシャルダイスの目を選ぶ", [1, 2, 3, 4, 5, 6], key=f"dino_special_value_{course_key}")
-                        if st.button(f"🌟 スペシャルダイスを使う（残り{special_stock}個）", use_container_width=True,
-                                     disabled=bool(race["finished"] or race["pending_battle"]), key=f"dino_special_roll_{course_key}"):
-                            roll_dino_dice(course_key, special_dice_value=int(special_value))
-                            st.rerun()
-                    else:
-                        st.caption("🌟 スペシャルダイスはショップで購入できます（1個5 IPPOポイント）。")
-                    st.caption(f"✨ {partner_species['passive_name']}：{partner_species['passive_text']}（発動確率 {int(dino_passive_chance(partner_level) * 100)}%）"
-                               if partner["species"] != "stegosaurus" else
-                               f"✨ {partner_species['passive_name']}：{partner_species['passive_text']}")
 
-        # ---------------- 恐竜たち ----------------
         with dino_tab:
             st.markdown("#### 🦖 あなたの恐竜たち")
-            st.caption("名前は自由につけられます。パートナーに選んだ恐竜が、レースとバトルに出ます。")
             for dino in st.session_state.dino_owned:
                 species = DINO_SPECIES[dino["species"]]
                 level = dino_level(dino)
                 is_partner = dino["id"] == st.session_state.dino_partner
-                title = f"{species['emoji']} {dino_display_name(dino)}　Lv.{level}" + ("　🤝パートナー" if is_partner else "")
+                title = f"{species['emoji']} {dino_display_name(dino)} Lv.{level}" + (" 🤝パートナー" if is_partner else "")
                 with st.expander(title, expanded=is_partner):
-                    st.write(f"種類：**{species['name']}**　／　最大HP：**{dino_max_hp(dino)}**　／　攻撃補正：+{dino_attack(dino)}　／　素早さ：{dino_speed(dino)}")
-                    st.caption(
-                        f"📈 レベルアップ・アイテムのボーナス：❤️HP +{int(dino.get('hp_bonus', 0))}　"
-                        f"⚔️攻撃力 +{int(dino.get('attack_bonus', 0))}　💨素早さ +{int(dino.get('speed_bonus', 0))}"
-                    )
-                    if st.checkbox("📜 成長履歴を見る", key=f"dino_growth_show_{dino['id']}"):
-                        growth_log = dino.get("growth_log", [])
-                        if not growth_log:
-                            st.caption("まだ成長の記録がありません。レベルが上がるとここに残ります！")
-                        for growth_entry in reversed(growth_log):   # 新しい順
-                            st.write(f"🗓️ {growth_entry['date']}　{growth_entry['text']}")
-                    if level >= DINO_MAX_LEVEL:
-                        st.progress(1.0)
-                        st.caption(f"経験値 {dino.get('exp', 0)}（最大レベル！）")
-                    else:
-                        base_exp = dino_exp_for_level(level)
-                        next_exp = dino_exp_for_level(level + 1)
-                        st.progress((dino.get("exp", 0) - base_exp) / (next_exp - base_exp))
-                        st.caption(f"経験値 {dino.get('exp', 0)}（次のレベルまであと {next_exp - dino.get('exp', 0)}）")
-                    st.write(f"✨ **固有能力『{species['passive_name']}』**：{species['passive_text']}")
-                    if dino["species"] != "stegosaurus":
-                        st.caption(f"　発動確率：{int(dino_passive_chance(level) * 100)}%（レベルが上がると高くなる）")
-                    st.write(f"🌟 **固有技『{species['special_name']}』**：{species['special_text']}")
-                    new_name = st.text_input("名前（空欄なら元の名前）", value=dino.get("custom_name", ""),
+                    new_name = st.text_input("名前", value=dino.get("custom_name", ""),
                                              key=f"dino_name_{dino['id']}", placeholder=species["name"])
                     if new_name.strip() != dino.get("custom_name", ""):
                         dino["custom_name"] = new_name.strip()
@@ -3926,119 +3255,22 @@ elif st.session_state.page in [
                         save_progress()
                         st.rerun()
 
-        # ---------------- 恐竜ショップ ----------------
         with dino_shop_tab:
             st.markdown("#### 🍖 恐竜のごはん")
-            st.caption("餌をあげると経験値がたまって、恐竜のレベルが上がります。レースのマスに進んだり、力試しに勝ったりしても経験値がもらえるよ！")
             food_cols = st.columns(len(DINO_FOOD))
             for food_col, (food_key, food) in zip(food_cols, DINO_FOOD.items()):
                 with food_col:
                     st.markdown(f"### {food['emoji']} {food['name']}")
-                    st.write(f"{food['price']} IPPOポイント ／ 経験値 +{food['exp']}")
-                    st.caption(f"持っている数：{st.session_state.dino_food.get(food_key, 0)}個")
+                    st.write(f"{food['price']} IPPOポイント")
                     if st.button("購入する", key=f"dino_buy_{food_key}", use_container_width=True):
-                        if st.session_state.ippo_points >= food["price"]:
-                            st.session_state.ippo_points -= food["price"]
+                        if st.session_state.aqua_points >= food["price"]:
+                            st.session_state.aqua_points -= food["price"]
                             st.session_state.dino_food[food_key] = st.session_state.dino_food.get(food_key, 0) + 1
                             save_progress()
                             st.success(f"{food['emoji']} {food['name']}を買いました！")
                             st.rerun()
                         else:
                             st.warning("IPPOポイントが足りません！")
-
-            st.write("---")
-            st.markdown("#### 🌟 スペシャルダイス")
-            st.write("**スペシャルダイス** — 5 IPPOポイント ／ 1回だけ、1〜6から好きな目を選べます。")
-            st.caption(f"所持数：{int(st.session_state.get('dino_special_dice', 0))}個")
-            if st.button("🌟 スペシャルダイスを購入（5 IPPOポイント）", key="dino_buy_special_dice", use_container_width=True):
-                if st.session_state.ippo_points >= 5:
-                    st.session_state.ippo_points -= 5
-                    st.session_state.dino_special_dice = int(st.session_state.get("dino_special_dice", 0)) + 1
-                    save_progress()
-                    st.success("スペシャルダイスを1個購入しました！レースで好きな目を選んで使えます。")
-                    st.rerun()
-                else:
-                    st.warning("IPPOポイントが足りません！")
-
-            st.write("---")
-            st.markdown("#### 🏁 コースショップ")
-            st.caption("IPPOポイントで新しいすごろくコースを解放できます。")
-            for course_key in ("survival", "relax"):
-                course_data = DINO_COURSES[course_key]
-                owned_course = course_key in st.session_state.get("dino_unlocked_courses", [])
-                st.markdown(f"**{('🏆' if course_key == 'survival' else '🌸')} {course_data['name']}** — {course_data['price']} IPPOポイント")
-                st.caption("バトルマスがたくさん！手ごわいサバイバル。" if course_key == "survival" else "和むイベントマスがたくさんある、のんびりコース。")
-                if owned_course:
-                    st.success("購入済み")
-                elif st.button(f"購入する（{course_data['price']} IPPOポイント）", key=f"dino_course_buy_{course_key}", use_container_width=True):
-                    if st.session_state.ippo_points >= course_data["price"]:
-                        st.session_state.ippo_points -= course_data["price"]
-                        st.session_state.setdefault("dino_unlocked_courses", []).append(course_key)
-                        save_progress()
-                        st.success(f"{course_data['name']}を解放しました！")
-                        st.rerun()
-                    else:
-                        st.warning("IPPOポイントが足りません！")
-
-            st.write("---")
-            st.markdown("#### 🧪 能力アップアイテム")
-            stat_target_idx = st.selectbox(
-                "能力を上げる恐竜", list(range(len(st.session_state.dino_owned))),
-                format_func=lambda i: f"{DINO_SPECIES[st.session_state.dino_owned[i]['species']]['emoji']} {dino_display_name(st.session_state.dino_owned[i])}",
-                key="dino_stat_target",
-            )
-            for item in DINO_SHOP_DATA["stat_items"]:
-                st.markdown(f"**{item['emoji']} {item['name']}** — {item['price']} IPPOポイント ／ 経験値 +{item['exp']} ／ 能力 +{item['amount']}")
-                if st.button(f"{item['name']}を購入して使う", key=f"dino_stat_buy_{item['id']}", use_container_width=True):
-                    if st.session_state.ippo_points >= item["price"]:
-                        st.session_state.ippo_points -= item["price"]
-                        target = st.session_state.dino_owned[stat_target_idx]
-                        stat_key = {"hp":"hp_bonus", "attack":"attack_bonus", "speed":"speed_bonus"}[item["stat"]]
-                        target[stat_key] = int(target.get(stat_key, 0)) + item["amount"]
-                        record_dino_growth(target, f"{item['emoji']} {item['name']}を使った！ {DINO_GROWTH_STATS[item['stat']]['label']} +{item['amount']}")
-                        add_dino_exp(target, item["exp"])
-                        add_dino_message(f"{item['emoji']} {dino_display_name(target)}に{item['name']}を使った！ 経験値 +{item['exp']}、{item['stat']} +{item['amount']}！")
-                        save_progress()
-                        st.rerun()
-                    else:
-                        st.warning("IPPOポイントが足りません！")
-
-            st.write("---")
-            st.markdown("#### 🍇 木の実を食べる")
-            st.caption("力試しの勝利でもらった木の実を食べると、対応する能力が上がるよ！")
-            berry_target_idx = st.selectbox(
-                "木の実を食べる恐竜", list(range(len(st.session_state.dino_owned))),
-                format_func=lambda i: f"{DINO_SPECIES[st.session_state.dino_owned[i]['species']]['emoji']} {dino_display_name(st.session_state.dino_owned[i])}（Lv.{dino_level(st.session_state.dino_owned[i])}）",
-                key="dino_berry_target",
-            )
-            for berry_key, berry in DINO_BERRIES.items():
-                stock = st.session_state.get("dino_berries", {}).get(berry_key, 0)
-                amount = 2 if berry_key.endswith("_plus") else 1
-                if st.button(f"{berry['emoji']} {berry['name']}（残り{stock}個・{berry['label']}+{amount}）を食べる",
-                             disabled=stock <= 0, key=f"dino_berry_eat_{berry_key}", use_container_width=True):
-                    eat_dino_berry(st.session_state.dino_owned[berry_target_idx], berry_key)
-                    st.rerun()
-
-            st.write("---")
-            st.markdown("#### 🍽️ 餌をあげる")
-            owned_dinos = st.session_state.dino_owned
-            feed_index = st.selectbox(
-                "どの恐竜にあげる？", list(range(len(owned_dinos))),
-                format_func=lambda i: f"{DINO_SPECIES[owned_dinos[i]['species']]['emoji']} {dino_display_name(owned_dinos[i])}（Lv.{dino_level(owned_dinos[i])}）",
-                key="dino_feed_target",
-            )
-            for food_key, food in DINO_FOOD.items():
-                stock = st.session_state.dino_food.get(food_key, 0)
-                if st.button(f"{food['emoji']} {food['name']}をあげる（残り{stock}個・経験値+{food['exp']}）",
-                             disabled=stock <= 0, key=f"dino_feed_{food_key}", use_container_width=True):
-                    target = owned_dinos[feed_index]
-                    st.session_state.dino_food[food_key] -= 1
-                    add_dino_message(f"{food['emoji']} {dino_display_name(target)}は{food['name']}をもぐもぐ！ 経験値 +{food['exp']}")
-                    queue_dino_sound("feed")
-                    add_dino_exp(target, food["exp"])
-                    save_progress()
-                    st.rerun()
-
 
 # =====================================================
 # 💾 Supabase への自動セーブ

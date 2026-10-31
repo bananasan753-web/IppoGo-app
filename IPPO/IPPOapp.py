@@ -1455,53 +1455,73 @@ def get_ippo_events_for_date(date_str: str) -> list:
 
 
 def build_schedule_print_html(date_strings: list, include_planned: bool, include_actual: bool) -> str:
-    # 最大7日分の帯グラフ。空の日も空欄グラフを描く。
+    """選択した最大7日分を、1枚のSVG画像としてまとめて印刷する。"""
     kinds = []
     if include_planned:
-        kinds.append(("planned", "📅 予定", "#4CAF50"))
+        kinds.append(("planned", "予定", "#4CAF50"))
     if include_actual:
-        kinds.append(("actual", "✅ 記録", "#2196F3"))
+        kinds.append(("actual", "記録", "#2196F3"))
+    ordered_dates = sorted(set(date_strings), key=lambda v: datetime.strptime(v, "%Y/%m/%d"))[:7]
+    if not ordered_dates or not kinds:
+        return "<p>印刷する日付と種類を選択してください。</p>"
 
-    def make_band(entries, fallback_color):
-        height, width, left = 720, 250, 52
-        parts = [f'<rect x="{left}" y="0" width="{width}" height="{height}" fill="#fff" stroke="#555" stroke-width="1.5"/>']
-        for half in range(49):
-            mins = half * 30
-            y = height * mins / 1440
-            major = mins % 60 == 0
-            parts.append(f'<line x1="{left}" y1="{y:.1f}" x2="{left+width}" y2="{y:.1f}" stroke="{"#aaa" if major else "#e5e5e5"}" stroke-width="{"1.2" if major else ".7"}/>')
-            if major:
-                parts.append(f'<text x="{left-5}" y="{y+4:.1f}" text-anchor="end" font-size="11">{mins//60:02d}:00</text>')
-        for e in sorted(entries or [], key=lambda x: x.get('start', '00:00')):
-            try:
-                a = time_to_minutes(e.get('start', '00:00'))
-                b = time_to_minutes(e.get('end', '00:00'))
-                if not (0 <= a < b <= 1440):
+    left_margin, top_margin = 54, 52
+    day_width = 190
+    track_gap = 5
+    track_width = (day_width - 16 - track_gap * (len(kinds) - 1)) / len(kinds)
+    graph_top, graph_height = top_margin, 720
+    graph_bottom = graph_top + graph_height
+    total_width = left_margin + day_width * len(ordered_dates) + 8
+    total_height = graph_bottom + 18
+    parts = [f'<rect x="0" y="0" width="{total_width}" height="{total_height}" fill="#fff"/>']
+
+    for half in range(49):
+        mins = half * 30
+        y = graph_top + graph_height * mins / 1440
+        major = mins % 60 == 0
+        parts.append(
+            f'<line x1="{left_margin}" y1="{y:.1f}" x2="{total_width}" y2="{y:.1f}" '
+            f'stroke="{"#999" if major else "#e5e5e5"}" stroke-width="{"1.2" if major else ".6"}"/>'
+        )
+        if major:
+            parts.append(f'<text x="{left_margin - 7}" y="{y + 4:.1f}" text-anchor="end" font-size="11" fill="#222">{mins // 60:02d}:00</text>')
+
+    for day_index, date_str in enumerate(ordered_dates):
+        day_x = left_margin + day_index * day_width
+        day = st.session_state.daily_schedule.get(date_str, {"planned": [], "actual": []})
+        date_label = datetime.strptime(date_str, "%Y/%m/%d").strftime("%m/%d（%a）")
+        parts.append(f'<text x="{day_x + day_width / 2:.1f}" y="28" text-anchor="middle" font-size="16" font-weight="bold" fill="#222">{html.escape(date_label)}</text>')
+        for kind_index, (key, title, fallback_color) in enumerate(kinds):
+            x = day_x + 8 + kind_index * (track_width + track_gap)
+            parts.append(f'<text x="{x + track_width / 2:.1f}" y="46" text-anchor="middle" font-size="11" font-weight="bold" fill="#222">{title}</text>')
+            parts.append(f'<rect x="{x:.1f}" y="{graph_top}" width="{track_width:.1f}" height="{graph_height}" fill="#fff" stroke="#777" stroke-width=".8"/>')
+            for entry in sorted(day.get(key, []) or [], key=lambda item: item.get("start", "00:00")):
+                try:
+                    start_min = time_to_minutes(entry.get("start", "00:00"))
+                    end_min = time_to_minutes(entry.get("end", "00:00"))
+                    if not (0 <= start_min < end_min <= 1440):
+                        continue
+                except Exception:
                     continue
-            except Exception:
-                continue
-            y1, y2 = height*a/1440, height*b/1440
-            color = str(e.get('color', fallback_color))
-            if not (len(color)==7 and color.startswith('#') and all(c in '0123456789abcdefABCDEF' for c in color[1:])):
-                color = fallback_color
-            label = html.escape(str(e.get('label','')))
-            parts.append(f'<rect x="{left+3}" y="{y1:.1f}" width="{width-6}" height="{max(y2-y1,4):.1f}" fill="{color}" fill-opacity=".88" stroke="#333" stroke-width=".5"/>')
-            if y2-y1 >= 15:
-                parts.append(f'<text x="{left+width/2}" y="{(y1+y2)/2+4:.1f}" text-anchor="middle" font-size="11" fill="#fff" stroke="#222" stroke-width=".6" paint-order="stroke">{label}</text>')
-        return f'<svg class="band" viewBox="0 0 {left+width+5} {height}" role="img">{"".join(parts)}</svg>'
+                y1 = graph_top + graph_height * start_min / 1440
+                y2 = graph_top + graph_height * end_min / 1440
+                color = str(entry.get("color", fallback_color))
+                if not (len(color) == 7 and color.startswith("#") and all(c in "0123456789abcdefABCDEF" for c in color[1:])):
+                    color = fallback_color
+                label = html.escape(str(entry.get("label", "")))
+                parts.append(f'<rect x="{x + 2:.1f}" y="{y1:.1f}" width="{max(track_width - 4, 1):.1f}" height="{max(y2-y1, 3):.1f}" rx="2" fill="{color}" fill-opacity=".9" stroke="#333" stroke-width=".4"/>')
+                if y2 - y1 >= 18:
+                    parts.append(f'<text x="{x + track_width / 2:.1f}" y="{(y1 + y2) / 2 + 3:.1f}" text-anchor="middle" font-size="9" fill="#fff" stroke="#222" stroke-width=".5" paint-order="stroke">{label}</text>')
+        parts.append(f'<line x1="{day_x + day_width}" y1="8" x2="{day_x + day_width}" y2="{graph_bottom}" stroke="#aaa" stroke-width="1"/>')
 
-    cards=[]
-    ordered_dates=sorted(set(date_strings), key=lambda v: datetime.strptime(v, '%Y/%m/%d'))[:7]
-    for date_str in ordered_dates:
-        day=st.session_state.daily_schedule.get(date_str, {"planned": [], "actual": []})
-        date_label=datetime.strptime(date_str, '%Y/%m/%d').strftime('%Y年%m月%d日（%a）')
-        columns=[]
-        for key,title,color in kinds:
-            columns.append(f'<section><h3>{title}</h3>{make_band(day.get(key, []), color)}</section>')
-        cards.append(f'<article class="day-card"><h2>{html.escape(date_label)}</h2><div class="bands">{"".join(columns)}</div></article>')
+    combined_svg = f'<svg xmlns="http://www.w3.org/2000/svg" class="combined-schedule" viewBox="0 0 {total_width} {total_height}" role="img" aria-label="スケジュール帯グラフ">' + "".join(parts) + "</svg>"
     return f'''<!DOCTYPE html><html lang="ja"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><style>
-*{{box-sizing:border-box}}body{{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;color:#222;margin:0;padding:14px;background:#f5f7fa}}.toolbar{{display:flex;justify-content:space-between;align-items:center;max-width:1100px;margin:0 auto 12px}}.toolbar h1{{font-size:22px;margin:0}}.print-button{{padding:10px 18px;background:#1769aa;color:white;border:0;border-radius:8px;font-weight:bold;font-size:16px}}.days{{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;max-width:1100px;margin:auto}}.day-card{{background:white;border:1px solid #aaa;padding:10px;break-inside:avoid;page-break-inside:avoid}}.day-card h2{{font-size:16px;margin:0 0 8px;border-bottom:2px solid #345;padding-bottom:5px}}.bands{{display:grid;grid-template-columns:repeat({max(len(kinds),1)},minmax(0,1fr));gap:8px}}section{{min-width:0}}h3{{font-size:14px;margin:2px 0 4px}}.band{{width:100%;height:auto;display:block}}@media(max-width:650px){{.days{{grid-template-columns:1fr}}}}@page{{size:A4 portrait;margin:8mm}}@media print{{body{{padding:0;background:#fff}}.toolbar{{display:none}}.days{{gap:5mm;max-width:none}}.day-card{{padding:6px;border:1px solid #777}}.band{{print-color-adjust:exact;-webkit-print-color-adjust:exact}}}}
-</style></head><body><div class="toolbar"><h1>IPPO スケジュール印刷</h1><button class="print-button" onclick="window.focus();window.print()">🖨️ 印刷する</button></div><div class="days">{"".join(cards)}</div></body></html>'''
+*{{box-sizing:border-box}}body{{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;color:#222;margin:0;padding:14px;background:#f5f7fa}}
+.toolbar{{display:flex;justify-content:space-between;align-items:center;max-width:1200px;margin:0 auto 12px}}
+.toolbar h1{{font-size:22px;margin:0}}.print-button{{padding:10px 18px;background:#1769aa;color:white;border:0;border-radius:8px;font-weight:bold;font-size:16px;cursor:pointer}}
+.image-sheet{{background:#fff;max-width:1200px;margin:0 auto;padding:10px;border:1px solid #aaa}}.combined-schedule{{display:block;width:100%;height:auto}}
+@page{{size:A4 landscape;margin:7mm}}@media print{{body{{padding:0;background:#fff}}.toolbar{{display:none}}.image-sheet{{max-width:none;padding:0;border:0}}.combined-schedule{{width:100%;height:auto;max-height:190mm;print-color-adjust:exact;-webkit-print-color-adjust:exact}}}}
+</style></head><body><div class="toolbar"><h1>IPPO スケジュール印刷</h1><button class="print-button" onclick="window.focus();window.print()">🖨️ 印刷する</button></div><div class="image-sheet">{combined_svg}</div></body></html>'''
 
 
 def render_schedule_clipboard(date_str: str):

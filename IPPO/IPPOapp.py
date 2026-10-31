@@ -1114,8 +1114,6 @@ def load_progress(uid) -> bool:
                 old_aqua_points = int(saved_data.get("aqua_points", 0) or 0)
                 old_candy_points = int(saved_data.get("candy_points", 0) or 0)
                 st.session_state.ippo_points = old_aqua_points + old_candy_points
-            # 予定・記録は旧形式／JSON文字列で保存されていた場合も表示可能な形へ補正する。
-            normalize_daily_schedule()
             return True
         return False
     except Exception as e:
@@ -1139,9 +1137,8 @@ def save_progress():
             supabase.table("user_data").update({"data": data_to_save}).eq("id", uid).execute()
         else:
             supabase.table("user_data").insert({"id": uid, "data": data_to_save}).execute()
-        st.session_state.pop("_save_progress_error", None)
     except Exception as e:
-        st.session_state["_save_progress_error"] = str(e)
+        pass
 
 
 def reset_progress_in_memory():
@@ -1283,85 +1280,6 @@ SCHEDULE_COLORS = {
     "🟤 茶": "#795548",
     "⚫ 黒": "#333333",
 }
-
-
-def normalize_daily_schedule():
-    """保存データの形式を整え、予定・記録の両方を必ず表示できる形にする。"""
-    raw = st.session_state.get("daily_schedule", {})
-    if isinstance(raw, str):
-        try:
-            raw = json.loads(raw)
-        except (TypeError, json.JSONDecodeError):
-            raw = {}
-    if not isinstance(raw, dict):
-        raw = {}
-
-    normalized = {}
-    for saved_date, saved_day in raw.items():
-        if not isinstance(saved_day, dict):
-            continue
-
-        # 以前の保存データに日本語キー／別名キーがあっても現在の形式へ移す。
-        planned_source = saved_day.get("planned", saved_day.get("予定", []))
-        actual_source = saved_day.get(
-            "actual", saved_day.get("record", saved_day.get("records", saved_day.get("記録", [])))
-        )
-
-        def clean_entries(entries, default_color):
-            cleaned = []
-            if not isinstance(entries, list):
-                return cleaned
-            for item in entries:
-                if not isinstance(item, dict):
-                    continue
-                start = item.get("start", item.get("start_time", ""))
-                end = item.get("end", item.get("end_time", ""))
-                # datetime.time 型や文字列のどちらで保存されていても HH:MM に統一。
-                try:
-                    if hasattr(start, "hour"):
-                        start = f"{start.hour:02d}:{start.minute:02d}"
-                    else:
-                        start = str(start)
-                    if hasattr(end, "hour"):
-                        end = f"{end.hour:02d}:{end.minute:02d}"
-                    else:
-                        end = str(end)
-                    start_dt = datetime.strptime(start, "%H:%M")
-                    end_dt = datetime.strptime(end, "%H:%M")
-                    if start_dt >= end_dt:
-                        continue
-                except (TypeError, ValueError):
-                    continue
-
-                label = item.get("label", item.get("title", item.get("内容", "")))
-                color = str(item.get("color", default_color))
-                if not (len(color) == 7 and color.startswith("#") and
-                        all(char in "0123456789abcdefABCDEF" for char in color[1:])):
-                    color = default_color
-                cleaned.append({
-                    "start": start,
-                    "end": end,
-                    "label": str(label or ""),
-                    "color": color,
-                })
-            cleaned.sort(key=lambda item: item["start"])
-            return cleaned
-
-        date_key = str(saved_date)
-        # 日付キーが YYYY-MM-DD 形式で保存されていた場合も YYYY/MM/DD にそろえる。
-        try:
-            if len(date_key) == 10 and date_key[4] == "-" and date_key[7] == "-":
-                date_key = datetime.strptime(date_key, "%Y-%m-%d").strftime("%Y/%m/%d")
-        except ValueError:
-            pass
-
-        normalized[date_key] = {
-            "planned": clean_entries(planned_source, "#4CAF50"),
-            "actual": clean_entries(actual_source, "#2196F3"),
-        }
-
-    st.session_state.daily_schedule = normalized
-    return normalized
 
 
 def time_to_minutes(hhmm) -> int:
@@ -1538,7 +1456,6 @@ def get_ippo_events_for_date(date_str: str) -> list:
 
 def build_schedule_print_html(date_strings: list, include_planned: bool, include_actual: bool) -> str:
     # 最大7日分の帯グラフ。空の日も空欄グラフを描く。
-    normalize_daily_schedule()
     kinds = []
     if include_planned:
         kinds.append(("planned", "📅 予定", "#4CAF50"))
@@ -1775,14 +1692,7 @@ def render_schedule_and_events(date_str: str, editable: bool, clipboard_at_botto
     指定した日の「予定／記録」帯グラフと、隣にIPPOイベントログを表示する。
     editable=True の場合は、予定・記録の追加に加えて既存項目の編集・削除ができる。
     """
-    all_schedules = normalize_daily_schedule()
-    day_schedule = all_schedules.setdefault(date_str, {"planned": [], "actual": []})
-    day_schedule.setdefault("planned", [])
-    day_schedule.setdefault("actual", [])
-
-    save_error = st.session_state.get("_save_progress_error")
-    if save_error:
-        st.warning(f"⚠️ 予定・記録のクラウド保存でエラーが発生しています。通信状態とSupabase設定を確認してください。詳細：{save_error}")
+    day_schedule = st.session_state.daily_schedule.setdefault(date_str, {"planned": [], "actual": []})
 
     if editable:
         if not clipboard_at_bottom:
@@ -1965,63 +1875,50 @@ def render_schedule_and_events(date_str: str, editable: bool, clipboard_at_botto
                             "color": color_pick,
                         }
                         day_schedule[form_kind].append(new_entry)
-                        day_schedule[form_kind].sort(key=lambda item: item["start"])
                         st.session_state.schedule_form_open = None
                         save_progress()
                         st.rerun()
 
-    # 予定・記録の文章一覧を帯グラフより先に表示し、スマートフォンでも見落としにくくする。
-    chart_col1, chart_col2 = st.columns(2)
-    for chart_col, kind, title, icon, fallback_color in [
-        (chart_col1, "planned", "📅 予定", "📅", "#4CAF50"),
-        (chart_col2, "actual", "✅ 記録", "✅", "#2196F3"),
+    chart_col1, chart_col2, event_col = st.columns([1, 1, 1.35])
+    for chart_col, kind, title, icon in [
+        (chart_col1, "planned", "📅 予定", "📅"),
+        (chart_col2, "actual", "✅ 記録", "✅"),
     ]:
         with chart_col:
-            st.markdown(f"### {title}")
-            entries = day_schedule.get(kind, [])
-            if entries:
-                st.markdown("**登録内容**")
-                for i, entry in enumerate(entries):
-                    color = entry.get("color", fallback_color)
-                    with st.container(border=True):
-                        time_col, label_col = st.columns([1.15, 1.85])
-                        with time_col:
-                            st.markdown(f"**{entry['start']}**")
-                            st.caption(f"〜 {entry['end']}")
-                        with label_col:
-                            st.write(entry.get("label", "（内容未入力）"))
-                        st.markdown(
-                            f'<div style="height:6px;background:{color};border-radius:4px;margin:2px 0 5px 0;"></div>',
-                            unsafe_allow_html=True,
-                        )
-                        if editable and st.button(
-                            f"✏️ {icon} この項目を編集・削除",
-                            use_container_width=True,
-                            key=f"schedule_entry_button_{date_str}_{kind}_{i}",
-                        ):
+            st.markdown(f"**{title}**")
+            st.markdown(render_day_bar_svg(day_schedule[kind], bar_width=150, height=720), unsafe_allow_html=True)
+            if day_schedule[kind]:
+                if editable:
+                    st.markdown("##### 🖱️ 項目を押して編集・削除")
+                for i, entry in enumerate(day_schedule[kind]):
+                    color = entry.get("color", "#4CAF50" if kind == "planned" else "#2196F3")
+                    button_label = f"{icon} {entry['start']}〜{entry['end']}　{entry.get('label', '')}"
+                    if editable:
+                        if st.button(button_label, use_container_width=True, key=f"schedule_entry_button_{date_str}_{kind}_{i}"):
                             play_click_sound(delay=0)
-                            st.session_state.schedule_edit_target = {
-                                "date": date_str, "kind": kind, "index": i
-                            }
+                            st.session_state.schedule_edit_target = {"date": date_str, "kind": kind, "index": i}
                             st.session_state.schedule_delete_target = None
                             st.rerun()
+                        # ボタンの左に色を表示する代わりに、直下に色チップを表示
+                        st.markdown(
+                            f'<div style="height:5px;background:{color};border-radius:4px;margin:-8px 0 6px 0;"></div>',
+                            unsafe_allow_html=True)
+                    else:
+                        st.markdown(
+                            f'<div style="border-left:8px solid {color};padding:6px 8px;margin:4px 0;">'
+                            f'<b>{entry["start"]}〜{entry["end"]}</b>　{entry.get("label", "")}</div>',
+                            unsafe_allow_html=True)
             else:
-                st.info(f"{title}はまだ登録されていません。")
+                st.caption("まだ登録されていません。")
 
-            st.markdown("**帯グラフ**")
-            st.markdown(
-                render_day_bar_svg(entries, bar_width=150, height=720),
-                unsafe_allow_html=True,
-            )
-
-    st.divider()
-    st.markdown("### 🎮 IPPO内のイベント記録")
-    events_today = get_ippo_events_for_date(date_str)
-    if events_today:
-        for event_time, event_label in events_today:
-            st.write(f"⏰ {event_time}　{event_label}")
-    else:
-        st.caption("この日はまだイベントの記録がありません。")
+    with event_col:
+        st.markdown("**🎮 IPPO内のイベント記録**")
+        events_today = get_ippo_events_for_date(date_str)
+        if events_today:
+            for event_time, event_label in events_today:
+                st.write(f"⏰ {event_time}　{event_label}")
+        else:
+            st.caption("この日はまだイベントの記録がありません。")
 
     if editable and clipboard_at_bottom:
         st.write("---")

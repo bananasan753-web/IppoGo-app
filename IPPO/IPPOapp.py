@@ -501,6 +501,27 @@ def dino_attack(dino: dict) -> int:
 def dino_speed(dino: dict) -> int:
     return dino_level(dino) + int(dino.get("speed_bonus", 0))
 
+def dino_base_dodge_rate(speed: int) -> int:
+    """素早さに応じた基本回避率（%）。"""
+    if speed < 10:
+        return 1
+    if speed < 20:
+        return 10
+    if speed < 30:
+        return 20
+    if speed < 40:
+        return 30
+    if speed < 50:
+        return 40
+    return 50
+
+def dino_dodge_rate(defender_speed: int, attacker_speed: int, special: bool = False) -> int:
+    """相手との素早さ差と攻撃種別を反映した回避率（%）。"""
+    rate = dino_base_dodge_rate(defender_speed) + defender_speed - attacker_speed
+    if special:
+        rate -= 20
+    return max(0, min(30 if special else 50, rate))
+
 def dino_power_bonus(level: int) -> int:
     """Lv4でダメージ+1、Lv7で+2、Lv10で+3。"""
     return (level - 1) // 3
@@ -900,34 +921,33 @@ def resolve_dino_battle_turn(partner: dict, action: str):
         log.append(text)
 
     # --- 相手の行動 ---
+    # 自分の固有技の反動とは分けて、相手の攻撃だけを回避判定する。
+    incoming_damage = 0
+    incoming_special = enemy_action == "special"
     if enemy_action == "attack" and action != "defend":
-        damage = random.randint(1, 5) + bonus_e
-        to_player += damage
-        log.append(f"💥 {ename}のこうげき！ {damage}ダメージ！")
+        incoming_damage = random.randint(1, 5) + bonus_e
+        log.append(f"💥 {ename}のこうげき！ {incoming_damage}ダメージ！")
     elif enemy_action == "special":
-        damage = random.randint(4, 7) + bonus_e
-        to_player += damage
-        log.append(f"💥 {ename}の強打！ {damage}ダメージ！")
+        incoming_damage = random.randint(4, 7) + bonus_e
+        log.append(f"💥 {ename}の強打！ {incoming_damage}ダメージ！")
 
-    # 防御は素早さに関係なく最優先。攻撃同士なら素早さの高い側が先に動き、
-    # 先手で相手を倒した場合は相手の攻撃を受けない。
-    if action != "defend" and enemy_action != "defend":
-        player_speed = dino_speed(partner)
-        enemy_speed = int(enemy.get("speed", enemy["level"]))
-        if player_speed > enemy_speed and to_enemy >= battle["enemy_hp"]:
-            to_player = 0
-        elif enemy_speed > player_speed and to_player >= battle["player_hp"]:
-            to_enemy = 0
-    # 素早さが高いほど相手の攻撃をかわしやすい（差1ごとに+5%、最大35%）。
+    # 素早さは回避率だけに影響する（攻撃力・先手判定などには使わない）。
     player_speed = dino_speed(partner)
     enemy_speed = int(enemy.get("speed", enemy["level"]))
-    incoming_attack = to_player
-    dodge_chance = max(0.0, min(0.35, (player_speed - enemy_speed) * 0.05))
-    if incoming_attack > 0 and random.random() < dodge_chance:
-        to_player = 0
-        log.append(f"💨 素早さを生かして攻撃を回避！（回避率 {int(dodge_chance * 100)}%）")
-    elif player_speed > enemy_speed:
-        log.append(f"💨 素早さで主導権を握る！（自分 {player_speed} ＞ 相手 {enemy_speed}）")
+    dodge_rate = dino_dodge_rate(player_speed, enemy_speed, special=incoming_special)
+    if incoming_damage > 0 and random.random() < dodge_rate / 100:
+        incoming_damage = 0
+        log.append(f"💨 {dino_display_name(partner)}は回避した！")
+    to_player += incoming_damage
+
+    # 相手側も同じルールで回避する。プレイヤーの固有技は必殺技扱い。
+    enemy_dodge_rate = dino_dodge_rate(
+        enemy_speed, player_speed, special=(action == "special")
+    )
+    if to_enemy > 0 and random.random() < enemy_dodge_rate / 100:
+        to_enemy = 0
+        log.append(f"💨 {enemy['name']}は回避した！")
+
     battle["enemy_hp"] = max(0, battle["enemy_hp"] - to_enemy)
     battle["player_hp"] = max(0, battle["player_hp"] - to_player)
     if heal and battle["player_hp"] > 0:
@@ -1773,7 +1793,7 @@ def render_schedule_and_events(date_str: str, editable: bool, clipboard_at_botto
 
                     # 予定の1コマを、そのまま「記録」にもコピーする
                     if edit_kind == "planned":
-                        if st.button("✅ 予定通り！（このコマを記録にそのままコピー）", use_container_width=True,
+                        if st.button("✅ 予定通りに出来た（+1 IPPOポイント）", use_container_width=True,
                                      key=f"as_planned_{date_str}_{edit_index}"):
                             actual_entries = day_schedule.setdefault("actual", [])
                             copied_entry = {
@@ -1785,13 +1805,16 @@ def render_schedule_and_events(date_str: str, editable: bool, clipboard_at_botto
                                 and a.get("label", "") == copied_entry["label"]
                                 for a in actual_entries
                             )
-                            if already:
-                                st.session_state.schedule_notice = "ℹ️ このコマは、すでに記録に入っています。"
+                            if entry.get("schedule_reward_claimed", False):
+                                st.session_state.schedule_notice = "ℹ️ この予定は達成済みです。"
                             else:
-                                actual_entries.append(copied_entry)
-                                actual_entries.sort(key=lambda e: e["start"])
+                                if not already:
+                                    actual_entries.append(copied_entry)
+                                    actual_entries.sort(key=lambda e: e["start"])
+                                entry["schedule_reward_claimed"] = True
+                                st.session_state.ippo_points = int(st.session_state.get("ippo_points", 0)) + 1
                                 st.session_state.schedule_notice = (
-                                    f"✅ 『{copied_entry['label']}』{copied_entry['start']}〜{copied_entry['end']} を記録にコピーしました！"
+                                    f"🎉 『{copied_entry['label']}』を達成！ 1 IPPOポイントを獲得しました！"
                                 )
                             st.session_state.schedule_edit_target = None
                             save_progress()

@@ -821,16 +821,39 @@ def start_dino_battle(course_key: str, partner: dict):
     save_progress()
 
 
-def start_dino_practice_battle(partner: dict):
-    """いつでも挑戦できる模型との練習バトル。報酬目当ての周回を防ぐため報酬なし。"""
-    level = dino_level(partner)
+def start_dino_practice_battle(partner: dict, difficulty: str = "ふつう"):
+    """強さを選べる模型との練習バトル。練習なので経験値・報酬はなし。"""
+    partner_level = dino_level(partner)
+    partner_hp = dino_max_hp(partner)
+    partner_speed = dino_speed(partner)
+    partner_attack = dino_attack(partner)
+
+    if difficulty == "やさしめ":
+        level = 1
+        enemy_hp = 17
+        enemy_speed = 1
+        enemy_attack = 0
+    elif difficulty == "つよい":
+        # レベル上限でも、HP・攻撃力・素早さは自分の恐竜より高くする。
+        level = min(DINO_MAX_LEVEL, partner_level + 2)
+        enemy_hp = max(14 + 3 * level, partner_hp + 6)
+        enemy_speed = max(level, partner_speed + 2)
+        enemy_attack = max(dino_power_bonus(level), partner_attack + 1)
+    else:  # ふつう
+        difficulty = "ふつう"
+        level = partner_level
+        enemy_hp = max(12, partner_hp)
+        enemy_speed = max(1, partner_speed)
+        enemy_attack = partner_attack
+
     enemy = {"name": "練習用の模型恐竜", "emoji": "🦖", "level": level,
-             "max_hp": max(12, dino_max_hp(partner)), "speed": max(1, dino_speed(partner)), "attack": dino_attack(partner)}
-    max_hp = dino_max_hp(partner)
+             "max_hp": enemy_hp, "speed": enemy_speed, "attack": enemy_attack}
+    max_hp = partner_hp
     st.session_state.dino_battle = {
         "enemy": enemy, "enemy_hp": enemy["max_hp"], "player_max_hp": max_hp, "player_hp": max_hp,
-        "special_left": DINO_SPECIAL_USES, "log": ["🧸 模型恐竜との練習開始！ 勝っても経験値・報酬はありません。"],
-        "over": False, "result": None, "practice": True,
+        "special_left": DINO_SPECIAL_USES,
+        "log": [f"🧸 模型恐竜との練習開始！（{difficulty}）勝っても経験値・報酬はありません。"],
+        "over": False, "result": None, "practice": True, "practice_difficulty": difficulty,
     }
     save_progress()
 
@@ -3796,11 +3819,19 @@ elif st.session_state.page in [
                 st.write("")
 
                 # 模型恐竜との練習はレース進行に関係なくいつでも開始できる
-                if st.session_state.get("dino_battle") is None and st.button(
-                    "🧸 模型の恐竜と練習バトル（いつでも挑戦・報酬なし）",
-                    use_container_width=True, key="dino_practice_battle"):
-                    start_dino_practice_battle(partner)
-                    st.rerun()
+                if st.session_state.get("dino_battle") is None:
+                    practice_difficulty = st.selectbox(
+                        "🧸 練習する模型恐竜の強さ",
+                        ["やさしめ", "ふつう", "つよい"],
+                        index=1,
+                        key="dino_practice_difficulty",
+                        help="やさしめ：Lv.1 ／ ふつう：自分と同じ強さ ／ つよい：自分より強い",
+                    )
+                    if st.button(
+                        "🧸 模型の恐竜と練習バトル（いつでも挑戦・報酬なし）",
+                        use_container_width=True, key="dino_practice_battle"):
+                        start_dino_practice_battle(partner, practice_difficulty)
+                        st.rerun()
 
                 battle = st.session_state.get("dino_battle")
                 if battle:

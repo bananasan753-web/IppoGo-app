@@ -1747,12 +1747,33 @@ def render_schedule_templates(date_str: str):
                 save_progress()
                 st.rerun()
 
-        with st.form(f"template_delete_{date_str}_{template_id}"):
-            delete_confirm = st.checkbox(f"『{template['name']}』を削除する")
-            if st.form_submit_button("🗑️ テンプレートを削除", disabled=not delete_confirm):
-                templates.pop(chosen)
+        # 削除はフォーム送信にまとめず、通常のボタンで実行する。
+        # フォーム内チェックボックスの状態や別フォームとの干渉で削除できないケースを避ける。
+        delete_confirm_key = f"template_delete_confirm_{template_id}"
+        delete_confirm = st.checkbox(
+            f"『{template['name']}』を削除することを確認",
+            key=delete_confirm_key,
+        )
+        if st.button(
+            "🗑️ 選択中のテンプレートを削除",
+            key=f"template_delete_button_{template_id}",
+            disabled=not delete_confirm,
+        ):
+            # 選択中のIDを再確認してから削除する。
+            current_templates = st.session_state.get("schedule_templates", [])
+            delete_index = next(
+                (i for i, item in enumerate(current_templates)
+                 if str(item.get("id", i)) == str(template_id)),
+                None,
+            )
+            if delete_index is not None:
+                removed_name = current_templates.pop(delete_index).get("name", "テンプレート")
+                st.session_state.schedule_templates = current_templates
                 save_progress()
+                st.success(f"『{removed_name}』を削除しました。")
                 st.rerun()
+            else:
+                st.warning("削除するテンプレートが見つかりません。画面を更新してください。")
 
 
 def valid_template_time_range(start: str, end: str) -> bool:

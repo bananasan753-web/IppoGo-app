@@ -2987,7 +2987,13 @@ elif st.session_state.page in [
                             for t in st.session_state.target_list
                         )
                         has_note = bool(st.session_state.calendar_notes.get(cell_date_str))
-                        markers = ("🎯" if has_deadline else "") + ("📝" if has_note else "")
+                        # その日に有効な反復リマインドがあれば、カレンダーにベルを表示
+                        reminder_tasks = [
+                            task for task in st.session_state.get("single_tasks", [])
+                            if single_task_is_due(task, cell_date_str)
+                        ]
+                        has_reminder = bool(reminder_tasks)
+                        markers = ("🎯" if has_deadline else "") + ("📝" if has_note else "") + ("🔔" if has_reminder else "")
 
                         label_line2 = " ".join(part for part in [cell_sticker_preview, markers] if part)
                         cell_label = f"{day_label} {label_line2}" if label_line2 else day_label
@@ -3006,6 +3012,17 @@ elif st.session_state.page in [
         selected_date_str = st.session_state.selected_calendar_date
         selected_date_display = datetime.strptime(selected_date_str, "%Y/%m/%d").strftime("%Y年%m月%d日")
         st.markdown(f"### 🔍 {selected_date_display} の記録")
+
+        selected_reminders = [
+            task for task in st.session_state.get("single_tasks", [])
+            if single_task_is_due(task, selected_date_str)
+        ]
+        if selected_reminders:
+            st.markdown("#### 🔔 この日のリマインド")
+            for reminder_task in selected_reminders:
+                st.caption(f"・{reminder_task.get('title', 'タスク')}")
+        else:
+            st.caption("🔔 この日に設定された未完了のリマインドはありません")
 
         existing_note = st.session_state.calendar_notes.get(selected_date_str, "")
         note_input = st.text_area("📝 この日の一言メモ・予定", value=existing_note,

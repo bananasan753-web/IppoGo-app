@@ -1044,6 +1044,14 @@ def complete_single_task(task_id: str, completion_date: str = None) -> bool:
             if not task.get("repeat_enabled"):
                 task["completed"] = True
             st.session_state.ippo_points += SINGLE_TASK_POINTS
+            # リマインド達成をイベント記録に残す（反復タスクも日付ごとに記録）
+            completion_log = st.session_state.setdefault("single_task_completion_log", [])
+            completion_log.append({
+                "task_id": task_id,
+                "title": task.get("title", "タスク"),
+                "date": f"{today} {get_now_jst().strftime('%H:%M')}",
+                "points": SINGLE_TASK_POINTS,
+            })
             add_sticker_for_date(today)
             return True
     return False
@@ -1090,6 +1098,7 @@ PERSISTENT_KEYS = [
     "dino_event_log",
     "dino_unlocked_courses",
     "single_tasks",
+    "single_task_completion_log",
 ]
 
 PERSISTENT_DEFAULTS = {
@@ -1130,6 +1139,7 @@ PERSISTENT_DEFAULTS = {
     "dino_event_log": [],
     "dino_unlocked_courses": [],
     "single_tasks": [],
+    "single_task_completion_log": [],
 }
 
 
@@ -1495,10 +1505,22 @@ def get_ippo_events_for_date(date_str: str) -> list:
             else:
                 label = f"🐠 『{ag.get('target', '')}』{level}目標達成（💎{points} IPPOポイント）"
             events.append((ag["date"].split(" ")[1], label))
-    # 単発のタスクの完了
+    # リマインド／単発タスクの達成（反復タスクも達成日ごとに表示）
+    for completion in st.session_state.get("single_task_completion_log", []):
+        completed_at = completion.get("date", "")
+        if completed_at.startswith(date_str):
+            event_time = completed_at.split(" ")[1] if " " in completed_at else "--:--"
+            title = completion.get("title", "タスク")
+            points = completion.get("points", SINGLE_TASK_POINTS)
+            events.append((event_time, f"🎉 リマインド『{title}』達成！（💎{points} IPPOポイント）"))
+    # 旧データ互換：達成ログがない旧形式の単発タスクだけ従来表示
     for st_task in st.session_state.get("single_tasks", []):
         completed_at = st_task.get("completed_at")
-        if st_task.get("completed") and completed_at and completed_at.startswith(date_str):
+        already_logged = any(
+            item.get("task_id") == st_task.get("id") and item.get("date", "").startswith(date_str)
+            for item in st.session_state.get("single_task_completion_log", [])
+        )
+        if st_task.get("completed") and completed_at and completed_at.startswith(date_str) and not already_logged:
             events.append((completed_at.split(" ")[1], f"✅ 単発タスク『{st_task.get('title', '')}』完了（💎{SINGLE_TASK_POINTS} IPPOポイント）"))
     # 恐竜レースでの出来事（レベルアップ・力試しなど）
     for de in st.session_state.get("dino_event_log", []):
@@ -2323,6 +2345,8 @@ if "dino_unlocked_courses" not in st.session_state:
     st.session_state.dino_unlocked_courses = []
 if "single_tasks" not in st.session_state:
     st.session_state.single_tasks = []
+if "single_task_completion_log" not in st.session_state:
+    st.session_state.single_task_completion_log = []
 
 STICKER_CIRCLE_COLORS = {
     "赤": "🔴", "橙": "🟠", "黄": "🟡", "緑": "🟢",

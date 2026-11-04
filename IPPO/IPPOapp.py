@@ -1011,7 +1011,7 @@ def resolve_dino_battle_turn(partner: dict, action: str):
 # =====================================================
 # 💎 IPPOポイント（お菓子集め・水族館・恐竜レースで共通）
 # =====================================================
-SINGLE_TASK_POINTS = 3      # 単発のタスクを完了したときにもらえるIPPOポイント
+SINGLE_TASK_POINTS = 1      # 単発・反復タスクの達成ポイント
 CANDY_COST_POINTS = 1       # お菓子を1個入れるのに必要なIPPOポイント
 
 
@@ -1022,18 +1022,29 @@ def add_single_task(title: str) -> bool:
     st.session_state.single_tasks.append({
         "id": get_now_jst().strftime("%Y%m%d%H%M%S%f"),
         "title": title, "completed": False, "completed_at": None,
+        "repeat_enabled": False, "repeat_mode": "range", "repeat_start": None,
+        "repeat_end": None, "repeat_weekday": 0, "completed_dates": [],
+        "created_date": get_now_jst().strftime("%Y/%m/%d"),
     })
     return True
 
 
-def complete_single_task(task_id: str) -> bool:
-    """単発のタスクを完了にして、3ポイントを加算する（1つのタスクで1回だけ）。"""
+def complete_single_task(task_id: str, completion_date: str = None) -> bool:
+    """単発・反復タスクを達成し、指定日につき1ポイントを加算する。"""
+    today = completion_date or get_now_jst().strftime("%Y/%m/%d")
     for task in st.session_state.single_tasks:
-        if task["id"] == task_id and not task.get("completed"):
-            task["completed"] = True
+        if task.get("id") == task_id:
+            completed_dates = task.setdefault("completed_dates", [])
+            if today in completed_dates:
+                return False
+            if not task.get("repeat_enabled") and task.get("completed"):
+                return False
+            completed_dates.append(today)
             task["completed_at"] = get_now_jst().strftime("%Y/%m/%d %H:%M")
+            if not task.get("repeat_enabled"):
+                task["completed"] = True
             st.session_state.ippo_points += SINGLE_TASK_POINTS
-            add_sticker_for_date(get_now_jst().strftime("%Y/%m/%d"))
+            add_sticker_for_date(today)
             return True
     return False
 
@@ -1339,7 +1350,7 @@ def minutes_to_hhmm(total_minutes: int) -> str:
     return f"{h:02d}:{m:02d}"
 
 
-def schedule_time_options(step_minutes: int = 5) -> list:
+def schedule_time_options(step_minutes: int = 10) -> list:
     """分の候補（通常は5分刻み）。"""
     return list(range(0, 60, step_minutes))
 
@@ -1354,7 +1365,7 @@ def schedule_time_selectbox(label: str, value: str, key: str) -> str:
         initial_hour, initial_minute = 0, 0
 
     # 過去に1分単位で登録した時刻も、編集時に失わないようにする。
-    minute_options = schedule_time_options(5)
+    minute_options = schedule_time_options(10)
     if initial_minute not in minute_options:
         minute_options = sorted(minute_options + [initial_minute])
 
@@ -1675,8 +1686,10 @@ def render_schedule_templates(date_str: str):
             with st.expander(f"{entry['start']}〜{entry['end']}　{entry.get('label', '')}", expanded=False):
                 with st.form(f"template_edit_{date_str}_{template_id}_{i}"):
                     label = st.text_input("内容", value=entry.get("label", ""))
-                    start = st.text_input("開始時刻（HH:MM）", value=entry["start"])
-                    end = st.text_input("終了時刻（HH:MM）", value=entry["end"])
+                    start = schedule_time_selectbox("開始時刻", entry["start"],
+                                                    key=f"template_edit_start_{date_str}_{template_id}_{i}")
+                    end = schedule_time_selectbox("終了時刻", entry["end"],
+                                                  key=f"template_edit_end_{date_str}_{template_id}_{i}")
                     color_options = list(SCHEDULE_COLORS)
                     current_color = entry.get("color", "#4CAF50")
                     current_idx = next((j for j, name in enumerate(color_options) if SCHEDULE_COLORS[name] == current_color), 3)
@@ -1701,9 +1714,11 @@ def render_schedule_templates(date_str: str):
             label = st.text_input("内容", placeholder="例：薬理の問題演習")
             c1, c2 = st.columns(2)
             with c1:
-                start = st.text_input("開始（HH:MM）", value="09:00")
+                start = schedule_time_selectbox("開始時刻", "09:00",
+                                                key=f"template_add_start_{date_str}_{template_id}")
             with c2:
-                end = st.text_input("終了（HH:MM）", value="10:00")
+                end = schedule_time_selectbox("終了時刻", "10:00",
+                                              key=f"template_add_end_{date_str}_{template_id}")
             color_name = st.selectbox("色", list(SCHEDULE_COLORS), index=3)
             if st.form_submit_button("➕ 項目を追加"):
                 if not label.strip() or not valid_template_time_range(start, end):
@@ -1750,12 +1765,55 @@ def valid_template_time_range(start: str, end: str) -> bool:
         return False
 
 
+def single_task_is_due(task: dict, date_str: str) -> bool:
+    """指定日に反復タスクを表示するか判定する。"""
+    if not task.get("repeat_enabled"):
+        return False
+    if date_str in task.get("completed_dates", []):
+        return False
+    try:
+        target_date = datetime.strptime(date_str, "%Y/%m/%d").date()
+        start = datetime.strptime(task.get("repeat_start", date_str), "%Y/%m/%d").date()
+        if target_date < start:
+            return False
+        if task.get("repeat_mode") == "range":
+            end_text = task.get("repeat_end")
+            if end_text and target_date > datetime.strptime(end_text, "%Y/%m/%d").date():
+                return False
+            return True
+        return target_date.weekday() == int(task.get("repeat_weekday", 0))
+    except (ValueError, TypeError):
+        return False
+
+
+def render_single_task_reminders(date_str: str):
+    """該当日の反復タスクを個別ボタンで表示する。達成後はその日だけ非表示。"""
+    due = [task for task in st.session_state.get("single_tasks", [])
+           if single_task_is_due(task, date_str)]
+    if not due:
+        return
+    st.markdown("### 🔔 今日のリマインド")
+    for task in due:
+        with st.container(border=True):
+            st.write(f"🌟 **{task.get('title', 'タスク')}の日です！**")
+            if st.button("できたら押してね！（+1 IPPOポイント）",
+                         key=f"repeat_task_done_{task.get('id')}_{date_str}",
+                         use_container_width=True):
+                if complete_single_task(task.get("id"), completion_date=date_str):
+                    st.session_state.single_task_notice = (
+                        f"🎉『{task.get('title', 'タスク')}』達成！1 IPPOポイントゲット！")
+                    save_progress()
+                    st.rerun()
+
+
 def render_schedule_and_events(date_str: str, editable: bool, clipboard_at_bottom: bool = False):
     """
     指定した日の「予定／記録」帯グラフと、隣にIPPOイベントログを表示する。
     editable=True の場合は、予定・記録の追加に加えて既存項目の編集・削除ができる。
     """
     day_schedule = st.session_state.daily_schedule.setdefault(date_str, {"planned": [], "actual": []})
+
+    render_single_task_reminders(date_str)
 
     if editable:
         if not clipboard_at_bottom:
@@ -2574,6 +2632,52 @@ elif st.session_state.page in [
                 task_col, done_col, del_col = st.columns([5, 3, 1])
                 with task_col:
                     st.write(f"📌 {task['title']}")
+                    with st.expander("🔁 このタスクを反復にする／設定する"):
+                        mode = st.radio(
+                            "繰り返し方",
+                            options=["range", "weekly"],
+                            format_func=lambda x: "開始日から終了日まで毎日" if x == "range" else "毎週、指定した曜日（7日ごと）",
+                            index=0 if task.get("repeat_mode", "range") == "range" else 1,
+                            key=f"single_repeat_mode_{task['id']}",
+                        )
+                        default_start = task.get("repeat_start")
+                        try:
+                            start_value = datetime.strptime(default_start, "%Y/%m/%d").date() if default_start else get_now_jst().date()
+                        except ValueError:
+                            start_value = get_now_jst().date()
+                        repeat_start = st.date_input("開始日", value=start_value, key=f"single_repeat_start_{task['id']}")
+                        repeat_end = None
+                        repeat_weekday = task.get("repeat_weekday", 0)
+                        if mode == "range":
+                            try:
+                                end_value = datetime.strptime(task.get("repeat_end"), "%Y/%m/%d").date() if task.get("repeat_end") else repeat_start
+                            except ValueError:
+                                end_value = repeat_start
+                            repeat_end = st.date_input("終了日", value=max(repeat_start, end_value),
+                                                       min_value=repeat_start, key=f"single_repeat_end_{task['id']}")
+                        else:
+                            weekdays = ["月曜日", "火曜日", "水曜日", "木曜日", "金曜日", "土曜日", "日曜日"]
+                            repeat_weekday = st.selectbox("毎週何曜日？", range(7),
+                                index=int(task.get("repeat_weekday", 0)),
+                                format_func=lambda x: weekdays[x], key=f"single_repeat_weekday_{task['id']}")
+                        if st.button("🔁 反復設定を保存", key=f"single_repeat_save_{task['id']}",
+                                     use_container_width=True):
+                            if mode == "range" and repeat_end < repeat_start:
+                                st.error("終了日は開始日以降にしてください。")
+                            else:
+                                task["repeat_enabled"] = True
+                                task["repeat_mode"] = mode
+                                task["repeat_start"] = repeat_start.strftime("%Y/%m/%d")
+                                task["repeat_end"] = repeat_end.strftime("%Y/%m/%d") if repeat_end else None
+                                task["repeat_weekday"] = int(repeat_weekday)
+                                task["completed_dates"] = task.get("completed_dates", [])
+                                save_progress()
+                                st.rerun()
+                        if task.get("repeat_enabled") and st.button("反復を解除する", key=f"single_repeat_off_{task['id']}"):
+                            task["repeat_enabled"] = False
+                            task["completed"] = False
+                            save_progress()
+                            st.rerun()
                 with done_col:
                     if st.button(f"✅ 完了！ +{SINGLE_TASK_POINTS} IPPOポイント", key=f"single_done_{task['id']}", use_container_width=True):
                         if complete_single_task(task["id"]):

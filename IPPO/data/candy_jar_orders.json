@@ -1,0 +1,51 @@
+{
+  "candy_stats": {
+    "🍬": {"sweetness": 70, "cuteness": 55, "seasonality": 35},
+    "🍭": {"sweetness": 85, "cuteness": 95, "seasonality": 30},
+    "🍫": {"sweetness": 60, "cuteness": 35, "seasonality": 25},
+    "🍩": {"sweetness": 65, "cuteness": 60, "seasonality": 45},
+    "🍪": {"sweetness": 45, "cuteness": 65, "seasonality": 40},
+    "🧁": {"sweetness": 80, "cuteness": 90, "seasonality": 40},
+    "🍡": {"sweetness": 55, "cuteness": 75, "seasonality": 65},
+    "🍮": {"sweetness": 75, "cuteness": 70, "seasonality": 35},
+    "🍧": {"sweetness": 90, "cuteness": 80, "seasonality": 95},
+    "🧇": {"sweetness": 50, "cuteness": 55, "seasonality": 50}
+  },
+  "candy_catalog": [
+    {"no": 1, "emoji": "🍬", "name": "定番キャンディー", "comment": "どんなときも頼れる、みんなの定番。ひとつ入れるだけで瓶がぱっと華やぐよ🍬"},
+    {"no": 2, "emoji": "🍭", "name": "渦巻きロリポップ", "comment": "くるくる渦巻きが目を引く、とびきりキュートな主役級のお菓子だよ🍭"},
+    {"no": 3, "emoji": "🍫", "name": "濃厚チョコブロック", "comment": "どっしり濃厚で落ち着いた味わい。大人っぽい瓶にしたいときにぴったり🍫"},
+    {"no": 4, "emoji": "🍩", "name": "サクサクドーナツ", "comment": "サクッとふわっ、ほどよい甘さ。おやつ時間のお供にいつでも合うよ🍩"},
+    {"no": 5, "emoji": "🍪", "name": "チョコチップクッキー", "comment": "素朴でほっとする甘さ。甘さ控えめな瓶を作りたいときの味方だよ🍪"},
+    {"no": 6, "emoji": "🧁", "name": "カップケーキ", "comment": "ふんわりクリームがのった、見た目も味もとびきり甘くて可愛い一品🧁"},
+    {"no": 7, "emoji": "🍡", "name": "おだんご", "comment": "もちもちやさしい和のおやつ。季節の移ろいを感じさせてくれるよ🍡"},
+    {"no": 8, "emoji": "🍮", "name": "とろとろプリン", "comment": "とろ〜っとなめらか。しっかり甘くて、可愛らしさもたっぷり🍮"},
+    {"no": 9, "emoji": "🍧", "name": "ふわふわかき氷", "comment": "ひんやりふわふわ！ 甘さも季節感もトップクラスの特別なお菓子🍧"},
+    {"no": 10, "emoji": "🧇", "name": "サクサクワッフル", "comment": "香ばしくてサクサク。何にでも合う、バランスのいい名脇役だよ🧇"}
+  ],
+  "orders": [
+    {"id": "cute_1", "dimension": "cuteness", "target": 90, "message": "今日は、見た目がとびきり可愛い瓶がいいな！🎀"},
+    {"id": "cute_2", "dimension": "cuteness", "target": 85, "message": "思わず飾りたくなるような、可愛いお菓子をお願い♪"},
+    {"id": "cute_3", "dimension": "cuteness", "target": 95, "message": "きゅんとする可愛さたっぷりの瓶にしてほしいな♡"},
+    {"id": "cute_4", "dimension": "cuteness", "target": 75, "message": "やさしくて可愛らしい雰囲気のお菓子が好きなの。"},
+    {"id": "cute_5", "dimension": "cuteness", "target": 65, "message": "ちょっぴり可愛いお菓子を詰めてもらえる？🌷"},
+    {"id": "sweet_1", "dimension": "sweetness", "target": 95, "message": "今日はとびきり甘いお菓子が食べたい気分！🍯"},
+    {"id": "sweet_2", "dimension": "sweetness", "target": 85, "message": "あま～いお菓子をいっぱい詰めてね♪"},
+    {"id": "sweet_3", "dimension": "sweetness", "target": 75, "message": "しっかり甘さを感じられる瓶がいいな！"},
+    {"id": "sweet_4", "dimension": "sweetness", "target": 25, "message": "今日は甘さ控えめの、すっきりしたお菓子がいいな。"},
+    {"id": "sweet_5", "dimension": "sweetness", "target": 40, "message": "ほんのり甘いくらいのお菓子をお願いできる？"},
+    {"id": "season_1", "dimension": "seasonality", "target": 95, "message": "季節を感じるお菓子をぎゅっと詰めてほしいな🍁"},
+    {"id": "season_2", "dimension": "seasonality", "target": 85, "message": "今の季節にぴったりのお菓子が食べたいな！"},
+    {"id": "season_3", "dimension": "seasonality", "target": 75, "message": "季節らしさのある、特別な瓶にしてね🌸"},
+    {"id": "season_4", "dimension": "seasonality", "target": 30, "message": "季節を問わず楽しめる定番のお菓子がいいな。"},
+    {"id": "season_5", "dimension": "seasonality", "target": 45, "message": "季節感はほんのりあるくらいが好きだよ♪"},
+    {"id": "mix_1", "dimension": "cuteness", "target": 50, "message": "可愛すぎず、落ち着いた雰囲気のお菓子をお願い。"},
+    {"id": "mix_2", "dimension": "sweetness", "target": 55, "message": "甘さはほどほどで、いろいろ楽しめる瓶がいいな。"},
+    {"id": "mix_3", "dimension": "seasonality", "target": 60, "message": "少し季節を感じる、いつものおやつにぴったりな瓶がほしいな。"},
+    {"id": "mix_4", "dimension": "cuteness", "target": 100, "message": "とにかく可愛いものが大好き！可愛さ満点でお願いね！"},
+    {"id": "mix_5", "dimension": "sweetness", "target": 10, "message": "かなり甘さ控えめで、さっぱりしたお菓子が食べたいな。"}
+  ],
+  "thanks": [
+    "ありがとう！大切にいただくね♪", "とっても素敵な瓶をありがとう！", "わぁ、うれしい！またお願いするね♡", "心をこめて作ってくれてありがとう！", "お菓子の時間が楽しみになったよ！", "ぴったりのお菓子をありがとう♪", "大事に味わって食べるね！", "すてきな贈り物をありがとう！", "お店に来てよかった！ありがとう！", "またこのお店に来るね！", "ひとつひとつがとっても素敵！", "おいしそうな瓶をありがとう！", "しあわせなおやつ時間になりそう！", "こんな瓶が欲しかったの！ありがとう！", "かわいい瓶をありがとう、大切にするね！", "心までぽかぽかになったよ♪", "すてきなお菓子を詰めてくれてありがとう！", "また新しいお菓子にも出会いたいな！", "おかげで今日はいい日になりそう！", "本当にありがとう！また会おうね！"
+  ]
+}

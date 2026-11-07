@@ -1022,11 +1022,11 @@ CANDY_SHOP_EXTRA_COST_POINTS = 2   # ショップで買った追加のお菓子�
 # お菓子コインはお菓子屋さん内だけで使うゲーム内通貨。
 # IPPOポイントや水族館・恐竜レースの仕組みとは独立させる。
 CANDY_SHOP_MATERIALS = {
-    "whip": {"name": "ホイップ", "emoji": "🍦", "price": 5},
-    "chocolate": {"name": "チョコ", "emoji": "🍫", "price": 5},
-    "strawberry": {"name": "イチゴ", "emoji": "🍓", "price": 5},
-    "flour": {"name": "小麦粉", "emoji": "🌾", "price": 5},
-    "cookie": {"name": "クッキー", "emoji": "🍪", "price": 5},
+    "whip": {"name": "ホイップ", "emoji": "🍦", "price": 20},
+    "chocolate": {"name": "チョコ", "emoji": "🍫", "price": 20},
+    "strawberry": {"name": "イチゴ", "emoji": "🍓", "price": 20},
+    "flour": {"name": "小麦粉", "emoji": "🌾", "price": 20},
+    "cookie": {"name": "クッキー", "emoji": "🍪", "price": 20},
 }
 # 最初から瓶に入れられる5種類（🍬🍭🍫🍩🍪）は、これまで通りIPPOポイントだけで入れられる。
 # こちらはショップでお菓子コインを使って買い足せる「追加のお菓子」（最初の5種類とは別の種類）。

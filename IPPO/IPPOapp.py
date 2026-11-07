@@ -1419,6 +1419,64 @@ def render_candy_jar_section():
                 save_progress()
                 st.rerun()
         st.caption("ショップで買ったお菓子もここに追加されます。")
+        st.markdown("---")
+        if st.button("📖 手に入れたお菓子一覧", use_container_width=True, key="open_candy_collection"):
+            play_click_sound()
+            st.session_state.page = "candy_collection_page"
+            st.rerun()
+
+
+def candy_is_obtained(emoji: str) -> bool:
+    """そのお菓子を手に入れたことがあるか。最初の5種類は最初から所持、
+    追加のお菓子はショップで買った（在庫がある）か、瓶に入れたことがあれば所持扱い。"""
+    if any(c["emoji"] == emoji for c in CANDY_DEFAULT_SPEC):
+        return True
+    for shop_key, item in CANDY_SHOP_JAR_CANDIES.items():
+        if item["emoji"] == emoji and st.session_state.candy_shop_jar_candy_stock.get(shop_key, 0) > 0:
+            return True
+    return any(c.get("emoji") == emoji for c in st.session_state.get("all_candy_log", []))
+
+
+def render_candy_collection_page():
+    """手に入れたお菓子の一覧ページ（No.・名前・一言・パラメータをJSONから表示）。"""
+    st.title("📖 手に入れたお菓子一覧")
+    if st.button("↩️ お菓子の瓶に戻る", key="back_to_candy_page"):
+        play_click_sound()
+        st.session_state.page = "candy_page"
+        st.rerun()
+
+    catalog = CANDY_JAR_ORDER_DATA.get("candy_catalog", [])
+    stats_all = CANDY_JAR_ORDER_DATA.get("candy_stats", {})
+    if not catalog:
+        st.warning("お菓子一覧のデータ（candy_catalog）がJSONに見つかりませんでした。")
+        return
+
+    obtained = [c for c in catalog if candy_is_obtained(c.get("emoji", ""))]
+    st.caption(f"手に入れたお菓子：{len(obtained)} / {len(catalog)} 種類　"
+               "（ショップで買い足すと新しいお菓子が増えるよ✨）")
+
+    used_counts = {}
+    for c in st.session_state.get("all_candy_log", []):
+        used_counts[c.get("emoji")] = used_counts.get(c.get("emoji"), 0) + 1
+
+    stat_labels = [("sweetness", "🍯 甘さ"), ("cuteness", "🎀 可愛さ"), ("seasonality", "🍁 季節感")]
+    for entry in catalog:
+        emoji = entry.get("emoji", "")
+        no_text = f"No.{entry.get('no', '?')}"
+        if not candy_is_obtained(emoji):
+            with st.container(border=True):
+                st.markdown(f"### {no_text}　❓ ？？？")
+                st.caption("まだ手に入れていないお菓子です。ショップで探してみよう！")
+            continue
+        stats = stats_all.get(emoji, {})
+        with st.container(border=True):
+            st.markdown(f"### {no_text}　{emoji} {entry.get('name', '')}")
+            if entry.get("comment"):
+                st.write(entry["comment"])
+            for key, label in stat_labels:
+                value = int(stats.get(key, 0))
+                st.progress(max(0, min(100, value)) / 100, text=f"{label}：{value}")
+            st.caption(f"これまでに瓶へ入れた数：{used_counts.get(emoji, 0)} 個")
 
 
 def render_candy_shop():
@@ -3272,7 +3330,7 @@ elif st.session_state.page == "menu_select":
 # =====================================================
 elif st.session_state.page in [
     "target_page", "calendar_page", "stage_page",
-    "candy_page", "aquarium_page", "dino_page", "schedule_page",
+    "candy_page", "candy_collection_page", "aquarium_page", "dino_page", "schedule_page",
     "future_schedule_page", "schedule_print_page"
 ]:
 
@@ -4006,6 +4064,10 @@ elif st.session_state.page in [
 
         # 瓶にお菓子を入れる機能は「瓶の注文」タブに統合済み。
         render_candy_shop()
+
+    # --- お菓子一覧ページ ---
+    elif st.session_state.page == "candy_collection_page":
+        render_candy_collection_page()
 
     # --- 水族館ページ ---
     elif st.session_state.page == "aquarium_page":

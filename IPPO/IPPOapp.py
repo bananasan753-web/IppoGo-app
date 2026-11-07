@@ -1071,7 +1071,7 @@ CANDY_RECIPE_BOOK_PRICE = 50
 
 
 CANDY_HINT_COST = 5
-CANDY_GACHA_COST_COINS = 20   # お菓子ガチャ1回に必要なお菓子コイン
+CANDY_GACHA_COST_COINS = 50   # お菓子ガチャ1回に必要なお菓子コイン
 CANDY_GACHA_DEFAULT_RATES = {1: 40, 2: 30, 3: 18, 4: 9, 5: 3}   # ★ごとの出やすさ（JSONのgacha_ratesで調整できる）
 
 

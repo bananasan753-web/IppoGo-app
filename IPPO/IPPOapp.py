@@ -1203,16 +1203,88 @@ def candy_shop_craft(material_keys: list):
     return True, crafted
 
 
-def candy_shop_sell_displayed(index: int):
+def candy_shop_craft_message(product: dict) -> str:
+    """スイーツ完成時のセリフ。JSONのcraft_messagesからランダムに選ぶ（{name}がスイーツ名に置き換わる）。"""
+    messages = CANDY_RECIPE_DATA.get("craft_messages") or ["{name}完成！"]
+    return random.choice(messages).replace("{name}", f"{product['emoji']}{product['name']}")
+
+
+def candy_shop_return_displayed(index: int):
+    """棚に並べた商品を、持ち物（商品）に戻す。"""
     displayed = st.session_state.candy_shop_displayed
     if not 0 <= index < len(displayed):
         return False
-    product = displayed.pop(index)
-    reward = int(product.get("sell_price", CANDY_SHOP_FALLBACK["sell_price"]))
-    st.session_state.candy_coins += reward
-    candy_shop_add_exp(max(5, int(product.get("rarity", 1)) * 5))
+    st.session_state.candy_shop_products.append(displayed.pop(index))
     save_progress()
     return True
+
+
+def candy_shop_serve_customer(customer: dict) -> dict:
+    """お客さん1人が棚を見て、気に入ったスイーツを買ってくれる。（必ず何か1つ買ってくれる）
+    大好物（likes）があればそれを選び、ファンボーナス込みの金額を払う。
+    なければ、その人の選び方（highest=いちばん豪華 / cheapest=お手頃 / random=気分）で選ぶ。
+    ときどきチップをくれることもある。"""
+    shelf = st.session_state.candy_shop_displayed
+    lines = customer.get("lines", {})
+    likes = set(customer.get("likes", []))
+
+    def price_of(product):
+        return int(product.get("sell_price", CANDY_SHOP_FALLBACK["sell_price"]))
+
+    favorites = [i for i, p in enumerate(shelf) if p.get("emoji") in likes]
+    loved = bool(favorites)
+    if loved:
+        chosen = random.choice(favorites)
+    else:
+        style = customer.get("style", "random")
+        indexes = list(range(len(shelf)))
+        if style == "highest":
+            chosen = max(indexes, key=lambda i: price_of(shelf[i]))
+        elif style == "cheapest":
+            chosen = min(indexes, key=lambda i: price_of(shelf[i]))
+        else:
+            chosen = random.choice(indexes)
+
+    product = shelf.pop(chosen)
+    paid = price_of(product)
+    if loved:
+        paid = round(paid * float(customer.get("fan_bonus", 1.5)))
+    tip = round(paid * 0.3) if random.random() < 0.15 else 0   # ときどきもらえるチップ
+    paid += tip
+
+    notes = st.session_state.candy_shop_customer_notes
+    note = notes.setdefault(customer["id"], {"visits": 0, "bought": 0, "loved": 0})
+    note["visits"] = int(note.get("visits", 0)) + 1
+    note["bought"] = int(note.get("bought", 0)) + 1
+    if loved:
+        note["loved"] = int(note.get("loved", 0)) + 1
+    st.session_state.candy_coins += paid
+    candy_shop_add_exp(max(5, int(product.get("rarity", 1)) * 5) + (5 if loved else 0))
+    return {"id": customer["id"], "name": customer.get("name", "お客さん"),
+            "emoji": customer.get("emoji", "🙂"), "loved": loved, "tip": tip, "paid": paid,
+            "bought": {"emoji": product.get("emoji", ""), "name": product.get("name", "")},
+            "line": lines.get("love" if loved else "buy", "ありがとう！")}
+
+
+def candy_shop_open_for_business():
+    """お店をひらく。お店レベルが高いほど来店するお客さんが増える（最大5人）。
+    お客さんはランダムに来て、棚のスイーツを気に入って買ってくれる。"""
+    customers = CANDY_RECIPE_DATA.get("customers", [])
+    if not customers or not st.session_state.candy_shop_displayed:
+        return None
+    level = int(st.session_state.get("candy_shop_level", 1))
+    count = random.randint(1, min(5, 2 + level // 5))
+    pool = list(customers)
+    visits = []
+    for _ in range(min(count, len(pool))):
+        if not st.session_state.candy_shop_displayed:
+            break  # 棚のスイーツが全部届いたら、今日はここまで
+        weights = [max(1, int(c.get("weight", 1))) for c in pool]
+        customer = random.choices(pool, weights=weights, k=1)[0]
+        pool.remove(customer)
+        visits.append(candy_shop_serve_customer(customer))
+    save_progress()
+    return {"visits": visits, "total": sum(v["paid"] for v in visits)}
 
 
 def candy_extra_owned(shop_key: str) -> bool:
@@ -1537,6 +1609,11 @@ def render_candy_shop():
 
     with craft_tab:
         st.subheader("材料を組み合わせてスイーツを作ろう")
+        craft_done = st.session_state.pop("candy_shop_craft_message", None)
+        if craft_done:
+            st.success(f"{craft_done['text']}　レア度：{'★' * int(craft_done['rarity'])}")
+            if int(craft_done["rarity"]) >= 4:
+                st.balloons()
         material_names = {
             key: f"{item['emoji']} {item['name']}（所持 {st.session_state.candy_shop_materials.get(key, 0)}）"
             for key, item in CANDY_SHOP_MATERIALS.items()
@@ -1571,7 +1648,9 @@ def render_candy_shop():
                          key="candy_shop_craft_button"):
                 ok, product = candy_shop_craft(chosen)
                 if ok:
-                    st.success(f"{product['emoji']} {product['name']}が完成！ レア度：{'★' * int(product['rarity'])}")
+                    st.session_state.candy_shop_craft_message = {
+                        "text": candy_shop_craft_message(product), "rarity": int(product["rarity"]),
+                    }
                     st.rerun()
                 else:
                     st.error("材料が足りません。")
@@ -1618,19 +1697,62 @@ def render_candy_shop():
             st.info("まだ商品がありません。材料を組み合わせて作ってみよう！")
 
         if st.session_state.candy_shop_displayed:
-            st.markdown("#### お客さんが買える商品")
+            st.markdown("#### 🪧 いまの棚")
             for idx, product in enumerate(list(st.session_state.candy_shop_displayed)):
                 with st.container(border=True):
                     st.markdown(
                         f"### {product['emoji']} {product['name']}　{'★' * int(product.get('rarity', 1))}"
                     )
-                    st.caption(f"購入されると {product.get('sell_price', 20)} お菓子コイン")
-                    if st.button("🛒 お客さんが購入する", key=f"candy_shop_sell_{idx}"):
-                        candy_shop_sell_displayed(idx)
-                        st.success("商品が売れたよ！お菓子コインとお店経験値を獲得！")
+                    st.caption(f"お値段：🪙 {product.get('sell_price', 20)}")
+                    if st.button("↩️ 棚からもどす", key=f"candy_shop_return_{idx}"):
+                        candy_shop_return_displayed(idx)
                         st.rerun()
         else:
             st.info("棚は空です。商品を作って展示しよう！")
+
+        st.write("---")
+        st.markdown("#### 🚪 お店をひらく")
+        st.caption("お客さんにはそれぞれ好みがあるよ。大好物を見つけると、特別なお礼をしてくれるかも💖")
+        visit_result = st.session_state.pop("candy_shop_visit_result", None)
+        if visit_result:
+            for visit in visit_result["visits"]:
+                with st.container(border=True):
+                    st.markdown(f"**{visit['emoji']} {visit['name']}**")
+                    st.write(f"「{visit['line']}」")
+                    if visit["bought"]:
+                        bonus_text = "　💖大好物ボーナス！" if visit["loved"] else ""
+                        tip_text = f"　✨チップ +{visit['tip']}" if visit.get("tip") else ""
+                        st.success(f"{visit['bought']['emoji']} {visit['bought']['name']} を購入！ 🪙+{visit['paid']}{bonus_text}{tip_text}")
+            if visit_result["total"]:
+                st.info(f"🪙 今回の売り上げ：{visit_result['total']} コイン")
+        if not CANDY_RECIPE_DATA.get("customers"):
+            st.warning("お客さんのデータ（customers）が見つかりませんでした。")
+        if not st.session_state.candy_shop_displayed:
+            st.caption("棚にスイーツを並べると、お店をひらけるよ🍰")
+        if st.button("🔔 お店をひらいてお客さんを迎える", type="primary",
+                     disabled=(not st.session_state.candy_shop_displayed or not CANDY_RECIPE_DATA.get("customers")),
+                     key="candy_shop_open_button"):
+            st.session_state.candy_shop_visit_result = candy_shop_open_for_business()
+            st.rerun()
+
+        with st.expander("📒 常連さんノート"):
+            notes = st.session_state.candy_shop_customer_notes
+            all_customers = CANDY_RECIPE_DATA.get("customers", [])
+            met = sum(1 for c in all_customers if c["id"] in notes)
+            st.caption(f"出会ったお客さん：{met} / {len(all_customers)} 人")
+            for customer in all_customers:
+                note = notes.get(customer["id"])
+                with st.container(border=True):
+                    if not note:
+                        st.markdown("### ❓ ？？？")
+                        st.caption("まだ会っていないお客さんです。")
+                        continue
+                    st.markdown(f"### {customer.get('emoji', '🙂')} {customer.get('name', '')}")
+                    if int(note.get("loved", 0)) > 0:
+                        st.write(f"💖 大好物：{' '.join(customer.get('likes', []))}")
+                    else:
+                        st.write(f"🔎 ヒント：{customer.get('hint', '')}")
+                    st.caption(f"来店 {note.get('visits', 0)} 回／購入 {note.get('bought', 0)} 回／大好物 {note.get('loved', 0)} 回")
 
     with order_tab:
         st.subheader("🫙 瓶の注文")
@@ -1817,6 +1939,7 @@ PERSISTENT_KEYS = [
     "candy_shop_exp",
     "candy_shop_jar_order",
     "candy_shop_jar_order_log",
+    "candy_shop_customer_notes",
 ]
 
 PERSISTENT_DEFAULTS = {
@@ -1873,6 +1996,7 @@ PERSISTENT_DEFAULTS = {
     "candy_shop_exp": 0,
     "candy_shop_jar_order": None,
     "candy_shop_jar_order_log": [],
+    "candy_shop_customer_notes": {},
 }
 
 
@@ -3088,7 +3212,7 @@ for _shop_key in (
     "candy_coins", "candy_shop_materials", "candy_shop_jar_candy_stock",
     "candy_shop_unlocked_recipes", "candy_shop_recipe_book_owned", "candy_shop_products", "candy_shop_displayed",
     "candy_shop_discovered", "candy_shop_shelf_capacity", "candy_shop_level",
-    "candy_shop_exp", "candy_shop_jar_order", "candy_shop_jar_order_log",
+    "candy_shop_exp", "candy_shop_jar_order", "candy_shop_jar_order_log", "candy_shop_customer_notes",
 ):
     if _shop_key not in st.session_state:
         _default = PERSISTENT_DEFAULTS[_shop_key]

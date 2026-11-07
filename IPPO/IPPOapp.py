@@ -71,6 +71,7 @@ AQUA_POINT_SOUND_PATH = os.path.join(os.path.dirname(__file__), "sounds", "パ�
 AQUA_GACHA_LOW_SOUND_PATH = os.path.join(os.path.dirname(__file__), "sounds", "ペタッ.mp3")
 AQUA_GACHA_THREE_SOUND_PATH = os.path.join(os.path.dirname(__file__), "sounds", "きらーん1.mp3")
 AQUA_FEED_SOUND_PATH = os.path.join(os.path.dirname(__file__), "sounds", "コルク栓を抜く.mp3")
+CANDY_CRAFT_SOUND_PATH = os.path.join(os.path.dirname(__file__), "sounds", "決定ボタンを押す21.mp3")  # スイーツを作るとき
 
 JAR_SIZE_LABELS = {5: "XS", 10: "S", 20: "M", 30: "L"}  # 5(XS)は過去の瓶の履歴表示用。選べるのは10/20/30
 
@@ -1017,8 +1018,9 @@ CANDY_SHOP_EXTRA_COST_POINTS = 2   # ショップで買った追加のお菓子�
 
 
 # =====================================================
-# 🍰 お菓子屋さん（お菓子屋さんステージ専用）
+# 🍰 お菓子屋さん ① 設定値・定数（お菓子コインはお菓子屋さん内だけで使うゲーム内通貨）
 # =====================================================
+
 # お菓子コインはお菓子屋さん内だけで使うゲーム内通貨。
 # IPPOポイントや水族館・恐竜レースの仕組みとは独立させる。
 CANDY_SHOP_MATERIALS = {
@@ -1028,6 +1030,8 @@ CANDY_SHOP_MATERIALS = {
     "flour": {"name": "小麦粉", "emoji": "🌾", "price": 20},
     "cookie": {"name": "クッキー", "emoji": "🍪", "price": 20},
 }
+
+
 # 最初から瓶に入れられる5種類（🍬🍭🍫🍩🍪）は、これまで通りIPPOポイントだけで入れられる。
 # こちらはショップでお菓子コインを使って買い足せる「追加のお菓子」（最初の5種類とは別の種類）。
 # 追加のお菓子は「買いきり」：一度買えば、以降は何個でも IPPOポイント（CANDY_SHOP_EXTRA_COST_POINTS）だけで瓶に入れられる。
@@ -1038,6 +1042,8 @@ CANDY_SHOP_JAR_CANDIES = {
     "shaved_ice": {"name": "ふわふわかき氷", "emoji": "🍧", "price": 400},
     "waffle": {"name": "サクサクワッフル", "emoji": "🧇", "price": 400},
 }
+
+
 # 最初から使える5種類
 CANDY_DEFAULT_SPEC = [
     {"emoji": "🍬", "label": "定番キャンディ"},
@@ -1046,17 +1052,42 @@ CANDY_DEFAULT_SPEC = [
     {"emoji": "🍩", "label": "サクサクドーナツ"},
     {"emoji": "🍪", "label": "チョコチップクッキー"},
 ]
+
+
 # 瓶の大きさ（お客さんの注文の個数も、この3種類）
 CANDY_JAR_SIZES = [10, 20, 30]
+
+
 CANDY_JAR_NAMES = {10: "小さめの瓶", 20: "普通の瓶", 30: "大きめの瓶"}
+
+
 CANDY_JAR_DEFAULT_NAME = "瓶詰めお菓子"   # 名前をつけなかったときの呼び名
 
-def candy_jar_display_name() -> str:
-    return (st.session_state.get("jar_name") or "").strip() or CANDY_JAR_DEFAULT_NAME
 
+CANDY_JAR_REWARD_DEFAULT = {10: (100, 300), 20: (200, 400), 30: (300, 500)}
+
+
+CANDY_RECIPE_BOOK_PRICE = 50
+
+
+CANDY_HINT_COST = 5
+CANDY_GACHA_COST_COINS = 20   # お菓子ガチャ1回に必要なお菓子コイン
+CANDY_GACHA_DEFAULT_RATES = {1: 40, 2: 30, 3: 18, 4: 9, 5: 3}   # ★ごとの出やすさ（JSONのgacha_ratesで調整できる）
+
+
+CANDY_SHOP_FALLBACK = {
+    "name": "ふしぎなお菓子", "emoji": "🍬", "rarity": 1, "sell_price": 20,
+}
+
+
+# =====================================================
+# 🍰 お菓子屋さん ② JSONデータの読み込み（レシピ・瓶の注文ルール）
+# =====================================================
 
 # レシピと瓶注文ルールは、アプリ本体とは別のJSONファイルで管理する。
 CANDY_RECIPE_DATA_PATH = os.path.join(BASE_DIR, "data", "candy_recipes.json")
+
+
 CANDY_JAR_ORDER_DATA_PATH = os.path.join(BASE_DIR, "data", "candy_jar_orders.json")
 
 
@@ -1073,17 +1104,22 @@ def load_candy_json(path: str, label: str) -> dict:
 
 
 CANDY_RECIPE_DATA = load_candy_json(CANDY_RECIPE_DATA_PATH, "スイーツレシピ")
+
+
 CANDY_JAR_ORDER_DATA = load_candy_json(CANDY_JAR_ORDER_DATA_PATH, "瓶注文")
+
+
 CANDY_SHOP_RECIPES = {
     recipe["id"]: recipe for recipe in CANDY_RECIPE_DATA.get("recipes", [])
 }
-CANDY_SHOP_FALLBACKS = CANDY_RECIPE_DATA.get("fallback_sweets", [])
-CANDY_SHOP_FALLBACK = {
-    "name": "ふしぎなお菓子", "emoji": "🍬", "rarity": 1, "sell_price": 20,
-}
-CANDY_RECIPE_BOOK_PRICE = 50
-CANDY_HINT_COST = 5
 
+
+CANDY_SHOP_FALLBACKS = CANDY_RECIPE_DATA.get("fallback_sweets", [])
+
+
+# =====================================================
+# 🍰 お菓子屋さん ③ 共通のヘルパー（経験値・瓶の名前）
+# =====================================================
 
 def candy_shop_add_exp(amount: int):
     """販売・瓶注文の経験値を加算して店レベルを更新する。"""
@@ -1098,56 +1134,13 @@ def candy_shop_add_exp(amount: int):
         st.session_state.candy_shop_level += 1
 
 
-def candy_rule_target(rule: dict, size: int) -> int:
-    """注文ルールから、瓶の大きさ(個数)に合った目標値を返す。旧形式（targetだけ）にも対応。"""
-    targets = rule.get("targets")
-    if isinstance(targets, dict) and targets:
-        if str(size) in targets:
-            return int(targets[str(size)])
-        nearest = min(targets, key=lambda k: abs(int(k) - int(size)))
-        return int(targets[nearest])
-    return int(rule.get("target", 50))
+def candy_jar_display_name() -> str:
+    return (st.session_state.get("jar_name") or "").strip() or CANDY_JAR_DEFAULT_NAME
 
 
-CANDY_JAR_REWARD_DEFAULT = {10: (100, 300), 20: (200, 400), 30: (300, 500)}
-
-
-def candy_jar_reward_range(capacity: int):
-    """瓶の大きさごとの報酬コインの(最低, 最高)。JSONのreward_rangesで調整できる。"""
-    r = CANDY_JAR_ORDER_DATA.get("reward_ranges", {}).get(str(capacity))
-    if isinstance(r, dict) and "min" in r and "max" in r:
-        return int(r["min"]), int(r["max"])
-    return CANDY_JAR_REWARD_DEFAULT.get(int(capacity), (100, 300))
-
-
-def candy_shop_create_jar_order():
-    """20種類の注文条件から、お客さんの注文を1件作る。（瓶の大きさは注文に含めず、自分で選ぶ）"""
-    order = st.session_state.get("candy_shop_jar_order")
-    order_rules = CANDY_JAR_ORDER_DATA.get("orders", [])
-    if not order_rules:
-        return
-    if not order:
-        rule = random.choice(order_rules)
-        st.session_state.candy_shop_jar_order = {
-            "condition_id": rule["id"],
-            "message": rule["message"],
-            "dimension": rule["dimension"],
-        }
-        save_progress()
-    elif not order.get("condition_id"):
-        # 旧バージョンの注文データを新しい注文形式へ移行する。
-        rule = random.choice(order_rules)
-        order.update({"condition_id": rule["id"], "message": rule["message"],
-                      "dimension": rule["dimension"]})
-        order.pop("reward", None)
-        order.pop("exp", None)
-        save_progress()
-    if order and ("quantity" in order or "target" in order):
-        # 旧形式の注文に残っている希望個数・目標値は使わない（瓶の大きさは自分で選ぶ）。
-        order.pop("quantity", None)
-        order.pop("target", None)
-        save_progress()
-
+# =====================================================
+# 🍓 お菓子屋さん ④ スイーツ作り（材料の購入・合成・完成セリフ）
+# =====================================================
 
 def candy_shop_buy_material(material_key: str, quantity: int = 1):
     item = CANDY_SHOP_MATERIALS[material_key]
@@ -1208,6 +1201,10 @@ def candy_shop_craft_message(product: dict) -> str:
     messages = CANDY_RECIPE_DATA.get("craft_messages") or ["{name}完成！"]
     return random.choice(messages).replace("{name}", f"{product['emoji']}{product['name']}")
 
+
+# =====================================================
+# 🧁 お菓子屋さん ⑤ 商品棚とお客さん（棚から戻す・お店をひらく）
+# =====================================================
 
 def candy_shop_return_displayed(index: int):
     """棚に並べた商品を、持ち物（商品）に戻す。"""
@@ -1287,8 +1284,63 @@ def candy_shop_open_for_business():
     return {"visits": visits, "total": sum(v["paid"] for v in visits)}
 
 
+# =====================================================
+# 🫙 お菓子屋さん ⑥ 瓶の注文（注文づくり・お菓子を入れる・渡す・瓶の画面）
+# =====================================================
+
+def candy_rule_target(rule: dict, size: int) -> int:
+    """注文ルールから、瓶の大きさ(個数)に合った目標値を返す。旧形式（targetだけ）にも対応。"""
+    targets = rule.get("targets")
+    if isinstance(targets, dict) and targets:
+        if str(size) in targets:
+            return int(targets[str(size)])
+        nearest = min(targets, key=lambda k: abs(int(k) - int(size)))
+        return int(targets[nearest])
+    return int(rule.get("target", 50))
+
+
+def candy_jar_reward_range(capacity: int):
+    """瓶の大きさごとの報酬コインの(最低, 最高)。JSONのreward_rangesで調整できる。"""
+    r = CANDY_JAR_ORDER_DATA.get("reward_ranges", {}).get(str(capacity))
+    if isinstance(r, dict) and "min" in r and "max" in r:
+        return int(r["min"]), int(r["max"])
+    return CANDY_JAR_REWARD_DEFAULT.get(int(capacity), (100, 300))
+
+
+def candy_shop_create_jar_order():
+    """20種類の注文条件から、お客さんの注文を1件作る。（瓶の大きさは注文に含めず、自分で選ぶ）"""
+    order = st.session_state.get("candy_shop_jar_order")
+    order_rules = CANDY_JAR_ORDER_DATA.get("orders", [])
+    if not order_rules:
+        return
+    if not order:
+        rule = random.choice(order_rules)
+        st.session_state.candy_shop_jar_order = {
+            "condition_id": rule["id"],
+            "message": rule["message"],
+            "dimension": rule["dimension"],
+        }
+        save_progress()
+    elif not order.get("condition_id"):
+        # 旧バージョンの注文データを新しい注文形式へ移行する。
+        rule = random.choice(order_rules)
+        order.update({"condition_id": rule["id"], "message": rule["message"],
+                      "dimension": rule["dimension"]})
+        order.pop("reward", None)
+        order.pop("exp", None)
+        save_progress()
+    if order and ("quantity" in order or "target" in order):
+        # 旧形式の注文に残っている希望個数・目標値は使わない（瓶の大きさは自分で選ぶ）。
+        order.pop("quantity", None)
+        order.pop("target", None)
+        save_progress()
+
+
 def candy_extra_owned(shop_key: str) -> bool:
-    """追加のお菓子を買いきりで持っているか。（以前の在庫方式で買った分や、瓶に入れたことがある分も持っている扱い）"""
+    """追加のお菓子を持っているか。（ショップで買いきり／ガチャで当てたお菓子。キーが gacha_ で始まるものはガチャのお菓子）
+    以前の在庫方式で買った分や、瓶に入れたことがある分も持っている扱い。"""
+    if shop_key.startswith("gacha_"):
+        return candy_gacha_owned(shop_key[len("gacha_"):])
     if st.session_state.candy_shop_jar_candy_stock.get(shop_key, 0) > 0:
         return True
     item = CANDY_SHOP_JAR_CANDIES.get(shop_key)
@@ -1496,20 +1548,25 @@ def render_candy_jar_section():
         st.caption("お菓子屋さん・水族館・恐竜レースで共通のIPPOポイントです。")
         st.markdown("### 🍬 飴を選ぶ")
         st.caption(f"最初のお菓子は1個 ＝ {CANDY_COST_POINTS} IPPOポイント／"
-                   f"ショップで買った追加のお菓子は1個 ＝ {CANDY_SHOP_EXTRA_COST_POINTS} IPPOポイント")
+                   f"ショップで買った・ガチャで当てた追加のお菓子は1個 ＝ {CANDY_SHOP_EXTRA_COST_POINTS} IPPOポイント")
         can_buy_candy = st.session_state.ippo_points >= CANDY_COST_POINTS
         if is_full:
             st.info("瓶が完成したよ！ 渡してから、次の瓶にお菓子を入れよう。")
         elif not can_buy_candy:
             st.warning("IPPOポイントが足りないよ！ 目標を達成してIPPOポイントをためよう。")
 
-        # 最初から使える5種類 ＋ ショップで買った（買いきりの）追加のお菓子
+        # 最初から使える5種類 ＋ ショップで買った（買いきりの）追加のお菓子 ＋ ガチャで当てたお菓子
         picker = [{"emoji": c["emoji"], "label": c["label"], "shop_key": None, "stock": None}
                   for c in CANDY_DEFAULT_SPEC]
         for shop_key, item in CANDY_SHOP_JAR_CANDIES.items():
             if candy_extra_owned(shop_key):
                 picker.append({"emoji": item["emoji"], "label": item["name"],
                                "shop_key": shop_key, "stock": None})
+        for gacha_candy in candy_gacha_pool():
+            if candy_gacha_owned(gacha_candy["id"]):
+                picker.append({"emoji": gacha_candy["emoji"],
+                               "label": f"{gacha_candy['name']} {'★' * int(gacha_candy['stars'])}",
+                               "shop_key": f"gacha_{gacha_candy['id']}", "stock": None})
         for candy in picker:
             candy_cost = CANDY_COST_POINTS if candy["shop_key"] is None else CANDY_SHOP_EXTRA_COST_POINTS
             label = f"{candy['emoji']}\n\n{candy['label']}\n💎{candy_cost}"
@@ -1522,7 +1579,7 @@ def render_candy_jar_section():
                 st.session_state.praise_message = ""
                 save_progress()
                 st.rerun()
-        st.caption("ショップで買ったお菓子もここに追加されます。")
+        st.caption("ショップで買ったお菓子や、ガチャで当てたお菓子もここに追加されます。")
         st.markdown("---")
         if st.button("📖 手に入れたお菓子一覧", use_container_width=True, key="open_candy_collection"):
             play_click_sound()
@@ -1530,10 +1587,137 @@ def render_candy_jar_section():
             st.rerun()
 
 
+# =====================================================
+# 🎰 お菓子屋さん ⑦ お菓子ガチャ（瓶の注文で使えるお菓子が出る）
+# =====================================================
+def candy_gacha_pool() -> list:
+    """ガチャで出るお菓子の一覧。candy_jar_orders.json の candy_catalog のうち、stars（★1〜5）があるもの。"""
+    return [c for c in CANDY_JAR_ORDER_DATA.get("candy_catalog", [])
+            if int(c.get("stars", 0)) > 0 and c.get("id")]
+
+
+def candy_gacha_rates() -> dict:
+    """★ごとの出やすさ。JSONのgacha_ratesがあればそれを使う。"""
+    rates = dict(CANDY_GACHA_DEFAULT_RATES)
+    for star, weight in CANDY_JAR_ORDER_DATA.get("gacha_rates", {}).items():
+        try:
+            rates[int(star)] = float(weight)
+        except (TypeError, ValueError):
+            pass
+    return rates
+
+
+def candy_gacha_owned(gacha_id: str) -> bool:
+    """そのガチャのお菓子を手に入れたことがあるか。"""
+    return int(st.session_state.candy_gacha_owned.get(gacha_id, 0)) > 0
+
+
+def candy_gacha_give_materials(stars: int) -> dict:
+    """同じお菓子が出たとき：今持っている材料の中から、★の数だけ（★1なら1個、★2なら2個…）ランダムでもらえる。
+    材料を1つも持っていないときは、材料の種類の中から選ぶ。"""
+    materials = st.session_state.candy_shop_materials
+    gained = {}
+    for _ in range(max(1, int(stars))):
+        held = [k for k, v in materials.items() if v > 0 and k in CANDY_SHOP_MATERIALS]
+        key = random.choice(held or list(CANDY_SHOP_MATERIALS))
+        materials[key] = materials.get(key, 0) + 1
+        gained[key] = gained.get(key, 0) + 1
+    return gained
+
+
+def candy_gacha_spin():
+    """ガチャを1回回す。コインを使い、結果を candy_gacha_result に入れる。回せなければFalse。"""
+    pool = candy_gacha_pool()
+    if not pool or st.session_state.candy_coins < CANDY_GACHA_COST_COINS:
+        return False
+    st.session_state.candy_coins -= CANDY_GACHA_COST_COINS
+
+    rates = candy_gacha_rates()
+    star_list = sorted({int(c["stars"]) for c in pool})
+    weights = [max(0.0, rates.get(s, 0)) for s in star_list]
+    if sum(weights) <= 0:
+        weights = [1.0] * len(star_list)
+    stars = random.choices(star_list, weights=weights, k=1)[0]
+    got = random.choice([c for c in pool if int(c["stars"]) == stars])
+
+    owned = st.session_state.candy_gacha_owned
+    is_new = int(owned.get(got["id"], 0)) <= 0
+    owned[got["id"]] = int(owned.get(got["id"], 0)) + 1
+
+    result = {"id": got["id"], "emoji": got.get("emoji", "🍬"), "name": got.get("name", ""),
+              "stars": stars, "is_new": is_new, "win_comment": got.get("win_comment", ""),
+              "stats": CANDY_JAR_ORDER_DATA.get("candy_stats", {}).get(got.get("emoji", ""), {})}
+    if not is_new:
+        result["materials"] = candy_gacha_give_materials(stars)
+        comments = CANDY_JAR_ORDER_DATA.get("gacha_duplicate_comments") or ["同じお菓子が出たよ！ 材料をプレゼントするね🎁"]
+        result["dup_comment"] = random.choice(comments)
+    st.session_state.candy_gacha_result = result
+    save_progress()
+    return True
+
+
+def render_candy_gacha_tab():
+    """お菓子ガチャの画面。"""
+    st.subheader("🎰 お菓子ガチャ")
+    st.write(f"1回 **🪙{CANDY_GACHA_COST_COINS}**。瓶の注文で使えるお菓子が出るよ！")
+    st.caption(f"当たったお菓子は「瓶の注文」の瓶に、1個につき {CANDY_SHOP_EXTRA_COST_POINTS} IPPOポイントで入れられます。"
+               "すでに持っているお菓子が出たときは、持っている材料からプレゼントがもらえるよ🎁")
+    st.metric("🪙 お菓子コイン", st.session_state.candy_coins)
+
+    # 直前のガチャ結果は、画面更新後にここで表示・効果音を鳴らす（効果音は1回だけ）
+    result = st.session_state.pop("candy_gacha_result", None)
+    if result:
+        play_candy_gacha_sound()
+        with st.container(border=True):
+            st.markdown(f"### {'★' * result['stars']}　{result['emoji']} {result['name']}")
+            if result["is_new"]:
+                st.success(f"🎉 {result['win_comment']}")
+                if result["stars"] >= 4:
+                    st.balloons()
+                for key, label in (("sweetness", "🍯 甘さ"), ("cuteness", "🎀 可愛さ"), ("seasonality", "🍁 季節感")):
+                    value = int(result["stats"].get(key, 0))
+                    st.progress(max(0, min(100, value)) / 100, text=f"{label}：{value}")
+            else:
+                st.info(result["dup_comment"])
+                gained_text = "　".join(
+                    f"{CANDY_SHOP_MATERIALS[k]['emoji']}{CANDY_SHOP_MATERIALS[k]['name']} ×{n}"
+                    for k, n in result["materials"].items() if k in CANDY_SHOP_MATERIALS
+                )
+                st.success(f"🎁 もらった材料：{gained_text}")
+
+    pool = candy_gacha_pool()
+    if not pool:
+        st.info("🚧 ガチャのお菓子は準備中です！（candy_jar_orders.json の candy_catalog にガチャのお菓子を入れると遊べます）")
+    elif st.button(f"🎰 ガチャを回す（🪙{CANDY_GACHA_COST_COINS}）", type="primary", use_container_width=True,
+                   disabled=st.session_state.candy_coins < CANDY_GACHA_COST_COINS, key="candy_gacha_spin_button"):
+        if candy_gacha_spin():
+            st.rerun()
+    if pool and st.session_state.candy_coins < CANDY_GACHA_COST_COINS:
+        st.caption("コインがたまったら回せるよ🪙 スイーツを売ったり、瓶を渡したりして集めよう！")
+
+    st.write("---")
+    got_count = sum(1 for c in pool if candy_gacha_owned(c["id"]))
+    st.markdown(f"#### 🍬 ガチャで出会ったお菓子（{got_count} / {len(pool)} 種類）")
+    for c in sorted(pool, key=lambda x: (int(x["stars"]), int(x.get("no", 0)))):
+        stars_text = "★" * int(c["stars"])
+        if candy_gacha_owned(c["id"]):
+            times = int(st.session_state.candy_gacha_owned.get(c["id"], 0))
+            st.write(f"{c['emoji']} **{c['name']}**　{stars_text}　（出会った回数 {times}）")
+        else:
+            st.write(f"❓ ？？？　{stars_text}")
+
+
+# =====================================================
+# 📖 お菓子屋さん ⑧ 手に入れたお菓子一覧ページ
+# =====================================================
+
 def candy_is_obtained(emoji: str) -> bool:
     """そのお菓子を手に入れたことがあるか。最初の5種類は最初から所持、
-    追加のお菓子はショップで買った（買いきり）か、瓶に入れたことがあれば所持扱い。"""
+    追加のお菓子はショップで買った（買いきり）か、瓶に入れたことがあれば所持扱い。
+    ガチャのお菓子は、ガチャで当てたことがあれば所持扱い。"""
     if any(c["emoji"] == emoji for c in CANDY_DEFAULT_SPEC):
+        return True
+    if any(c.get("emoji") == emoji and candy_gacha_owned(c["id"]) for c in candy_gacha_pool()):
         return True
     for shop_key, item in CANDY_SHOP_JAR_CANDIES.items():
         if item["emoji"] == emoji and candy_extra_owned(shop_key):
@@ -1557,7 +1741,7 @@ def render_candy_collection_page():
 
     obtained = [c for c in catalog if candy_is_obtained(c.get("emoji", ""))]
     st.caption(f"手に入れたお菓子：{len(obtained)} / {len(catalog)} 種類　"
-               "（ショップで買い足すと新しいお菓子が増えるよ✨）")
+               "（ショップやガチャで新しいお菓子が増えるよ✨）")
 
     used_counts = {}
     for c in st.session_state.get("all_candy_log", []):
@@ -1569,12 +1753,14 @@ def render_candy_collection_page():
         no_text = f"No.{entry.get('no', '?')}"
         if not candy_is_obtained(emoji):
             with st.container(border=True):
-                st.markdown(f"### {no_text}　❓ ？？？")
-                st.caption("まだ手に入れていないお菓子です。ショップで探してみよう！")
+                st.markdown(f"### {no_text}　❓ ？？？{'　' + '★' * int(entry['stars']) if entry.get('stars') else ''}")
+                st.caption("まだ手に入れていないお菓子です。ガチャで出会えるかも！" if entry.get("stars")
+                           else "まだ手に入れていないお菓子です。ショップで探してみよう！")
             continue
         stats = stats_all.get(emoji, {})
         with st.container(border=True):
-            st.markdown(f"### {no_text}　{emoji} {entry.get('name', '')}")
+            star_text = f"　{'★' * int(entry['stars'])}" if entry.get("stars") else ""
+            st.markdown(f"### {no_text}　{emoji} {entry.get('name', '')}{star_text}")
             if entry.get("comment"):
                 st.write(entry["comment"])
             for key, label in stat_labels:
@@ -1582,6 +1768,10 @@ def render_candy_collection_page():
                 st.progress(max(0, min(100, value)) / 100, text=f"{label}：{value}")
             st.caption(f"これまでに瓶へ入れた数：{used_counts.get(emoji, 0)} 個")
 
+
+# =====================================================
+# 🏪 お菓子屋さん ⑨ お菓子屋さんのメイン画面（タブ構成）
+# =====================================================
 
 def render_candy_shop():
     """お菓子屋さんステージ内に表示するショップ・制作・販売・瓶注文UI。"""
@@ -1603,14 +1793,15 @@ def render_candy_shop():
     else:
         st.success("最高レベルに到達しました！")
 
-    craft_tab, display_tab, order_tab, shop_tab, book_tab = st.tabs(
-        ["🍓 スイーツを作る", "🧁 商品棚", "🫙 瓶の注文", "🛍️ ショップ", "📖 スイーツ図鑑"]
+    craft_tab, display_tab, order_tab, shop_tab, candy_gacha_tab, book_tab = st.tabs(
+        ["🍓 スイーツを作る", "🧁 商品棚", "🫙 瓶の注文", "🛍️ ショップ", "🎰 お菓子ガチャ", "📖 スイーツ図鑑"]
     )
 
     with craft_tab:
         st.subheader("材料を組み合わせてスイーツを作ろう")
         craft_done = st.session_state.pop("candy_shop_craft_message", None)
         if craft_done:
+            play_candy_craft_sound()   # 「この材料でスイーツを作る」を押した直後に1回だけ鳴らす
             st.success(f"{craft_done['text']}　レア度：{'★' * int(craft_done['rarity'])}")
             if int(craft_done["rarity"]) >= 4:
                 st.balloons()
@@ -1830,6 +2021,9 @@ def render_candy_shop():
             st.rerun()
         st.caption("棚を増やすと、一度に展示できる商品数が増えます。")
 
+    with candy_gacha_tab:
+        render_candy_gacha_tab()
+
     with book_tab:
         st.subheader("📖 スイーツ図鑑")
         if not st.session_state.candy_shop_discovered:
@@ -1837,8 +2031,6 @@ def render_candy_shop():
         else:
             for product in st.session_state.candy_shop_discovered:
                 st.write(f"{product['emoji']} **{product['name']}**　{'★' * int(product.get('rarity', 1))}")
-        st.markdown("#### 🎁 ガチャ")
-        st.info("ガチャはまだ工事中、ごめんね！")
 
 
 def add_single_task(title: str) -> bool:
@@ -1940,6 +2132,7 @@ PERSISTENT_KEYS = [
     "candy_shop_jar_order",
     "candy_shop_jar_order_log",
     "candy_shop_customer_notes",
+    "candy_gacha_owned",
 ]
 
 PERSISTENT_DEFAULTS = {
@@ -1997,6 +2190,7 @@ PERSISTENT_DEFAULTS = {
     "candy_shop_jar_order": None,
     "candy_shop_jar_order_log": [],
     "candy_shop_customer_notes": {},
+    "candy_gacha_owned": {},
 }
 
 
@@ -2972,6 +3166,7 @@ _aqua_point_sound_b64 = load_sound_base64(AQUA_POINT_SOUND_PATH)
 _aqua_gacha_low_sound_b64 = load_sound_base64(AQUA_GACHA_LOW_SOUND_PATH)
 _aqua_gacha_three_sound_b64 = load_sound_base64(AQUA_GACHA_THREE_SOUND_PATH)
 _aqua_feed_sound_b64 = load_sound_base64(AQUA_FEED_SOUND_PATH)
+_candy_craft_sound_b64 = load_sound_base64(CANDY_CRAFT_SOUND_PATH)
 
 
 def play_click_sound(delay: float = 1.2):
@@ -3016,6 +3211,26 @@ def play_aqua_feed_sound(delay: float = 0):
     if _aqua_feed_sound_b64 is None:
         return
     sound_html = f'<audio autoplay="true" style="display:none;"><source src="data:audio/mp3;base64,{_aqua_feed_sound_b64}" type="audio/mp3"></audio>'
+    st.components.v1.html(sound_html, height=0)
+    if delay:
+        time.sleep(delay)
+
+
+def play_candy_craft_sound(delay: float = 0):
+    """お菓子屋さんで「この材料でスイーツを作る」を押したときの効果音。"""
+    if _candy_craft_sound_b64 is None:
+        return
+    sound_html = f'<audio autoplay="true" style="display:none;"><source src="data:audio/mp3;base64,{_candy_craft_sound_b64}" type="audio/mp3"></audio>'
+    st.components.v1.html(sound_html, height=0)
+    if delay:
+        time.sleep(delay)
+
+
+def play_candy_gacha_sound(delay: float = 0):
+    """お菓子ガチャを回したときの効果音（ペタッ.mp3を1回だけ）。"""
+    if _aqua_gacha_low_sound_b64 is None:
+        return
+    sound_html = f'<audio autoplay="true" style="display:none;"><source src="data:audio/mp3;base64,{_aqua_gacha_low_sound_b64}" type="audio/mp3"></audio>'
     st.components.v1.html(sound_html, height=0)
     if delay:
         time.sleep(delay)
@@ -3213,6 +3428,7 @@ for _shop_key in (
     "candy_shop_unlocked_recipes", "candy_shop_recipe_book_owned", "candy_shop_products", "candy_shop_displayed",
     "candy_shop_discovered", "candy_shop_shelf_capacity", "candy_shop_level",
     "candy_shop_exp", "candy_shop_jar_order", "candy_shop_jar_order_log", "candy_shop_customer_notes",
+    "candy_gacha_owned",
 ):
     if _shop_key not in st.session_state:
         _default = PERSISTENT_DEFAULTS[_shop_key]

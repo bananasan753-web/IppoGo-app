@@ -1071,7 +1071,7 @@ CANDY_RECIPE_BOOK_PRICE = 50
 
 
 CANDY_HINT_COST = 5
-CANDY_GACHA_COST_COINS = 50   # お菓子ガチャ1回に必要なお菓子コイン
+CANDY_GACHA_COST_COINS = 20   # お菓子ガチャ1回に必要なお菓子コイン
 CANDY_GACHA_DEFAULT_RATES = {1: 40, 2: 30, 3: 18, 4: 9, 5: 3}   # ★ごとの出やすさ（JSONのgacha_ratesで調整できる）
 
 
@@ -2114,6 +2114,7 @@ PERSISTENT_KEYS = [
     "dino_berries",
     "dino_special_dice",
     "dino_race",
+    "dino_locked_course",
     "dino_event_log",
     "dino_unlocked_courses",
     "single_tasks",
@@ -2171,6 +2172,7 @@ PERSISTENT_DEFAULTS = {
     "dino_berries": {key: 0 for key in DINO_BERRIES},
     "dino_special_dice": 0,
     "dino_race": {},
+    "dino_locked_course": None,
     "dino_event_log": [],
     "dino_unlocked_courses": [],
     "single_tasks": [],
@@ -2411,7 +2413,7 @@ def minutes_to_hhmm(total_minutes: int) -> str:
     return f"{h:02d}:{m:02d}"
 
 
-def schedule_time_options(step_minutes: int = 10) -> list:
+def schedule_time_options(step_minutes: int = 5) -> list:
     """分の候補（通常は5分刻み）。"""
     return list(range(0, 60, step_minutes))
 
@@ -3413,6 +3415,8 @@ if "dino_special_dice" not in st.session_state:
     st.session_state.dino_special_dice = 0
 if "dino_race" not in st.session_state:
     st.session_state.dino_race = {}
+if "dino_locked_course" not in st.session_state:
+    st.session_state.dino_locked_course = None
 if "dino_event_log" not in st.session_state:
     st.session_state.dino_event_log = []
 if "dino_unlocked_courses" not in st.session_state:
@@ -4942,6 +4946,7 @@ elif st.session_state.page in [
                 with change_col:
                     if st.button("🔄 変更", use_container_width=True, key="dino_course_change"):
                         st.session_state.dino_locked_course = None
+                        save_progress()
                         st.rerun()
             else:
                 # ---- 未決定：選んで「決める」を押すと固定される ----
@@ -4952,6 +4957,7 @@ elif st.session_state.page in [
                 )
                 if st.button("✅ このコースに決める", type="primary", use_container_width=True, key="dino_course_lock"):
                     st.session_state.dino_locked_course = course_key
+                    save_progress()
                     st.rerun()
             course = DINO_COURSES[course_key]
             if not course["ready"]:

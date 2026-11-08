@@ -1,0 +1,245 @@
+{
+  "stegosaurus": {
+    "name": "ステゴサウルス",
+    "emoji": "🦕",
+    "base_hp": 26,
+    "passive_name": "どっしり歩き",
+    "passive_text": "サイコロの目が1、2、3のとき、一定確率で6マス進む。",
+    "special_name": "トゲ尾スイング",
+    "special_text": "3〜6ダメージを与え、自分のHPを2回復する。"
+  },
+  "velociraptor": {
+    "name": "ヴェロキラプトル",
+    "emoji": "🦖",
+    "base_hp": 20,
+    "passive_name": "仲間を呼ぶ",
+    "passive_text": "サイコロを振るたび、一定確率で仲間を呼んでポイントを1〜3個ゲットする。",
+    "special_name": "連続ひっかき",
+    "special_text": "2〜5回の連続攻撃。1回ごとのダメージは1〜3でランダム。"
+  },
+  "triceratops": {
+    "name": "トリケラトプス",
+    "emoji": "🦏",
+    "base_hp": 24,
+    "passive_name": "突進ダッシュ",
+    "passive_text": "サイコロを振るたび、一定確率で+1マス多く進む。",
+    "special_name": "捨て身の突進",
+    "special_text": "7〜12の大ダメージ！ ただし自分も2〜4ダメージを受ける。"
+  },
+  "compsognathus": {
+    "name": "コンプソグナトゥス",
+    "emoji": "🦎",
+    "base_hp": 18,
+    "stars": 1,
+    "passive_name": "木の実ひろい",
+    "passive_text": "サイコロを振るたび、一定確率で木の実を1個拾ってくる。",
+    "passive": {
+      "type": "pickup",
+      "item": "berry"
+    },
+    "special_name": "ちょこまかアタック",
+    "special_text": "2〜3回の連続攻撃。1回ごとのダメージは1〜2。",
+    "special": {
+      "type": "multi_hit",
+      "hits_min": 2,
+      "hits_max": 3,
+      "hit_min": 1,
+      "hit_max": 2
+    },
+    "gacha_comment": "ちょこまか走る小さな恐竜が、仲間になりたそうにこっちを見ているよ🦎"
+  },
+  "psittacosaurus": {
+    "name": "プシッタコサウルス",
+    "emoji": "🐣",
+    "base_hp": 20,
+    "stars": 1,
+    "passive_name": "ぴょんぴょんステップ",
+    "passive_text": "サイコロを振るたび、一定確率で+1マス多く進む。",
+    "passive": {
+      "type": "move",
+      "effect": "extra_steps",
+      "steps": 1
+    },
+    "special_name": "ぴよぴよフラッシュ",
+    "special_text": "2〜5ダメージ。30%の確率で、相手を1ターン行動不能にする。",
+    "special": {
+      "type": "stun_hit",
+      "min": 2,
+      "max": 5,
+      "chance": 0.3
+    },
+    "gacha_comment": "ぴよぴよ元気なオウムのくちばし恐竜！ いっしょに走ろう🐣"
+  },
+  "ankylosaurus": {
+    "name": "アンキロサウルス",
+    "emoji": "🐢",
+    "base_hp": 28,
+    "stars": 2,
+    "passive_name": "どっしり挑戦状",
+    "passive_text": "サイコロを振るたび、一定確率で、バトルマス以外でもいきなり野良恐竜とのバトルになる（挑むかは自由）。勝つと経験値が2倍、負けると出た目のぶん後戻り。",
+    "passive": {
+      "type": "ambush",
+      "exp_multiplier": 2,
+      "chance_scale": 0.6
+    },
+    "special_name": "どっしりカウンター",
+    "special_text": "受けたダメージを2倍にして相手に返す。相手がぼうぎょしていたら不発。",
+    "special": {
+      "type": "counter",
+      "multiplier": 2
+    },
+    "gacha_comment": "どっしり頼もしい、よろいの恐竜が仲間になったよ🐢"
+  },
+  "parasaurolophus": {
+    "name": "パラサウロロフス",
+    "emoji": "🎺",
+    "base_hp": 24,
+    "stars": 2,
+    "passive_name": "トランペットの歌",
+    "passive_text": "サイコロを振るたび、一定確率で仲間が集まってIPPOポイントを1〜2個拾ってくる。",
+    "passive": {
+      "type": "pickup",
+      "item": "ippo_points",
+      "min": 1,
+      "max": 2
+    },
+    "special_name": "いやしのメロディ",
+    "special_text": "2〜5ダメージを与え、自分のHPを3回復する。",
+    "special": {
+      "type": "heal_hit",
+      "min": 2,
+      "max": 5,
+      "heal": 3
+    },
+    "gacha_comment": "ぷわぁ〜♪ とさかのトランペットが鳴り響いたよ🎺"
+  },
+  "spinosaurus": {
+    "name": "スピノサウルス",
+    "emoji": "🐊",
+    "base_hp": 26,
+    "stars": 3,
+    "passive_name": "水辺の宝さがし",
+    "passive_text": "サイコロを振るたび、一定確率で能力アップドリンクを1本拾ってくる。",
+    "passive": {
+      "type": "pickup",
+      "item": "drink"
+    },
+    "special_name": "ビッグセイルアタック",
+    "special_text": "8〜13の大ダメージ！ ただし自分も2〜4ダメージを受ける。",
+    "special": {
+      "type": "recoil_hit",
+      "min": 8,
+      "max": 13,
+      "recoil_min": 2,
+      "recoil_max": 4
+    },
+    "gacha_comment": "大きな背びれがかっこいい！ 水辺の王者がやってきた🐊"
+  },
+  "pteranodon": {
+    "name": "プテラノドン",
+    "emoji": "🦅",
+    "base_hp": 20,
+    "stars": 3,
+    "passive_name": "追い風に乗る",
+    "passive_text": "サイコロを振るたび、一定確率で出た目の2倍進む。",
+    "passive": {
+      "type": "move",
+      "effect": "double_dice"
+    },
+    "special_name": "急降下ラッシュ",
+    "special_text": "3〜5回の連続攻撃。1回ごとのダメージは1〜3。",
+    "special": {
+      "type": "multi_hit",
+      "hits_min": 3,
+      "hits_max": 5,
+      "hit_min": 1,
+      "hit_max": 3
+    },
+    "gacha_comment": "大空から仲間がびゅーん！ 風に乗って登場だよ🦅"
+  },
+  "brachiosaurus": {
+    "name": "ブラキオサウルス",
+    "emoji": "🦒",
+    "base_hp": 34,
+    "stars": 4,
+    "passive_name": "高いところのひらめき",
+    "passive_text": "サイコロを振るたび、一定確率でスペシャルダイスを1個拾ってくる。",
+    "passive": {
+      "type": "pickup",
+      "item": "special_dice"
+    },
+    "special_name": "ゆったりふみつけ",
+    "special_text": "4〜7ダメージを与え、自分のHPを4回復する。",
+    "special": {
+      "type": "heal_hit",
+      "min": 4,
+      "max": 7,
+      "heal": 4
+    },
+    "gacha_comment": "首が長〜い！ 高いところから見守ってくれる頼もしい仲間だよ🦒✨"
+  },
+  "giganotosaurus": {
+    "name": "ギガノトサウルス",
+    "emoji": "🐉",
+    "base_hp": 30,
+    "stars": 4,
+    "passive_name": "強者のオーラ",
+    "passive_text": "サイコロを振るたび、一定確率で、バトルマス以外でもいきなり野良恐竜とのバトルになる（挑むかは自由）。勝つと経験値が2.5倍、負けると出た目のぶん後戻り。",
+    "passive": {
+      "type": "ambush",
+      "exp_multiplier": 2.5,
+      "chance_scale": 0.6
+    },
+    "special_name": "ギガントロア",
+    "special_text": "6〜10ダメージ。30%の確率で、相手を1ターン行動不能にする。",
+    "special": {
+      "type": "stun_hit",
+      "min": 6,
+      "max": 10,
+      "chance": 0.3
+    },
+    "gacha_comment": "すごい迫力！ 巨大な肉食恐竜が仲間に加わったよ🐉✨"
+  },
+  "unicornosaurus": {
+    "name": "ユニコーンサウルス",
+    "emoji": "🦄",
+    "base_hp": 30,
+    "stars": 5,
+    "passive_name": "にじいろの追い風",
+    "passive_text": "サイコロを振るたび、一定確率で+2マス多く進む。",
+    "passive": {
+      "type": "move",
+      "effect": "extra_steps",
+      "steps": 2
+    },
+    "special_name": "ゆめかわミラクル",
+    "special_text": "他の恐竜の固有技の中から、1つをランダムで選んで発動する。",
+    "special": {
+      "type": "random"
+    },
+    "gacha_comment": "きらきら虹色の夢みたいな恐竜が来てくれた！ 大当たり🎊🦄"
+  },
+  "tyrannosaurus": {
+    "name": "ティラノサウルス",
+    "emoji": "🦖",
+    "base_hp": 32,
+    "stars": 5,
+    "passive_name": "王者の挑戦",
+    "passive_text": "サイコロを振るたび、一定確率で、バトルマス以外でもいきなり野良恐竜とのバトルになる（挑むかは自由）。勝つと経験値が3倍、負けると出た目のぶん後戻り。",
+    "passive": {
+      "type": "ambush",
+      "exp_multiplier": 3,
+      "chance_scale": 0.6
+    },
+    "special_name": "王者のかみつき",
+    "special_text": "10〜15の超大ダメージ！ ただし自分も2〜4ダメージを受ける。",
+    "special": {
+      "type": "recoil_hit",
+      "min": 10,
+      "max": 15,
+      "recoil_min": 2,
+      "recoil_max": 4
+    },
+    "gacha_comment": "恐竜の王様、ティラノサウルスが仲間になった！ 最高の大当たり🎉👑"
+  }
+}

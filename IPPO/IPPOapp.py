@@ -2426,7 +2426,7 @@ def schedule_time_selectbox(label: str, value: str, key: str) -> str:
         initial_hour, initial_minute = 0, 0
 
     # 過去に1分単位で登録した時刻も、編集時に失わないようにする。
-    minute_options = schedule_time_options(10)
+    minute_options = schedule_time_options(5)
     if initial_minute not in minute_options:
         minute_options = sorted(minute_options + [initial_minute])
 

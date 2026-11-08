@@ -445,6 +445,47 @@ with open(DINO_SHOP_DATA_PATH, "r", encoding="utf-8") as f:
     DINO_SHOP_DATA = json.load(f)
 
 
+DINO_GACHA_COST_POINTS = 5              # 恐竜ガチャ1回に必要なIPPOポイント
+DINO_GACHA_RATES = {1: 40, 2: 30, 3: 18, 4: 9, 5: 3}   # ★ごとの出やすさ
+DINO_GACHA_DUP_EXP_PER_STAR = 10       # すでに仲間の恐竜が出たとき、★1つにつきもらえる経験値
+
+# ---------- 固有技（バトル）の種類。dino.json の "special" で指定する ----------
+# （書いていない恐竜は、下の初期設定を使う。新しい種類を増やすときは dino_special_effect に1つ足す）
+#   multi_hit  : 連続攻撃。hits_min〜hits_max 回、1回ごとに hit_min〜hit_max ダメージ
+#   recoil_hit : 反動つき攻撃。min〜max の大ダメージ＋自分も recoil_min〜recoil_max ダメージ
+#   heal_hit   : 回復つき攻撃。min〜max ダメージ＋自分のHPを heal 回復
+#   stun_hit   : 麻痺つき攻撃。min〜max ダメージ＋chance（初期30%）で相手を1ターン行動不能に
+#   counter    : カウンター。相手の攻撃を受けて、受けたダメージを multiplier倍（初期2倍）にして返す。
+#                相手がぼうぎょしていたら不発
+#   random     : 完全ランダム。他の恐竜の固有技を1つランダムで選んで発動する
+DINO_SPECIAL_DEFAULTS = {
+    "velociraptor": {"type": "multi_hit", "hits_min": 2, "hits_max": 5, "hit_min": 1, "hit_max": 3},
+    "stegosaurus": {"type": "heal_hit", "min": 3, "max": 6, "heal": 2},
+    "triceratops": {"type": "recoil_hit", "min": 7, "max": 12, "recoil_min": 2, "recoil_max": 4},
+}
+
+# ---------- 固有能力（レース）の種類。dino.json の "passive" で指定する ----------
+# 3つの系統があり、どれもサイコロを振るたびに判定される（発動確率はレベルで上がる。chance_scale で調整できる）。
+#   type "pickup"（🎒 拾う系）：item に拾うものを1種類だけ指定する
+#       item "berry"        : 木の実を1個（berries で種類ごとの出やすさを指定できる）
+#       item "special_dice" : スペシャルダイスを1個
+#       item "drink"        : 能力アップドリンク（dino_shop.json の stat_items）を1本（drinks で種類を絞れる）
+#       item "ippo_points"  : IPPOポイントを min〜max 個
+#   type "move"（👣 進む系）：effect に効果を指定する
+#       effect "extra_steps": 出た目に steps マス追加で進む
+#       effect "double_dice": 出た目の2倍進む
+#       effect "dice_map"   : 出た目が when のとき、必ず steps マス進む（確率なし）
+#   type "ambush"（⚔️ バトル系）：バトルマス以外でもいきなり野良恐竜とのバトルになる（挑むかは自由）。
+#       勝つと経験値が exp_multiplier 倍。負けると、出た目のぶんだけ後戻りする
+DINO_PASSIVE_DEFAULTS = {
+    "velociraptor": {"type": "pickup", "item": "ippo_points", "min": 1, "max": 3,
+                     "message": "🦖 ヴェロキラプトルが仲間を呼んだ！ 仲間たちから {n} IPPOポイントもらった！"},
+    "stegosaurus": {"type": "move", "effect": "dice_map", "when": 1, "steps": 2},
+    "triceratops": {"type": "move", "effect": "extra_steps", "steps": 1},
+}
+DINO_PASSIVE_KIND_LABELS = {"pickup": "🎒 拾う系", "move": "👣 進む系", "ambush": "⚔️ バトル系"}
+DINO_BERRY_PICKUP_DEFAULT = {"hp": 3, "attack": 3, "speed": 3, "hp_plus": 1, "attack_plus": 1, "speed_plus": 1}
+
 DINO_FOOD = {
     "meat": {"name": "こんがり肉", "emoji": "🍖", "price": 2, "exp": 3},
     "feast": {"name": "ごちそう肉", "emoji": "🍗", "price": 5, "exp": 8},
@@ -533,6 +574,99 @@ def dino_passive_chance(level: int) -> float:
     return min(0.5, 0.20 + 0.03 * (level - 1))
 
 
+def dino_passive(species_key: str):
+    """その恐竜の固有能力の設定（なければNone）。"""
+    return DINO_SPECIES[species_key].get("passive") or DINO_PASSIVE_DEFAULTS.get(species_key)
+
+
+def dino_passive_effective_chance(species_key: str, level: int):
+    """固有能力の発動確率（0〜1）。出た目で必ず発動するタイプは None。"""
+    passive = dino_passive(species_key)
+    if not passive or passive.get("effect") == "dice_map":
+        return None
+    return min(1.0, dino_passive_chance(level) * float(passive.get("chance_scale", 1.0)))
+
+
+def dino_passive_caption(species_key: str, level: int) -> str:
+    """固有能力の説明（系統・名前・内容・発動確率）。"""
+    info = DINO_SPECIES[species_key]
+    passive = dino_passive(species_key)
+    label = DINO_PASSIVE_KIND_LABELS.get(passive["type"], "✨") if passive else "✨"
+    text = f"{label}『{info['passive_name']}』：{info['passive_text']}"
+    chance = dino_passive_effective_chance(species_key, level)
+    if chance is not None:
+        text += f"（発動確率 {int(round(chance * 100))}%）"
+    return text
+
+
+def dino_passive_move(passive: dict, dice: int, chance: float, who: str, info: dict):
+    """進む系。(進むマス数, 表示メッセージ or None) を返す。"""
+    name = info["passive_name"]
+    effect = passive.get("effect")
+    if effect == "dice_map":
+        if dice == int(passive.get("when", 1)):
+            steps = int(passive["steps"])
+            return steps, f"✨ {who}の『{name}』！ 出た目は{dice}だけど、{steps}マス進める！"
+        return dice, None
+    if random.random() >= chance:
+        return dice, None
+    if effect == "double_dice":
+        return dice * 2, f"🌪️ {who}の『{name}』！ 出た目の2倍、{dice * 2}マス進む！"
+    if effect == "extra_steps":
+        extra = int(passive.get("steps", 1))
+        return dice + extra, f"💨 {who}の『{name}』！ さらに +{extra}マス進む！（合計 {dice + extra}マス）"
+    return dice, None
+
+
+def dino_passive_pickup(passive: dict, who: str, info: dict):
+    """拾う系。決まった種類のものを1つだけ拾ってくる。"""
+    name = info["passive_name"]
+    item = passive.get("item")
+    if item == "ippo_points":
+        n = random.randint(int(passive["min"]), int(passive["max"]))
+        st.session_state.ippo_points += n
+        template = passive.get("message", "🎒 {who}の『{pn}』！ IPPOポイントを {n} 個拾ってきた！")
+        add_dino_message(template.format(who=who, pn=name, n=n))
+    elif item == "special_dice":
+        st.session_state.dino_special_dice = int(st.session_state.get("dino_special_dice", 0)) + 1
+        add_dino_message(f"🎒 {who}の『{name}』！ 🌟 スペシャルダイスを1個拾ってきた！")
+    elif item == "berry":
+        weights = {k: w for k, w in (passive.get("berries") or DINO_BERRY_PICKUP_DEFAULT).items() if k in DINO_BERRIES}
+        if not weights:
+            return
+        berry_key = random.choices(list(weights), weights=list(weights.values()), k=1)[0]
+        inventory = st.session_state.setdefault("dino_berries", {})
+        inventory[berry_key] = inventory.get(berry_key, 0) + 1
+        berry = DINO_BERRIES[berry_key]
+        add_dino_message(f"🎒 {who}の『{name}』！ {berry['emoji']} {berry['name']}を拾ってきた！")
+    elif item == "drink":
+        weights = passive.get("drinks") or {}
+        pool = [i for i in DINO_SHOP_DATA.get("stat_items", []) if not weights or i["id"] in weights]
+        if not pool:
+            return
+        pick = random.choices(pool, weights=[float(weights.get(i["id"], 1)) for i in pool], k=1)[0]
+        inventory = st.session_state.setdefault("dino_stat_items", {})
+        inventory[pick["id"]] = inventory.get(pick["id"], 0) + 1
+        add_dino_message(f"🎒 {who}の『{name}』！ {pick['emoji']} {pick['name']}を拾ってきた！")
+    else:
+        return
+    queue_dino_sound("points")
+
+
+def dino_passive_try_ambush(passive: dict, course_key: str, partner: dict, dice: int, chance: float, who: str, info: dict) -> bool:
+    """バトル系。バトルマス以外でも、一定確率でいきなりバトルのお誘いが来る（挑むかは自由）。"""
+    race = get_dino_race(course_key)
+    if race["finished"] or race["pending_battle"] or random.random() >= chance:
+        return False
+    enemy = make_wild_dino(partner)
+    multiplier = float(passive.get("exp_multiplier", 2))
+    enemy["ambush"] = {"exp_multiplier": multiplier, "back_steps": int(dice)}
+    race["pending_battle"] = enemy
+    add_dino_message(f"⚡ {who}の『{info['passive_name']}』！ いきなり野良の {enemy['emoji']} {enemy['name']} が飛び出してきた！ "
+                     f"勝てば経験値{multiplier:g}倍、負けると{dice}マス戻るよ。挑むかは自由！")
+    return True
+
+
 def dino_course_goal(course_key: str) -> int:
     return DINO_COURSES[course_key]["distance_km"] * 10
 
@@ -563,7 +697,7 @@ def ensure_dino_data():
     if not st.session_state.dino_owned:
         st.session_state.dino_owned = [
             {"id": f"{key}_1", "species": key, "exp": 0, "custom_name": ""}
-            for key in DINO_SPECIES
+            for key, info in DINO_SPECIES.items() if not info.get("stars")   # ★付き＝ガチャ限定は配らない
         ]
     for d in st.session_state.dino_owned:
         d.setdefault("custom_name", "")
@@ -577,6 +711,7 @@ def ensure_dino_data():
     st.session_state.setdefault("dino_berries", {key: 0 for key in DINO_BERRIES})
     for key in DINO_BERRIES:
         st.session_state.dino_berries.setdefault(key, 0)
+    st.session_state.setdefault("dino_stat_items", {})
     if st.session_state.dino_partner and get_dino_partner() is None:
         st.session_state.dino_partner = None
 
@@ -776,18 +911,21 @@ def roll_dino_dice(course_key: str, special_dice_value=None):
         return
 
     species_key = partner["species"]
-    chance = dino_passive_chance(dino_level(partner))
+    species_info = DINO_SPECIES[species_key]
+    passive = dino_passive(species_key)
+    chance = dino_passive_effective_chance(species_key, dino_level(partner)) or 0.0
+    who = f"{species_info['emoji']} {dino_display_name(partner)}"
     steps = dice
-    if special_dice_value is None:
-        add_dino_message(f"🎲 サイコロの目は {dice}！ {dice}マス進む！")
+    move_note = None
+    if passive and passive["type"] == "move":          # 👣 進む系：進むマス数が変わる
+        steps, move_note = dino_passive_move(passive, dice, chance, who, species_info)
+    if move_note is None:
+        add_dino_message(f"🎲 サイコロの目は {dice}！ {dice}マス進む！" if special_dice_value is None else f"🎲 {dice}マス進む！")
     else:
-        add_dino_message(f"🎲 {dice}マス進む！")
-    # サイコロの出目と移動数は必ず一致。固有能力による追加移動はしない。
-    if species_key == "velociraptor" and random.random() < chance:
-        bonus_points = random.randint(1, 3)
-        st.session_state.ippo_points += bonus_points
-        add_dino_message(f"🦖 ヴェロキラプトルが仲間を呼んだ！ 仲間たちから {bonus_points} IPPOポイントもらった！")
-        queue_dino_sound("points")
+        add_dino_message(f"🎲 サイコロの目は {dice}！" if special_dice_value is None else f"🎲 {dice}が出た！")
+        add_dino_message(move_note)
+    if passive and passive["type"] == "pickup" and random.random() < chance:   # 🎒 拾う系
+        dino_passive_pickup(passive, who, species_info)
 
     gained = advance_dino(course_key, steps, partner)
     add_dino_message(f"👣 {gained}マス（{gained * 100}m）進んだ！ 現在 {race['pos'] * 100}m 地点")
@@ -796,6 +934,8 @@ def roll_dino_dice(course_key: str, special_dice_value=None):
         finish_dino_race(course_key)
     else:
         apply_dino_square(course_key, partner)
+        if passive and passive["type"] == "ambush":      # ⚔️ バトル系：いきなりバトルのお誘い
+            dino_passive_try_ambush(passive, course_key, partner, dice, chance, who, species_info)
     save_progress()
 
 
@@ -818,6 +958,7 @@ def start_dino_battle(course_key: str, partner: dict):
         "player_max_hp": max_hp, "player_hp": max_hp,
         "special_left": DINO_SPECIAL_USES,
         "log": ["⚔️ 力試しスタート！ どう戦う？"], "over": False, "result": None, "practice": False,
+        "course_key": course_key, "ambush": enemy.get("ambush"),
     }
     save_progress()
 
@@ -873,6 +1014,58 @@ def eat_dino_berry(dino: dict, berry_key: str):
     save_progress()
 
 
+def use_dino_stat_item(target: dict, item: dict) -> str:
+    """能力アップアイテムを1個使う。（お金や持ち物の増減は呼び出し側）結果の文章を返す。"""
+    name = dino_display_name(target)
+    stat = DINO_GROWTH_STATS[item["stat"]]
+    old_level = dino_level(target)
+    target[stat["field"]] = int(target.get(stat["field"], 0)) + item["amount"]
+    record_dino_growth(target, f"{item['emoji']} {item['name']}を使った！ {stat['label']} +{item['amount']}")
+    add_dino_exp(target, item["exp"])
+    add_dino_message(f"{item['emoji']} {name}に{item['name']}を使った！ 経験値 +{item['exp']}、{stat['label']} +{item['amount']}！")
+    text = f"{item['emoji']} {name}に{item['name']}を使った！ {stat['label']} +{item['amount']}、経験値 +{item['exp']}"
+    if dino_level(target) > old_level:
+        text += f"　🎉 Lv.{dino_level(target)} にレベルアップ！"
+    return text
+
+
+def dino_gacha_pool() -> list:
+    """ガチャで出る恐竜（dino.json で stars が付いているもの）。[(キー, 情報), ...]"""
+    return [(key, info) for key, info in DINO_SPECIES.items() if int(info.get("stars", 0)) > 0]
+
+
+def dino_gacha_spin() -> bool:
+    """恐竜ガチャを1回回す。IPPOポイントを使い、結果を dino_gacha_result に入れる。回せなければFalse。
+    すでに仲間の恐竜が出たときは、★の数に応じた経験値がその恐竜に入る。"""
+    pool = dino_gacha_pool()
+    if not pool or st.session_state.ippo_points < DINO_GACHA_COST_POINTS:
+        return False
+    st.session_state.ippo_points -= DINO_GACHA_COST_POINTS
+    star_list = sorted({int(info["stars"]) for _, info in pool})
+    weights = [max(0.0, float(DINO_GACHA_RATES.get(s, 0))) for s in star_list]
+    if sum(weights) <= 0:
+        weights = [1.0] * len(star_list)
+    stars = random.choices(star_list, weights=weights, k=1)[0]
+    key, info = random.choice([(k, i) for k, i in pool if int(i["stars"]) == stars])
+
+    owned = next((d for d in st.session_state.dino_owned if d["species"] == key), None)
+    result = {"key": key, "stars": stars, "name": info["name"], "emoji": info["emoji"],
+              "comment": info.get("gacha_comment", ""), "is_new": owned is None}
+    if owned is None:
+        st.session_state.dino_owned.append({"id": f"{key}_1", "species": key, "exp": 0,
+                                            "custom_name": "", "hp_bonus": 0, "attack_bonus": 0,
+                                            "speed_bonus": 0, "growth_log": []})
+        log_dino_event(f"🎰 ガチャで {info['emoji']} {info['name']} が仲間になった！")
+    else:
+        result["dup_exp"] = stars * DINO_GACHA_DUP_EXP_PER_STAR
+        before = dino_level(owned)
+        add_dino_exp(owned, result["dup_exp"])
+        result["level_up"] = dino_level(owned) if dino_level(owned) > before else None
+    st.session_state.dino_gacha_result = result
+    save_progress()
+    return True
+
+
 def skip_dino_battle(course_key: str):
     race = get_dino_race(course_key)
     enemy = race["pending_battle"]
@@ -882,19 +1075,57 @@ def skip_dino_battle(course_key: str):
     save_progress()
 
 
-def dino_special_attack(species_key: str, bonus: int, pname: str):
-    """固有技。(敵へのダメージ, 自分へのダメージ, 回復量, 表示テキスト) を返す。"""
-    special = DINO_SPECIES[species_key]["special_name"]
-    if species_key == "velociraptor":
-        hits = [random.randint(1, 3) for _ in range(random.randint(2, 5))]
-        damage = sum(hits) + bonus
-        return damage, 0, 0, f"🌟 {pname}の固有技『{special}』！ {len(hits)}回連続（{'+'.join(map(str, hits))}）で合計 {damage}ダメージ！"
-    if species_key == "stegosaurus":
-        damage = random.randint(3, 6) + bonus
-        return damage, 0, 2, f"🌟 {pname}の固有技『{special}』！ {damage}ダメージ！ 自分のHPが2回復！"
-    damage = random.randint(7, 12) + bonus
-    recoil = random.randint(2, 4)
-    return damage, recoil, 0, f"🌟 {pname}の固有技『{special}』！ {damage}ダメージ！ …でも自分も {recoil}ダメージ！"
+def dino_special_spec(species_key: str) -> dict:
+    """その恐竜の固有技の設定。dino.json の "special"、なければ初期設定。"""
+    return (DINO_SPECIES[species_key].get("special")
+            or DINO_SPECIAL_DEFAULTS.get(species_key)
+            or DINO_SPECIAL_DEFAULTS["triceratops"])
+
+
+def dino_special_effect(species_key: str, bonus: int, pname: str) -> dict:
+    """固有技の結果。damage(敵へ) / recoil(自分へ) / heal(回復) / stun(相手を行動不能に) /
+    counter(カウンター) / counter_mult(返す倍率) / texts(表示する文章のリスト) を返す。"""
+    info = DINO_SPECIES[species_key]
+    spec = dino_special_spec(species_key)
+    prefix = f"🌟 {pname}の固有技『{info['special_name']}』！"
+    effect = {"damage": 0, "recoil": 0, "heal": 0, "stun": False, "counter": False, "counter_mult": 2, "texts": []}
+    kind = spec["type"]
+
+    if kind == "random":   # 完全ランダム：ほかの恐竜の固有技を1つ選んで発動する
+        others = [k for k in DINO_SPECIES if k != species_key and dino_special_spec(k)["type"] != "random"]
+        if others:
+            picked = random.choice(others)
+            picked_info = DINO_SPECIES[picked]
+            sub = dino_special_effect(picked, bonus, pname)
+            sub["texts"] = [f"{prefix} 🎲 {picked_info['emoji']} {picked_info['name']}の『{picked_info['special_name']}』が飛び出した！"] + sub["texts"]
+            return sub
+        spec = DINO_SPECIAL_DEFAULTS["triceratops"]
+        kind = spec["type"]
+
+    if kind == "multi_hit":
+        hits = [random.randint(int(spec["hit_min"]), int(spec["hit_max"]))
+                for _ in range(random.randint(int(spec["hits_min"]), int(spec["hits_max"])))]
+        effect["damage"] = sum(hits) + bonus
+        effect["texts"].append(f"{prefix} {len(hits)}回連続（{'+'.join(map(str, hits))}）で合計 {effect['damage']}ダメージ！")
+    elif kind == "heal_hit":
+        effect["damage"] = random.randint(int(spec["min"]), int(spec["max"])) + bonus
+        effect["heal"] = int(spec["heal"])
+        effect["texts"].append(f"{prefix} {effect['damage']}ダメージ！ 自分のHPが{effect['heal']}回復！")
+    elif kind == "stun_hit":
+        effect["damage"] = random.randint(int(spec["min"]), int(spec["max"])) + bonus
+        effect["texts"].append(f"{prefix} {effect['damage']}ダメージ！")
+        if random.random() < float(spec.get("chance", 0.3)):
+            effect["stun"] = True
+            effect["texts"].append("💫 相手は目を回して、このターンは動けない！")
+    elif kind == "counter":
+        effect["counter"] = True
+        effect["counter_mult"] = float(spec.get("multiplier", 2))
+        effect["texts"].append(f"{prefix} どっしり身構えた…！ 受けたダメージを倍にして返すよ！")
+    else:   # recoil_hit（反動つき攻撃）
+        effect["damage"] = random.randint(int(spec["min"]), int(spec["max"])) + bonus
+        effect["recoil"] = random.randint(int(spec["recoil_min"]), int(spec["recoil_max"]))
+        effect["texts"].append(f"{prefix} {effect['damage']}ダメージ！ …でも自分も {effect['recoil']}ダメージ！")
+    return effect
 
 
 def resolve_dino_battle_turn(partner: dict, action: str):
@@ -917,6 +1148,8 @@ def resolve_dino_battle_turn(partner: dict, action: str):
     enemy_label = {"attack": "こうげき", "defend": "ぼうぎょ", "special": "強打"}[enemy_action]
     log = [f"👀 {ename}は『{enemy_label}』を選んだ！"]
     to_enemy = to_player = heal = 0
+    stun = counter = False      # 麻痺（相手の行動不能）・カウンター
+    counter_mult = 2
 
     # --- 自分の行動 ---
     if action == "attack":
@@ -939,16 +1172,20 @@ def resolve_dino_battle_turn(partner: dict, action: str):
             log.append(f"🛡️ {pname}は身構えたが、強打は防ぎきれない！")
     else:  # special
         battle["special_left"] -= 1
-        damage, recoil, heal, text = dino_special_attack(partner["species"], bonus_p, pname)
-        to_enemy += damage
-        to_player += recoil
-        log.append(text)
+        effect = dino_special_effect(partner["species"], bonus_p, pname)
+        to_enemy += effect["damage"]
+        to_player += effect["recoil"]
+        heal = effect["heal"]
+        stun, counter, counter_mult = effect["stun"], effect["counter"], effect["counter_mult"]
+        log.extend(effect["texts"])
 
     # --- 相手の行動 ---
     # 自分の固有技の反動とは分けて、相手の攻撃だけを回避判定する。
     incoming_damage = 0
     incoming_special = enemy_action == "special"
-    if enemy_action == "attack" and action != "defend":
+    if stun:
+        log.append(f"😵 {ename}は目を回して動けない！ このターンは何もできなかった！")
+    elif enemy_action == "attack" and action != "defend":
         incoming_damage = random.randint(1, 5) + bonus_e
         log.append(f"💥 {ename}のこうげき！ {incoming_damage}ダメージ！")
     elif enemy_action == "special":
@@ -964,11 +1201,22 @@ def resolve_dino_battle_turn(partner: dict, action: str):
         log.append(f"💨 {dino_display_name(partner)}は回避した！")
     to_player += incoming_damage
 
+    # カウンター：受けたダメージを倍にして返す。相手がぼうぎょしていたら不発。
+    if counter:
+        if enemy_action == "defend":
+            log.append(f"🛡️ {ename}はぼうぎょしていた…！ カウンターは不発に終わった！")
+        elif incoming_damage > 0:
+            reflected = round(incoming_damage * counter_mult)
+            to_enemy += reflected
+            log.append(f"🔁 受けた {incoming_damage} ダメージを{counter_mult:g}倍にして返した！ {reflected}ダメージ！")
+        elif not stun:
+            log.append("💨 攻撃をかわしたので、今回は返すダメージがなかったよ。")
+
     # 相手側も同じルールで回避する。プレイヤーの固有技は必殺技扱い。
     enemy_dodge_rate = dino_dodge_rate(
         enemy_speed, player_speed, special=(action == "special")
     )
-    if to_enemy > 0 and random.random() < enemy_dodge_rate / 100:
+    if to_enemy > 0 and not counter and random.random() < enemy_dodge_rate / 100:
         to_enemy = 0
         log.append(f"💨 {enemy['name']}は回避した！")
 
@@ -982,8 +1230,10 @@ def resolve_dino_battle_turn(partner: dict, action: str):
         if battle.get("practice"):
             log.append("🎉 模型恐竜に勝利！ 練習おつかれさま！ 経験値・報酬はありません。")
         else:
-            log.append(f"🎉 {ename}に勝利！ 経験値 +{DINO_BATTLE_WIN_EXP}！")
-            add_dino_exp(partner, DINO_BATTLE_WIN_EXP)
+            ambush = battle.get("ambush")
+            win_exp = round(DINO_BATTLE_WIN_EXP * float(ambush["exp_multiplier"])) if ambush else DINO_BATTLE_WIN_EXP
+            log.append(f"🎉 {ename}に勝利！ 経験値 +{win_exp}！" + ("（いきなりバトルボーナス！）" if ambush else ""))
+            add_dino_exp(partner, win_exp)
             if random.random() < 0.5:
                 berry_key = random.choice(list(DINO_BERRIES))
                 st.session_state.dino_berries.setdefault(berry_key, 0)
@@ -1003,6 +1253,11 @@ def resolve_dino_battle_turn(partner: dict, action: str):
         else:
             log.append(f"😵 {pname}はたおれてしまった… でも挑戦はすごいこと！ 経験値 +{DINO_BATTLE_LOSE_EXP}")
             add_dino_exp(partner, DINO_BATTLE_LOSE_EXP)
+            if battle.get("ambush"):   # いきなりバトルに負けたら、出た目のぶん後戻り
+                lose_race = get_dino_race(battle["course_key"])
+                old_pos = lose_race["pos"]
+                lose_race["pos"] = max(0, old_pos - int(battle["ambush"]["back_steps"]))
+                log.append(f"⏪ いきなりバトルに負けて、{old_pos - lose_race['pos']}マス戻った…")
             log_dino_event(f"⚔️ {pname}が野良の{ename}に力試しで挑戦！")
     battle["log"] = log
     save_progress()
@@ -2112,6 +2367,7 @@ PERSISTENT_KEYS = [
     "dino_partner",
     "dino_food",
     "dino_berries",
+    "dino_stat_items",
     "dino_special_dice",
     "dino_race",
     "dino_locked_course",
@@ -2170,6 +2426,7 @@ PERSISTENT_DEFAULTS = {
     "dino_partner": None,
     "dino_food": {"meat": 0, "feast": 0},
     "dino_berries": {key: 0 for key in DINO_BERRIES},
+    "dino_stat_items": {},
     "dino_special_dice": 0,
     "dino_race": {},
     "dino_locked_course": None,
@@ -3417,6 +3674,8 @@ if "dino_race" not in st.session_state:
     st.session_state.dino_race = {}
 if "dino_locked_course" not in st.session_state:
     st.session_state.dino_locked_course = None
+if "dino_stat_items" not in st.session_state:
+    st.session_state.dino_stat_items = {}
 if "dino_event_log" not in st.session_state:
     st.session_state.dino_event_log = []
 if "dino_unlocked_courses" not in st.session_state:
@@ -4927,7 +5186,9 @@ elif st.session_state.page in [
                 for message_text in dino_messages:
                     st.write(message_text)
 
-        race_tab, dino_tab, dino_shop_tab = st.tabs(["🏁 レース", "🦖 恐竜たち", "🍖 恐竜ショップ"])
+        race_tab, dino_tab, dino_grow_tab, dino_shop_tab, dino_gacha_tab = st.tabs(
+            ["🏁 レース", "🦖 恐竜たち", "🌱 育成", "🍖 恐竜ショップ", "🎰 恐竜ガチャ"]
+        )
 
         # ---------------- レース ----------------
         with race_tab:
@@ -5036,7 +5297,11 @@ elif st.session_state.page in [
                 elif race["pending_battle"]:
                     # ===== バトルマスに到着（挑むかどうかは自由）=====
                     pending = race["pending_battle"]
-                    st.warning(f"⚔️ 野良の {pending['emoji']} {pending['name']}（Lv.{pending['level']}）があらわれた！ 力試しに挑戦する？")
+                    if pending.get("ambush"):
+                        st.warning(f"⚡ いきなり野良の {pending['emoji']} {pending['name']}（Lv.{pending['level']}）が飛び出してきた！ "
+                                   f"勝つと経験値が{float(pending['ambush']['exp_multiplier']):g}倍！ 負けると{pending['ambush']['back_steps']}マス戻るよ。挑戦する？")
+                    else:
+                        st.warning(f"⚔️ 野良の {pending['emoji']} {pending['name']}（Lv.{pending['level']}）があらわれた！ 力試しに挑戦する？")
                     fight_col, skip_col = st.columns(2)
                     with fight_col:
                         if st.button("⚔️ 力試しに挑む！", type="primary", use_container_width=True, key="dino_battle_accept"):
@@ -5077,9 +5342,7 @@ elif st.session_state.page in [
                             st.rerun()
                     else:
                         st.caption("🌟 スペシャルダイスはショップで購入できます（1個5 IPPOポイント）。")
-                    st.caption(f"✨ {partner_species['passive_name']}：{partner_species['passive_text']}（発動確率 {int(dino_passive_chance(partner_level) * 100)}%）"
-                               if partner["species"] != "stegosaurus" else
-                               f"✨ {partner_species['passive_name']}：{partner_species['passive_text']}")
+                    st.caption(dino_passive_caption(partner["species"], partner_level))
 
         # ---------------- 恐竜たち ----------------
         with dino_tab:
@@ -5110,9 +5373,9 @@ elif st.session_state.page in [
                         next_exp = dino_exp_for_level(level + 1)
                         st.progress((dino.get("exp", 0) - base_exp) / (next_exp - base_exp))
                         st.caption(f"経験値 {dino.get('exp', 0)}（次のレベルまであと {next_exp - dino.get('exp', 0)}）")
-                    st.write(f"✨ **固有能力『{species['passive_name']}』**：{species['passive_text']}")
-                    if dino["species"] != "stegosaurus":
-                        st.caption(f"　発動確率：{int(dino_passive_chance(level) * 100)}%（レベルが上がると高くなる）")
+                    st.write("✨ **固有能力** " + dino_passive_caption(dino["species"], level))
+                    if dino_passive_effective_chance(dino["species"], level) is not None:
+                        st.caption("　発動確率は、レベルが上がると高くなるよ。")
                     st.write(f"🌟 **固有技『{species['special_name']}』**：{species['special_text']}")
                     new_name = st.text_input("名前（空欄なら元の名前）", value=dino.get("custom_name", ""),
                                              key=f"dino_name_{dino['id']}", placeholder=species["name"])
@@ -5179,65 +5442,164 @@ elif st.session_state.page in [
                     else:
                         st.warning("IPPOポイントが足りません！")
 
-            st.write("---")
-            st.markdown("#### 🧪 能力アップアイテム")
-            stat_target_idx = st.selectbox(
-                "能力を上げる恐竜", list(range(len(st.session_state.dino_owned))),
-                format_func=lambda i: f"{DINO_SPECIES[st.session_state.dino_owned[i]['species']]['emoji']} {dino_display_name(st.session_state.dino_owned[i])}",
-                key="dino_stat_target",
+        # ---------------- 育成（ごはん・木の実・能力アップアイテム） ----------------
+        with dino_grow_tab:
+            st.markdown("#### 🌱 恐竜を育てよう")
+            st.caption("① 育てる恐竜を選ぶ　→　② ごはん・木の実・アイテムで強くしよう！")
+            grow_result = st.session_state.pop("dino_grow_result", None)
+            if grow_result:
+                st.success(grow_result)
+
+            grow_dinos = st.session_state.dino_owned
+            default_idx = next((i for i, d in enumerate(grow_dinos) if d["id"] == st.session_state.dino_partner), 0)
+            grow_idx = st.selectbox(
+                "① 育てる恐竜", list(range(len(grow_dinos))), index=default_idx,
+                format_func=lambda i: f"{DINO_SPECIES[grow_dinos[i]['species']]['emoji']} {dino_display_name(grow_dinos[i])}（Lv.{dino_level(grow_dinos[i])}）",
+                key="dino_grow_target",
             )
-            for item in DINO_SHOP_DATA["stat_items"]:
-                st.markdown(f"**{item['emoji']} {item['name']}** — {item['price']} IPPOポイント ／ 経験値 +{item['exp']} ／ 能力 +{item['amount']}")
-                if st.button(f"{item['name']}を購入して使う", key=f"dino_stat_buy_{item['id']}", use_container_width=True):
-                    if st.session_state.ippo_points >= item["price"]:
-                        st.session_state.ippo_points -= item["price"]
-                        target = st.session_state.dino_owned[stat_target_idx]
-                        stat_key = {"hp":"hp_bonus", "attack":"attack_bonus", "speed":"speed_bonus"}[item["stat"]]
-                        target[stat_key] = int(target.get(stat_key, 0)) + item["amount"]
-                        record_dino_growth(target, f"{item['emoji']} {item['name']}を使った！ {DINO_GROWTH_STATS[item['stat']]['label']} +{item['amount']}")
-                        add_dino_exp(target, item["exp"])
-                        add_dino_message(f"{item['emoji']} {dino_display_name(target)}に{item['name']}を使った！ 経験値 +{item['exp']}、{item['stat']} +{item['amount']}！")
-                        save_progress()
-                        st.rerun()
+            grow_target = grow_dinos[grow_idx]
+            grow_species = DINO_SPECIES[grow_target["species"]]
+            grow_level = dino_level(grow_target)
+            grow_name = dino_display_name(grow_target)
+
+            # --- いまの様子 ---
+            with st.container(border=True):
+                st.markdown(f"### {grow_species['emoji']} {grow_name}　Lv.{grow_level}")
+                if grow_level >= DINO_MAX_LEVEL:
+                    st.progress(1.0)
+                    st.caption(f"経験値 {grow_target.get('exp', 0)}（最大レベル！）")
+                else:
+                    base_exp = dino_exp_for_level(grow_level)
+                    next_exp = dino_exp_for_level(grow_level + 1)
+                    st.progress((grow_target.get("exp", 0) - base_exp) / (next_exp - base_exp))
+                    st.caption(f"経験値 {grow_target.get('exp', 0)} ／ 次のレベルまであと {next_exp - grow_target.get('exp', 0)}")
+                stat_col1, stat_col2, stat_col3 = st.columns(3)
+                hp_bonus = int(grow_target.get("hp_bonus", 0))
+                attack_bonus = int(grow_target.get("attack_bonus", 0))
+                speed_bonus = int(grow_target.get("speed_bonus", 0))
+                stat_col1.metric("❤️ 最大HP", dino_max_hp(grow_target), delta=f"+{hp_bonus}" if hp_bonus else None, delta_color="off")
+                stat_col2.metric("⚔️ 攻撃力", f"+{dino_attack(grow_target)}", delta=f"+{attack_bonus}" if attack_bonus else None, delta_color="off")
+                stat_col3.metric("💨 素早さ", dino_speed(grow_target), delta=f"+{speed_bonus}" if speed_bonus else None, delta_color="off")
+                st.caption("小さな数字は、木の実・アイテム・レベルアップで増えた分だよ。")
+
+            st.markdown("##### ② 育てかたを選ぶ")
+            grow_food_tab, grow_berry_tab, grow_item_tab = st.tabs(["🍽️ ごはん", "🍇 木の実", "🧪 能力アップアイテム"])
+
+            # --- ごはん ---
+            with grow_food_tab:
+                st.caption("あげると経験値がたまって、レベルアップ！ ごはんは「🍖 恐竜ショップ」で買えるよ。レースの食べ物マスでも見つかるよ。")
+                food_grow_cols = st.columns(len(DINO_FOOD))
+                for food_col, (food_key, food) in zip(food_grow_cols, DINO_FOOD.items()):
+                    with food_col:
+                        with st.container(border=True):
+                            stock = st.session_state.dino_food.get(food_key, 0)
+                            st.markdown(f"### {food['emoji']} {food['name']}")
+                            st.write(f"経験値 **+{food['exp']}**")
+                            st.caption(f"持っている数：{stock}個")
+                            if st.button("あげる", key=f"dino_grow_feed_{food_key}", disabled=stock <= 0, use_container_width=True):
+                                old_level = dino_level(grow_target)
+                                st.session_state.dino_food[food_key] -= 1
+                                add_dino_message(f"{food['emoji']} {grow_name}は{food['name']}をもぐもぐ！ 経験値 +{food['exp']}")
+                                queue_dino_sound("feed")
+                                add_dino_exp(grow_target, food["exp"])
+                                text = f"{food['emoji']} {grow_name}は{food['name']}をもぐもぐ！ 経験値 +{food['exp']}"
+                                if dino_level(grow_target) > old_level:
+                                    text += f"　🎉 Lv.{dino_level(grow_target)} にレベルアップ！"
+                                st.session_state.dino_grow_result = text
+                                save_progress()
+                                st.rerun()
+
+            # --- 木の実 ---
+            with grow_berry_tab:
+                st.caption("力試し（バトル）に勝つと、ときどきもらえるよ。食べると、その能力がずっと上がるよ！")
+                berry_cols = st.columns(3)
+                for berry_col, stat_key in zip(berry_cols, ("hp", "attack", "speed")):
+                    stat_info = DINO_GROWTH_STATS[stat_key]
+                    with berry_col:
+                        with st.container(border=True):
+                            st.markdown(f"**{stat_info['emoji']} {stat_info['label']}アップ**")
+                            for berry_key, berry in DINO_BERRIES.items():
+                                if berry["stat"] != stat_key:
+                                    continue
+                                stock = st.session_state.get("dino_berries", {}).get(berry_key, 0)
+                                amount = 2 if berry_key.endswith("_plus") else 1
+                                st.caption(f"{berry['name']}　残り {stock}個")
+                                if st.button(f"{berry['emoji']} 食べる（+{amount}）", key=f"dino_grow_berry_{berry_key}",
+                                             disabled=stock <= 0, use_container_width=True):
+                                    eat_dino_berry(grow_target, berry_key)
+                                    st.session_state.dino_grow_result = (
+                                        f"{berry['emoji']} {grow_name}が{berry['name']}を食べた！ {berry['label']} +{amount}！")
+                                    st.rerun()
+
+            # --- 能力アップアイテム（ドリンクなど） ---
+            with grow_item_tab:
+                st.caption("拾ったアイテムは無料で使えるよ。IPPOポイントで買って、すぐ使うこともできるよ。"
+                           f"　いまのIPPOポイント：{st.session_state.ippo_points}")
+                for item in DINO_SHOP_DATA["stat_items"]:
+                    owned_count = int(st.session_state.get("dino_stat_items", {}).get(item["id"], 0))
+                    stat_label = DINO_GROWTH_STATS[item["stat"]]["label"]
+                    with st.container(border=True):
+                        item_left, item_right = st.columns([3, 2])
+                        with item_left:
+                            st.markdown(f"**{item['emoji']} {item['name']}**")
+                            st.caption(f"{stat_label} +{item['amount']} ／ 経験値 +{item['exp']}")
+                            st.caption(f"🎒 持っている数：{owned_count}個")
+                        with item_right:
+                            if st.button(f"使う（{owned_count}個）", key=f"dino_grow_item_use_{item['id']}",
+                                         disabled=owned_count <= 0, use_container_width=True):
+                                st.session_state.setdefault("dino_stat_items", {})[item["id"]] = owned_count - 1
+                                st.session_state.dino_grow_result = use_dino_stat_item(grow_target, item)
+                                save_progress()
+                                st.rerun()
+                            if st.button(f"買って使う（{item['price']} IPPO）", key=f"dino_grow_item_{item['id']}",
+                                         disabled=st.session_state.ippo_points < item["price"], use_container_width=True):
+                                st.session_state.ippo_points -= item["price"]
+                                st.session_state.dino_grow_result = use_dino_stat_item(grow_target, item)
+                                save_progress()
+                                st.rerun()
+
+        # ---------------- 恐竜ガチャ ----------------
+        with dino_gacha_tab:
+            st.markdown("#### 🎰 恐竜ガチャ")
+            st.write(f"1回 **{DINO_GACHA_COST_POINTS} IPPOポイント**。新しい恐竜の仲間に会えるよ！")
+            st.caption("出会った恐竜は「🦖 恐竜たち」タブに仲間入りして、パートナーにできるよ。"
+                       "すでに仲間の恐竜が出たときは、その恐竜に経験値がもらえるよ🎁")
+            st.metric("💎 IPPOポイント", st.session_state.ippo_points)
+
+            gacha_result = st.session_state.pop("dino_gacha_result", None)
+            if gacha_result:
+                play_aqua_gacha_sound(gacha_result["stars"], delay=0)   # 効果音は1回だけ
+                with st.container(border=True):
+                    st.markdown(f"### {'★' * gacha_result['stars']}　{gacha_result['emoji']} {gacha_result['name']}")
+                    if gacha_result["is_new"]:
+                        st.success(f"🎉 {gacha_result['name']}が仲間になったよ！ {gacha_result['comment']}")
+                        if gacha_result["stars"] >= 4:
+                            st.balloons()
                     else:
-                        st.warning("IPPOポイントが足りません！")
+                        text = f"すでに仲間の{gacha_result['name']}に会えたよ！ 仲良しボーナスで経験値 +{gacha_result['dup_exp']} 🎁"
+                        if gacha_result.get("level_up"):
+                            text += f"　🎉 Lv.{gacha_result['level_up']} にレベルアップ！"
+                        st.info(text)
+
+            gacha_pool = dino_gacha_pool()
+            if not gacha_pool:
+                st.info("🚧 ガチャの恐竜は準備中です！（dino.json に stars 付きの恐竜を入れると遊べます）")
+            elif st.button(f"🎰 ガチャを回す（{DINO_GACHA_COST_POINTS} IPPOポイント）", type="primary", use_container_width=True,
+                           disabled=st.session_state.ippo_points < DINO_GACHA_COST_POINTS, key="dino_gacha_spin_button"):
+                if dino_gacha_spin():
+                    st.rerun()
+            if gacha_pool and st.session_state.ippo_points < DINO_GACHA_COST_POINTS:
+                st.caption("IPPOポイントがたまったら回せるよ💎 目標を達成してためよう！")
 
             st.write("---")
-            st.markdown("#### 🍇 木の実を食べる")
-            st.caption("力試しの勝利でもらった木の実を食べると、対応する能力が上がるよ！")
-            berry_target_idx = st.selectbox(
-                "木の実を食べる恐竜", list(range(len(st.session_state.dino_owned))),
-                format_func=lambda i: f"{DINO_SPECIES[st.session_state.dino_owned[i]['species']]['emoji']} {dino_display_name(st.session_state.dino_owned[i])}（Lv.{dino_level(st.session_state.dino_owned[i])}）",
-                key="dino_berry_target",
-            )
-            for berry_key, berry in DINO_BERRIES.items():
-                stock = st.session_state.get("dino_berries", {}).get(berry_key, 0)
-                amount = 2 if berry_key.endswith("_plus") else 1
-                if st.button(f"{berry['emoji']} {berry['name']}（残り{stock}個・{berry['label']}+{amount}）を食べる",
-                             disabled=stock <= 0, key=f"dino_berry_eat_{berry_key}", use_container_width=True):
-                    eat_dino_berry(st.session_state.dino_owned[berry_target_idx], berry_key)
-                    st.rerun()
-
-            st.write("---")
-            st.markdown("#### 🍽️ 餌をあげる")
-            owned_dinos = st.session_state.dino_owned
-            feed_index = st.selectbox(
-                "どの恐竜にあげる？", list(range(len(owned_dinos))),
-                format_func=lambda i: f"{DINO_SPECIES[owned_dinos[i]['species']]['emoji']} {dino_display_name(owned_dinos[i])}（Lv.{dino_level(owned_dinos[i])}）",
-                key="dino_feed_target",
-            )
-            for food_key, food in DINO_FOOD.items():
-                stock = st.session_state.dino_food.get(food_key, 0)
-                if st.button(f"{food['emoji']} {food['name']}をあげる（残り{stock}個・経験値+{food['exp']}）",
-                             disabled=stock <= 0, key=f"dino_feed_{food_key}", use_container_width=True):
-                    target = owned_dinos[feed_index]
-                    st.session_state.dino_food[food_key] -= 1
-                    add_dino_message(f"{food['emoji']} {dino_display_name(target)}は{food['name']}をもぐもぐ！ 経験値 +{food['exp']}")
-                    queue_dino_sound("feed")
-                    add_dino_exp(target, food["exp"])
-                    save_progress()
-                    st.rerun()
-
+            met = sum(1 for key, _ in gacha_pool if any(d["species"] == key for d in st.session_state.dino_owned))
+            st.markdown(f"#### 🦕 ガチャで出会える恐竜（{met} / {len(gacha_pool)} 種類）")
+            for key, info in sorted(gacha_pool, key=lambda x: (int(x[1]["stars"]), x[1]["name"])):
+                stars_text = "★" * int(info["stars"])
+                if any(d["species"] == key for d in st.session_state.dino_owned):
+                    st.write(f"{info['emoji']} **{info['name']}**　{stars_text}　（仲間になったよ）")
+                else:
+                    st.write(f"❓ ？？？　{stars_text}")
 
 # =====================================================
 # 💾 Supabase への自動セーブ

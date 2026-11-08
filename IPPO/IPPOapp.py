@@ -4931,11 +4931,28 @@ elif st.session_state.page in [
                 k for k in ("survival", "relax")
                 if k in st.session_state.get("dino_unlocked_courses", [])
             ]
-            course_key = st.selectbox(
-                "🗺️ コースを選ぶ", course_keys,
-                format_func=lambda k: f"{DINO_COURSES[k]['tier']} {DINO_COURSES[k]['name']}（{DINO_COURSES[k]['distance_km']}km）",
-                key="dino_course_choice",
-            )
+            locked_course = st.session_state.get("dino_locked_course")
+            if locked_course in course_keys:
+                # ---- 決定済み：コースを固定して表示。変えるときは変更ボタン ----
+                course_key = locked_course
+                locked_info = DINO_COURSES[course_key]
+                name_col, change_col = st.columns([3, 1])
+                with name_col:
+                    st.markdown(f"🗺️ **{locked_info['tier']} {locked_info['name']}（{locked_info['distance_km']}km）**")
+                with change_col:
+                    if st.button("🔄 変更", use_container_width=True, key="dino_course_change"):
+                        st.session_state.dino_locked_course = None
+                        st.rerun()
+            else:
+                # ---- 未決定：選んで「決める」を押すと固定される ----
+                course_key = st.selectbox(
+                    "🗺️ コースを選ぶ", course_keys,
+                    format_func=lambda k: f"{DINO_COURSES[k]['tier']} {DINO_COURSES[k]['name']}（{DINO_COURSES[k]['distance_km']}km）",
+                    key="dino_course_choice",
+                )
+                if st.button("✅ このコースに決める", type="primary", use_container_width=True, key="dino_course_lock"):
+                    st.session_state.dino_locked_course = course_key
+                    st.rerun()
             course = DINO_COURSES[course_key]
             if not course["ready"]:
                 st.info(f"🚧 {course['tier']} {course['name']} は現在準備中です！お楽しみに！")

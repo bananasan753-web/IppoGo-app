@@ -480,7 +480,7 @@ DINO_SPECIAL_DEFAULTS = {
 DINO_PASSIVE_DEFAULTS = {
     "velociraptor": {"type": "pickup", "item": "ippo_points", "min": 1, "max": 3,
                      "message": "🦖 ヴェロキラプトルが仲間を呼んだ！ 仲間たちから {n} IPPOポイントもらった！"},
-    "stegosaurus": {"type": "move", "effect": "dice_map", "when": 1, "steps": 2},
+    "stegosaurus": {"type": "move", "effect": "dice_map", "when": [1, 2, 3], "steps": 6, "use_chance": True},
     "triceratops": {"type": "move", "effect": "extra_steps", "steps": 1},
 }
 DINO_PASSIVE_KIND_LABELS = {"pickup": "🎒 拾う系", "move": "👣 進む系", "ambush": "⚔️ バトル系"}
@@ -582,7 +582,7 @@ def dino_passive(species_key: str):
 def dino_passive_effective_chance(species_key: str, level: int):
     """固有能力の発動確率（0〜1）。出た目で必ず発動するタイプは None。"""
     passive = dino_passive(species_key)
-    if not passive or passive.get("effect") == "dice_map":
+    if not passive or (passive.get("effect") == "dice_map" and not passive.get("use_chance")):
         return None
     return min(1.0, dino_passive_chance(level) * float(passive.get("chance_scale", 1.0)))
 
@@ -604,7 +604,11 @@ def dino_passive_move(passive: dict, dice: int, chance: float, who: str, info: d
     name = info["passive_name"]
     effect = passive.get("effect")
     if effect == "dice_map":
-        if dice == int(passive.get("when", 1)):
+        when = passive.get("when", 1)
+        when_list = when if isinstance(when, list) else [when]      # 1つでも、[1, 2, 3] のような複数でもOK
+        if dice in [int(w) for w in when_list]:
+            if passive.get("use_chance") and random.random() >= chance:
+                return dice, None                                      # 確率に外れたら、出た目のまま
             steps = int(passive["steps"])
             return steps, f"✨ {who}の『{name}』！ 出た目は{dice}だけど、{steps}マス進める！"
         return dice, None
@@ -616,8 +620,6 @@ def dino_passive_move(passive: dict, dice: int, chance: float, who: str, info: d
         extra = int(passive.get("steps", 1))
         return dice + extra, f"💨 {who}の『{name}』！ さらに +{extra}マス進む！（合計 {dice + extra}マス）"
     return dice, None
-
-
 def dino_passive_pickup(passive: dict, who: str, info: dict):
     """拾う系。決まった種類のものを1つだけ拾ってくる。"""
     name = info["passive_name"]

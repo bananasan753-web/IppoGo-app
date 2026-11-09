@@ -1,5 +1,5 @@
 import streamlit as st
-from datetime import datetime, date
+from datetime import datetime, date, timedelta
 import zoneinfo
 import random
 import html
@@ -3064,20 +3064,35 @@ def render_schedule_templates(date_str: str):
                     st.rerun()
 
         st.divider()
-        st.markdown(f"**📥 『{template['name']}』を {date_str} に貼り付け**")
-        with st.form(f"template_paste_{date_str}_{template_id}"):
-            destination = st.radio("貼り付け先", ["📅 予定", "✅ 記録"], horizontal=True)
-            paste_mode = st.radio("貼り付け方法", ["既存の内容に追加", "既存の内容を置き換え"])
+        st.markdown(f"**📥 『{template['name']}』を貼り付け**")
+        with st.container(border=True):
+            destination = st.radio("貼り付け先", ["📅 予定", "✅ 記録"], horizontal=True,
+                                   key=f"template_paste_dest_{date_str}_{template_id}")
+            try:
+                paste_default = datetime.strptime(date_str, "%Y/%m/%d").date()
+            except ValueError:
+                paste_default = get_now_jst().date()
+            target_dates = schedule_date_range_picker(
+                "貼り付ける日付（カレンダーで ○日〜○日 のようにまとめて選べます）",
+                key=f"template_paste_dates_{date_str}_{template_id}",
+                default_date=paste_default,
+            )
+            paste_mode = st.radio("貼り付け方法", ["既存の内容に追加", "既存の内容を置き換え"],
+                                  key=f"template_paste_mode_{date_str}_{template_id}")
             st.caption("置き換えを選ぶと、選んだ貼り付け先の内容だけが置き換わります。もう一方は残ります。")
-            if st.form_submit_button("📋 テンプレートを貼り付け", disabled=not entries):
+            if paste_mode == "既存の内容を置き換え" and len(target_dates) > 1:
+                st.warning(f"選んだ{len(target_dates)}日分すべての「{destination[2:]}」が置き換わります。")
+            if st.button("📋 テンプレートを貼り付け", type="primary", use_container_width=True,
+                         disabled=(not entries or not target_dates),
+                         key=f"template_paste_button_{date_str}_{template_id}"):
                 key = "planned" if destination == "📅 予定" else "actual"
-                copied = copy.deepcopy(entries)
-                if paste_mode == "既存の内容を置き換え":
-                    day[key] = copied
-                else:
-                    day[key].extend(copied)
-                    day[key].sort(key=lambda e: e["start"])
+                apply_schedule_entries_to_dates(
+                    entries, target_dates, key, replace=(paste_mode == "既存の内容を置き換え"))
                 play_click_sound(delay=0)
+                st.session_state.schedule_notice = (
+                    f"✅ 『{template['name']}』を {target_dates[0]} 〜 {target_dates[-1]}"
+                    f"（{len(target_dates)}日分）の{destination[2:]}に貼り付けました！"
+                )
                 save_progress()
                 st.rerun()
 
@@ -3118,6 +3133,164 @@ def valid_template_time_range(start: str, end: str) -> bool:
         return a < b and len(start) == 5 and len(end) == 5
     except (ValueError, TypeError):
         return False
+
+
+# =====================================================
+# 🗓️ 複数日まとめて操作（カレンダー期間選択・一括追加・クイック追加ページ）
+# =====================================================
+SCHEDULE_MAX_RANGE_DAYS = 62  # 一度にまとめて選べる最大日数
+WEEKDAY_LABELS = ["月", "火", "水", "木", "金", "土", "日"]
+
+
+def schedule_date_range_picker(label: str, key: str, default_date) -> list:
+    """
+    カレンダーで「○日〜○日」の期間（1日だけでもOK）を選び、日付文字列（YYYY/MM/DD）のリストで返す。
+    曜日で絞り込むこともできる（空なら全部の曜日）。
+    """
+    picked = st.date_input(
+        label, value=(default_date, default_date), key=f"{key}_range",
+        help="カレンダーで最初の日と最後の日をクリックすると期間を選べます。1日だけならその日を1回クリック。",
+    )
+    if isinstance(picked, (tuple, list)):
+        if len(picked) == 0:
+            return []
+        start_d = picked[0]
+        end_d = picked[1] if len(picked) >= 2 else picked[0]
+    else:
+        start_d = end_d = picked
+    if end_d < start_d:
+        start_d, end_d = end_d, start_d
+
+    weekdays = st.multiselect(
+        "曜日を絞る（選ばなければ全部の曜日）", WEEKDAY_LABELS, key=f"{key}_weekdays",
+    )
+    allowed = {WEEKDAY_LABELS.index(w) for w in weekdays}
+
+    total_days = (end_d - start_d).days + 1
+    if total_days > SCHEDULE_MAX_RANGE_DAYS:
+        st.warning(f"⚠️ 一度に選べるのは最大{SCHEDULE_MAX_RANGE_DAYS}日です。最初の{SCHEDULE_MAX_RANGE_DAYS}日分だけが対象になります。")
+        total_days = SCHEDULE_MAX_RANGE_DAYS
+
+    date_strs = []
+    for offset in range(total_days):
+        d = start_d + timedelta(days=offset)
+        if allowed and d.weekday() not in allowed:
+            continue
+        date_strs.append(d.strftime("%Y/%m/%d"))
+
+    if not isinstance(picked, (tuple, list)) or len(picked) < 2:
+        st.caption("📆 1日だけ選択中です（期間にしたいときは、最後の日もクリックしてね）")
+    if date_strs:
+        st.caption(f"📆 {date_strs[0]} 〜 {date_strs[-1]}（{len(date_strs)}日分が対象）")
+    else:
+        st.caption("📆 対象になる日がありません。日付か曜日を見直してください。")
+    return date_strs
+
+
+def apply_schedule_entries_to_dates(entries: list, date_strs: list, kind: str, replace: bool = False):
+    """
+    entries（予定／記録のリスト）を、指定した複数の日の「planned」または「actual」にコピーする。
+    各日に独立したコピーを入れるので、あとから1日ずつ編集しても他の日に影響しない。
+    """
+    for ds in date_strs:
+        day = st.session_state.daily_schedule.setdefault(ds, {"planned": [], "actual": []})
+        day.setdefault("planned", [])
+        day.setdefault("actual", [])
+        copied = []
+        for e in entries:
+            c = copy.deepcopy(e)
+            c.pop("schedule_reward_claimed", None)  # 貼り付け先では未達成の予定として扱う
+            copied.append(c)
+        if replace:
+            day[kind] = copied
+        else:
+            day[kind].extend(copied)
+        day[kind].sort(key=lambda e: e["start"])
+
+
+def render_quick_add_page():
+    """⚡ クイック追加：日付（複数日OK）・時間・内容を決めて、予定／記録をまとめて追加するページ。"""
+    st.title("⚡ クイック追加")
+    st.caption("日付（○日〜○日のように複数日もOK）・時間・内容を決めて、予定や記録をまとめて追加できます。")
+
+    today_dt = get_now_jst().date()
+    default_date = st.session_state.get("quick_add_default_date") or today_dt
+
+    # 追加後に内容欄を空にする（ウィジェット作成前にだけ消せる）
+    if st.session_state.pop("quick_add_reset", False):
+        st.session_state.pop("qa_label", None)
+    notice = st.session_state.pop("quick_add_notice", None)
+    if notice:
+        st.success(notice)
+
+    kind_label_pick = st.radio("追加するもの", ["📅 予定", "✅ 記録"], horizontal=True, key="qa_kind")
+    kind = "planned" if kind_label_pick == "📅 予定" else "actual"
+    kind_word = "予定" if kind == "planned" else "記録"
+
+    with st.container(border=True):
+        st.markdown("#### 1️⃣ 日付をえらぶ")
+        date_strs = schedule_date_range_picker(
+            "追加する日付（カレンダーで期間を選べます）",
+            key=f"qa_dates_{default_date.strftime('%Y%m%d') if hasattr(default_date, 'strftime') else default_date}",
+            default_date=default_date,
+        )
+
+    with st.container(border=True):
+        st.markdown("#### 2️⃣ 時間をえらぶ")
+        col_start, col_end = st.columns(2)
+        with col_start:
+            start_time = schedule_time_selectbox("開始時刻", "09:00", key="qa_start")
+        with col_end:
+            end_time = schedule_time_selectbox("終了時刻", "10:00", key="qa_end")
+
+    with st.container(border=True):
+        st.markdown(f"#### 3️⃣ {kind_word}の内容")
+        label_text = st.text_input("内容（なんでもOK）", key="qa_label", placeholder="例：数学の宿題、読書、休憩 など")
+        color_options = list(SCHEDULE_COLORS.keys())
+        color_name = st.selectbox(
+            "色（10色から選択）", options=color_options,
+            index=3 if kind == "planned" else 4, key=f"qa_color_{kind}",
+        )
+
+    if date_strs and label_text.strip():
+        st.info(f"{kind_label_pick}：{start_time}〜{end_time}『{label_text.strip()}』を {len(date_strs)}日分に追加します")
+
+    if st.button("➕ まとめて追加する", type="primary", use_container_width=True,
+                 key="qa_add_button", disabled=not date_strs):
+        if not label_text.strip():
+            st.error("⚠️ 内容を入力してください。")
+        elif time_to_minutes(start_time) >= time_to_minutes(end_time):
+            st.error("⚠️ 終了時刻は開始時刻より後にしてください。")
+        else:
+            play_click_sound(delay=0)
+            new_entry = {
+                "start": start_time,
+                "end": end_time,
+                "label": label_text.strip(),
+                "color": SCHEDULE_COLORS[color_name],
+            }
+            apply_schedule_entries_to_dates([new_entry], date_strs, kind, replace=False)
+            save_progress()
+            st.session_state.quick_add_notice = (
+                f"✅ {date_strs[0]} 〜 {date_strs[-1]}（{len(date_strs)}日分）の{kind_word}に"
+                f"『{new_entry['label']}』{start_time}〜{end_time} を追加しました！"
+            )
+            st.session_state.quick_add_reset = True
+            st.rerun()
+
+    st.write("---")
+    nav_a, nav_b = st.columns(2)
+    with nav_a:
+        if st.button("↩️ 一日のスケジュールへ", use_container_width=True, key="qa_back_schedule"):
+            st.session_state.page = "schedule_page"
+            st.rerun()
+    with nav_b:
+        if st.button("📅 カレンダーで確認する", use_container_width=True, key="qa_go_calendar",
+                     disabled=not date_strs):
+            st.session_state.selected_calendar_date = date_strs[0]
+            st.session_state.page = "calendar_page"
+            st.rerun()
+
 
 
 def single_task_is_due(task: dict, date_str: str) -> bool:
@@ -3962,7 +4135,7 @@ elif st.session_state.page == "menu_select":
 elif st.session_state.page in [
     "target_page", "calendar_page", "stage_page",
     "candy_page", "candy_collection_page", "aquarium_page", "dino_page", "schedule_page",
-    "future_schedule_page", "schedule_print_page"
+    "future_schedule_page", "schedule_print_page", "quick_add_page"
 ]:
 
     # サイドバーメニュー
@@ -4544,10 +4717,16 @@ elif st.session_state.page in [
         today_dt = get_now_jst().date()
         today_str = today_dt.strftime("%Y/%m/%d")
         st.caption(f"📅 今日：{today_dt.strftime('%Y年%m月%d日')}")
-        nav1, nav2 = st.columns(2)
+        nav1, nav_quick, nav2 = st.columns(3)
         with nav1:
             if st.button("📅 未来の予定を立てる", type="primary", use_container_width=True, key="go_future_schedule"):
                 st.session_state.page = "future_schedule_page"
+                st.rerun()
+        with nav_quick:
+            if st.button("⚡ クイック追加", use_container_width=True, key="go_quick_add_from_daily"):
+                play_click_sound(delay=0)
+                st.session_state.quick_add_default_date = today_dt
+                st.session_state.page = "quick_add_page"
                 st.rerun()
         with nav2:
             if st.button("🖨️ 印刷", use_container_width=True, key="go_schedule_print_from_daily"):
@@ -4558,6 +4737,10 @@ elif st.session_state.page in [
                 st.rerun()
         st.markdown(f"### 📅 {today_dt.strftime('%Y年%m月%d日')} のスケジュール")
         render_schedule_and_events(today_str, editable=True, clipboard_at_bottom=True)
+
+    # --- クイック追加ページ ---
+    elif st.session_state.page == "quick_add_page":
+        render_quick_add_page()
 
     # --- 未来の予定を立てる専用ページ ---
     elif st.session_state.page == "future_schedule_page":
@@ -4583,7 +4766,12 @@ elif st.session_state.page in [
                 st.session_state.page = "schedule_print_page"
                 st.rerun()
         with nav3:
-            st.caption("予定は当日になっても保存されています")
+            if st.button("⚡ クイック追加", use_container_width=True, key="go_quick_add_from_future"):
+                play_click_sound(delay=0)
+                st.session_state.quick_add_default_date = selected
+                st.session_state.page = "quick_add_page"
+                st.rerun()
+        st.caption("予定は当日になっても保存されています")
         render_schedule_and_events(date_str, editable=True, clipboard_at_bottom=True)
 
     # --- 印刷設定・プレビュー専用ページ ---

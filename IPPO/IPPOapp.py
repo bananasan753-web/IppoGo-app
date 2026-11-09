@@ -2304,6 +2304,41 @@ def add_single_task(title: str) -> bool:
     return True
 
 
+def refresh_single_task_status() -> bool:
+    """
+    期間つきの反復タスク（開始日〜終了日）を「完了したタスク」へ移す。
+    ・期間のすべての日を達成した → 移動
+    ・終了日を過ぎた（1回以上は達成している） → 移動
+    ※毎週の反復（終了日なし）は期間が決まっていないので、自動では移動しない。
+    変更があればTrueを返す。
+    """
+    today = get_now_jst().date()
+    changed = False
+    for task in st.session_state.get("single_tasks", []):
+        if not task.get("repeat_enabled") or task.get("completed"):
+            continue
+        if task.get("repeat_mode") != "range" or not task.get("repeat_end"):
+            continue
+        done_dates = set(task.get("completed_dates", []))
+        if not done_dates:
+            continue
+        try:
+            start = datetime.strptime(task.get("repeat_start"), "%Y/%m/%d").date()
+            end = datetime.strptime(task.get("repeat_end"), "%Y/%m/%d").date()
+        except (ValueError, TypeError):
+            continue
+        total_days = (end - start).days + 1
+        all_done = 0 < total_days <= 400 and all(
+            (start + timedelta(days=i)).strftime("%Y/%m/%d") in done_dates for i in range(total_days)
+        )
+        if all_done or end < today:
+            task["completed"] = True
+            if not task.get("completed_at"):
+                task["completed_at"] = get_now_jst().strftime("%Y/%m/%d %H:%M")
+            changed = True
+    return changed
+
+
 def complete_single_task(task_id: str, completion_date: str = None) -> bool:
     """単発・反復タスクを達成し、指定日につき1ポイントを加算する。"""
     today = completion_date or get_now_jst().strftime("%Y/%m/%d")
@@ -2328,6 +2363,7 @@ def complete_single_task(task_id: str, completion_date: str = None) -> bool:
                 "points": SINGLE_TASK_POINTS,
             })
             add_sticker_for_date(today)
+            refresh_single_task_status()
             return True
     return False
 
@@ -4272,6 +4308,8 @@ elif st.session_state.page in [
                     else:
                         st.error("⚠️ タスクの内容を入力してください。")
 
+            if refresh_single_task_status():
+                save_progress()
             open_tasks = [t for t in st.session_state.single_tasks if not t.get("completed")]
             done_tasks = [t for t in st.session_state.single_tasks if t.get("completed")]
             if not open_tasks:
@@ -4339,7 +4377,10 @@ elif st.session_state.page in [
                         st.rerun()
             if done_tasks and st.checkbox(f"完了したタスクを見る（{len(done_tasks)}件）", key="show_done_single_tasks"):
                 for task in reversed(done_tasks[-30:]):
-                    st.write(f"✅ {task['title']}　（{task.get('completed_at', '')}）")
+                    repeat_info = ""
+                    if task.get("repeat_enabled"):
+                        repeat_info = f"　🔁 {len(task.get('completed_dates', []))}回達成"
+                    st.write(f"✅ {task['title']}　（{task.get('completed_at', '')}）{repeat_info}")
 
         st.write("---")
         st.write("まずは達成したい「大きな目標」を入力してください。")

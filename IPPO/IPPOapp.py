@@ -3208,6 +3208,84 @@ def apply_schedule_entries_to_dates(entries: list, date_strs: list, kind: str, r
         day[kind].sort(key=lambda e: e["start"])
 
 
+def render_schedule_bulk_delete(date_str: str):
+    """その日、または選んだ期間の予定／記録をまとめて削除する（削除前に必ず確認する）。"""
+    pending = st.session_state.get("bulk_delete_pending")
+    with st.expander("🗑️ 予定・記録をまとめて削除", expanded=bool(pending)):
+        st.caption("その日だけ、または○日〜○日の期間の予定・記録を一括で削除できます。削除前に確認画面が出ます。")
+
+        # ---- 確認画面（削除ボタンを押したあと） ----
+        if pending:
+            kind_text = {"planned": "予定", "actual": "記録", "both": "予定と記録の両方"}[pending["target"]]
+            with st.container(border=True):
+                st.error(
+                    f"⚠️ 本当に削除しますか？\n\n"
+                    f"📆 {pending['dates'][0]} 〜 {pending['dates'][-1]}（{len(pending['dates'])}日分）\n\n"
+                    f"🗑️ 対象：{kind_text}（合計 {pending['count']} 件）\n\n"
+                    f"削除したものは元に戻せません。"
+                )
+                confirm_col, cancel_col = st.columns(2)
+                with confirm_col:
+                    if st.button("🗑️ はい、削除します", type="primary", use_container_width=True,
+                                 key=f"bulk_delete_confirm_{date_str}"):
+                        kinds = ["planned", "actual"] if pending["target"] == "both" else [pending["target"]]
+                        removed = 0
+                        for ds in pending["dates"]:
+                            day = st.session_state.daily_schedule.get(ds)
+                            if not day:
+                                continue
+                            for k in kinds:
+                                removed += len(day.get(k, []))
+                                day[k] = []
+                        st.session_state.bulk_delete_pending = None
+                        st.session_state.schedule_edit_target = None
+                        st.session_state.schedule_delete_target = None
+                        st.session_state.schedule_form_open = None
+                        play_click_sound(delay=0)
+                        save_progress()
+                        st.session_state.schedule_notice = (
+                            f"🗑️ {pending['dates'][0]} 〜 {pending['dates'][-1]}の{kind_text}を {removed} 件削除しました。"
+                        )
+                        st.rerun()
+                with cancel_col:
+                    if st.button("やめる", use_container_width=True, key=f"bulk_delete_cancel_{date_str}"):
+                        st.session_state.bulk_delete_pending = None
+                        st.rerun()
+            return
+
+        # ---- 削除する範囲の選択 ----
+        target_label = st.radio(
+            "削除するもの", ["📅 予定", "✅ 記録", "📅✅ 予定と記録の両方"],
+            key=f"bulk_delete_target_{date_str}",
+        )
+        target = {"📅 予定": "planned", "✅ 記録": "actual", "📅✅ 予定と記録の両方": "both"}[target_label]
+        try:
+            default_d = datetime.strptime(date_str, "%Y/%m/%d").date()
+        except ValueError:
+            default_d = get_now_jst().date()
+        target_dates = schedule_date_range_picker(
+            "削除する日付（その日だけ／カレンダーで期間を選べます）",
+            key=f"bulk_delete_dates_{date_str}", default_date=default_d,
+        )
+        kinds = ["planned", "actual"] if target == "both" else [target]
+        count = sum(
+            len(st.session_state.daily_schedule.get(ds, {}).get(k, []))
+            for ds in target_dates for k in kinds
+        )
+        if target_dates:
+            if count:
+                st.info(f"🗑️ 削除される項目：{count} 件（{len(target_dates)}日分の中）")
+            else:
+                st.caption("選んだ範囲には、削除できる予定・記録がありません。")
+        if st.button("🗑️ 削除の確認へ進む", use_container_width=True,
+                     disabled=(not target_dates or count == 0),
+                     key=f"bulk_delete_request_{date_str}"):
+            st.session_state.bulk_delete_pending = {
+                "dates": target_dates, "target": target, "count": count,
+            }
+            st.rerun()
+
+
 def render_quick_add_page():
     """⚡ クイック追加：日付（複数日OK）・時間・内容を決めて、予定／記録をまとめて追加するページ。"""
     st.title("⚡ クイック追加")
@@ -3578,6 +3656,7 @@ def render_schedule_and_events(date_str: str, editable: bool, clipboard_at_botto
 
     if editable:
         render_schedule_templates(date_str)
+        render_schedule_bulk_delete(date_str)
 
 
 

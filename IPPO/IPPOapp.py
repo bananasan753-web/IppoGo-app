@@ -1280,13 +1280,7 @@ CANDY_SHOP_EXTRA_COST_POINTS = 2   # ショップで買った追加のお菓子�
 
 # お菓子コインはお菓子屋さん内だけで使うゲーム内通貨。
 # IPPOポイントや水族館・恐竜レースの仕組みとは独立させる。
-CANDY_SHOP_MATERIALS = {
-    "whip": {"name": "ホイップ", "emoji": "🍦", "price": 20},
-    "chocolate": {"name": "チョコ", "emoji": "🍫", "price": 20},
-    "strawberry": {"name": "イチゴ", "emoji": "🍓", "price": 20},
-    "flour": {"name": "小麦粉", "emoji": "🌾", "price": 20},
-    "cookie": {"name": "クッキー", "emoji": "🍪", "price": 20},
-}
+CANDY_SHOP_MATERIALS = {'whip': {'name': 'ホイップクリーム', 'emoji': '🍦', 'price': 20}, 'chocolate': {'name': 'チョコレート', 'emoji': '🍫', 'price': 20}, 'strawberry': {'name': 'イチゴ', 'emoji': '🍓', 'price': 20}, 'flour': {'name': '小麦粉', 'emoji': '🌾', 'price': 15}, 'cookie': {'name': 'クッキー', 'emoji': '🍪', 'price': 15}, 'milk': {'name': 'ミルク', 'emoji': '🥛', 'price': 15}, 'matcha': {'name': '抹茶', 'emoji': '🍵', 'price': 20}, 'banana': {'name': 'バナナ', 'emoji': '🍌', 'price': 15}, 'cheese': {'name': 'クリームチーズ', 'emoji': '🧀', 'price': 25}, 'caramel': {'name': 'キャラメル', 'emoji': '🍯', 'price': 20}}
 
 
 # 最初から瓶に入れられる5種類（🍬🍭🍫🍩🍪）は、これまで通りIPPOポイントだけで入れられる。
@@ -1343,6 +1337,9 @@ CANDY_SHOP_FALLBACK = {
 
 # レシピと瓶注文ルールは、アプリ本体とは別のJSONファイルで管理する。
 CANDY_RECIPE_DATA_PATH = os.path.join(BASE_DIR, "data", "candy_recipes.json")
+# dataフォルダがない環境では、アプリ本体と同じ場所のレシピJSONも読み込める。
+if not os.path.exists(CANDY_RECIPE_DATA_PATH):
+    CANDY_RECIPE_DATA_PATH = os.path.join(BASE_DIR, "candy_recipes.json")
 
 
 CANDY_JAR_ORDER_DATA_PATH = os.path.join(BASE_DIR, "data", "candy_jar_orders.json")
@@ -1521,13 +1518,13 @@ def candy_shop_serve_customer(customer: dict) -> dict:
 
 
 def candy_shop_open_for_business():
-    """お店をひらく。お店レベルが高いほど来店するお客さんが増える（最大5人）。
+    """お店をひらく。来店人数は毎回ランダム（最低1人、棚の商品数以下、最大5人）。
     お客さんはランダムに来て、棚のスイーツを気に入って買ってくれる。"""
     customers = CANDY_RECIPE_DATA.get("customers", [])
     if not customers or not st.session_state.candy_shop_displayed:
         return None
-    level = int(st.session_state.get("candy_shop_level", 1))
-    count = random.randint(1, min(5, 2 + level // 5))
+    # 来店人数は毎回ランダム。最低1人、棚の商品数を超えず、最大5人。
+    count = random.randint(1, min(5, len(st.session_state.candy_shop_displayed)))
     pool = list(customers)
     visits = []
     for _ in range(min(count, len(pool))):

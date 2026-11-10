@@ -4352,10 +4352,58 @@ elif st.session_state.page in [
             if not open_tasks:
                 st.caption("まだ未完了のタスクはありません。")
             for task in open_tasks:
+                            if not open_tasks:
+                st.caption("まだ未完了のタスクはありません。")
+            for task in open_tasks:
                 task_col, done_col, del_col = st.columns([5, 3, 1])
                 with task_col:
                     st.write(f"📌 {task['title']}")
+
+                    # ✏️ タスク名の編集
+                    if st.session_state.get("editing_single_task_id") == task["id"]:
+                        edited_title = st.text_input(
+                            "タスク名を変更",
+                            value=task["title"],
+                            key=f"single_task_edit_input_{task['id']}"
+                        )
+
+                        edit_col1, edit_col2 = st.columns(2)
+
+                        with edit_col1:
+                            if st.button(
+                                "💾 保存",
+                                key=f"single_task_edit_save_{task['id']}",
+                                use_container_width=True
+                            ):
+                                if edited_title.strip():
+                                    task["title"] = edited_title.strip()
+                                    st.session_state.editing_single_task_id = None
+                                    save_progress()
+                                    st.rerun()
+                                else:
+                                    st.error("タスク名を入力してください。")
+
+                        with edit_col2:
+                            if st.button(
+                                "キャンセル",
+                                key=f"single_task_edit_cancel_{task['id']}"
+                            ):
+                                st.session_state.editing_single_task_id = None
+                                st.rerun()
+
+                    else:
+                        if st.button(
+                            "✏️ 名前を編集",
+                            key=f"single_task_edit_open_{task['id']}",
+                            use_container_width=True
+                        ):
+                            st.session_state.editing_single_task_id = task["id"]
+                            st.rerun()
+
                     with st.expander("🔁 このタスクを反復にする／設定する"):
+                        mode = st.radio(
+                            "繰り返し方",
+                            options=["range", "weekly"],
                         mode = st.radio(
                             "繰り返し方",
                             options=["range", "weekly"],

@@ -2086,6 +2086,13 @@ def render_candy_shop():
                     f"{CANDY_SHOP_MATERIALS[k]['emoji']}{CANDY_SHOP_MATERIALS[k]['name']}" for k in chosen
                 )
                 st.info(f"「{labels}」を使ってスイーツを作る？")
+                chosen_sorted = tuple(sorted(chosen))
+                has_recipe = any(tuple(sorted(r.get("materials", []))) == chosen_sorted
+                                 for r in CANDY_RECIPE_DATA.get("recipes", []))
+                if not has_recipe:
+                    st.caption("🌱 この組み合わせはレシピにないので、★1のスイーツ（ふしぎなお菓子）ができるよ。")
+                elif len(chosen) == 1:
+                    st.caption("🍬 この材料1種類だけで作れるスイーツだよ！")
             needed = {}
             for key in chosen:
                 needed[key] = needed.get(key, 0) + 1
@@ -2103,7 +2110,7 @@ def render_candy_shop():
                     st.error("材料が足りません。")
             if not book_owned:
                 st.caption("材料を3つ選ぶには、ショップで『秘伝のレシピ書』を買ってね！")
-        st.caption("材料2つのレシピは★2・★3、材料3つのレシピは★4・★5。レシピにない組み合わせは★1のスイーツになるよ。")
+        st.caption("材料2種類のレシピは★2・★3、材料3種類のレシピは★3〜★5。レシピにない組み合わせは★1のスイーツになるよ。")
 
         with st.expander("🔎 まだ見つけていないスイーツのヒント（5 IPPOポイント）"):
             if st.session_state.get("candy_shop_last_hint"):
@@ -2293,23 +2300,37 @@ def render_candy_shop():
         st.metric("発見したスイーツ / 全種類", f"{discovered_count} / {total_count}")
         st.progress(discovered_count / total_count if total_count else 0)
 
-        if not st.session_state.candy_shop_discovered:
+        # いまのバージョンに存在するスイーツ（レシピ＋★1スイーツ）だけを表示する。
+        # 保存データに残っている古いバージョンのスイーツは、表示しないだけで消さずに残しておく。
+        recipe_by_id = {recipe.get("id"): recipe for recipe in all_recipes}
+        fallback_by_id = {fb.get("id"): fb for fb in CANDY_SHOP_FALLBACKS}
+        shown_products = [
+            p for p in st.session_state.candy_shop_discovered
+            if p.get("id") in recipe_by_id or p.get("id") in fallback_by_id
+        ]
+        if not shown_products:
             st.info("まだスイーツが登録されていません。材料を組み合わせて発見しよう！")
         else:
-            recipe_by_id = {recipe.get("id"): recipe for recipe in all_recipes}
-            for product in st.session_state.candy_shop_discovered:
-                recipe = recipe_by_id.get(product.get("id"), {})
-                material_ids = product.get("materials") or recipe.get("materials", [])
-                material_names = [
-                    f"{CANDY_SHOP_MATERIALS.get(mid, {}).get('emoji', '🧺')} "
-                    f"{CANDY_SHOP_MATERIALS.get(mid, {}).get('name', mid)}"
-                    for mid in material_ids
-                ]
-                st.write(f"{product['emoji']} **{product['name']}**　{'★' * int(product.get('rarity', 1))}")
-                if material_names:
-                    st.caption("作り方：" + " ＋ ".join(material_names))
+            for product in shown_products:
+                pid = product.get("id")
+                # 名前・絵文字・★は、いまのJSONのデータを優先して表示する
+                current = recipe_by_id.get(pid) or fallback_by_id.get(pid) or product
+                st.write(f"{current.get('emoji', product.get('emoji', '🍬'))} **{current.get('name', product.get('name', ''))}**"
+                         f"　{'★' * int(current.get('rarity', product.get('rarity', 1)))}")
+                if pid in recipe_by_id:
+                    material_ids = recipe_by_id[pid].get("materials", [])
+                    material_names = [
+                        f"{CANDY_SHOP_MATERIALS.get(mid, {}).get('emoji', '🧺')} "
+                        f"{CANDY_SHOP_MATERIALS.get(mid, {}).get('name', mid)}"
+                        for mid in material_ids
+                    ]
+                    kinds = len(material_ids)
+                    if kinds == 1:
+                        st.caption("作り方：" + material_names[0] + "（1種類だけで作れるよ）")
+                    else:
+                        st.caption("作り方：" + " ＋ ".join(material_names) + f"（{kinds}種類の組み合わせ）")
                 else:
-                    st.caption("作り方：材料の記録がありません（このスイーツは以前のバージョンで発見したものです）。")
+                    st.caption("作り方：レシピにない組み合わせで、ふしぎとできあがるスイーツだよ（材料は1種類でも、いろいろ混ぜても出ることがあるよ）。")
 
 
 def add_single_task(title: str) -> bool:

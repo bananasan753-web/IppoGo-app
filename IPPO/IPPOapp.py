@@ -4352,9 +4352,6 @@ elif st.session_state.page in [
             if not open_tasks:
                 st.caption("まだ未完了のタスクはありません。")
             for task in open_tasks:
-                            if not open_tasks:
-                st.caption("まだ未完了のタスクはありません。")
-            for task in open_tasks:
                 task_col, done_col, del_col = st.columns([5, 3, 1])
                 with task_col:
                     st.write(f"📌 {task['title']}")
@@ -4401,9 +4398,6 @@ elif st.session_state.page in [
                             st.rerun()
 
                     with st.expander("🔁 このタスクを反復にする／設定する"):
-                        mode = st.radio(
-                            "繰り返し方",
-                            options=["range", "weekly"],
                         mode = st.radio(
                             "繰り返し方",
                             options=["range", "weekly"],

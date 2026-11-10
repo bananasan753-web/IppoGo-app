@@ -1,0 +1,1266 @@
+{
+  "fallback_sweets": [
+    {
+      "id": "mystery_candy",
+      "name": "こもれびキャンディ",
+      "emoji": "🍬",
+      "rarity": 1,
+      "sell_price": 20
+    },
+    {
+      "id": "flower_marshmallow",
+      "name": "星くずマシュマロ",
+      "emoji": "🌼",
+      "rarity": 1,
+      "sell_price": 22
+    },
+    {
+      "id": "cloud_cookie",
+      "name": "月ふわ雲クッキー",
+      "emoji": "☁️",
+      "rarity": 1,
+      "sell_price": 24
+    }
+  ],
+  "recipes": [
+    {
+      "id": "new_sweet_01",
+      "name": "ふんわりミルクムース",
+      "emoji": "🍰",
+      "materials": [
+        "whip",
+        "chocolate"
+      ],
+      "rarity": 2,
+      "sell_price": 106,
+      "hint": "ホイップクリーム・チョコレートを組み合わせてみよう！"
+    },
+    {
+      "id": "new_sweet_02",
+      "name": "抹茶チョコサンド",
+      "emoji": "🧁",
+      "materials": [
+        "whip",
+        "strawberry"
+      ],
+      "rarity": 2,
+      "sell_price": 111,
+      "hint": "ホイップクリーム・イチゴを組み合わせてみよう！"
+    },
+    {
+      "id": "new_sweet_03",
+      "name": "バナナミルクタルト",
+      "emoji": "🥧",
+      "materials": [
+        "whip",
+        "flour"
+      ],
+      "rarity": 2,
+      "sell_price": 116,
+      "hint": "ホイップクリーム・小麦粉を組み合わせてみよう！"
+    },
+    {
+      "id": "new_sweet_04",
+      "name": "キャラメルクッキー",
+      "emoji": "🍮",
+      "materials": [
+        "whip",
+        "cookie"
+      ],
+      "rarity": 2,
+      "sell_price": 121,
+      "hint": "ホイップクリーム・クッキーを組み合わせてみよう！"
+    },
+    {
+      "id": "new_sweet_05",
+      "name": "苺チーズクリーム",
+      "emoji": "🍨",
+      "materials": [
+        "whip",
+        "milk"
+      ],
+      "rarity": 2,
+      "sell_price": 126,
+      "hint": "ホイップクリーム・ミルクを組み合わせてみよう！"
+    },
+    {
+      "id": "new_sweet_06",
+      "name": "雪どけ抹茶ケーキ",
+      "emoji": "🍡",
+      "materials": [
+        "whip",
+        "chocolate",
+        "strawberry"
+      ],
+      "rarity": 3,
+      "sell_price": 159,
+      "hint": "ホイップクリーム・チョコレート・イチゴを組み合わせてみよう！"
+    },
+    {
+      "id": "new_sweet_07",
+      "name": "黄金キャラメルタルト",
+      "emoji": "🍩",
+      "materials": [
+        "whip",
+        "chocolate",
+        "flour"
+      ],
+      "rarity": 3,
+      "sell_price": 129,
+      "hint": "ホイップクリーム・チョコレート・小麦粉を組み合わせてみよう！"
+    },
+    {
+      "id": "new_sweet_08",
+      "name": "バナナショコラパイ",
+      "emoji": "🍫",
+      "materials": [
+        "whip",
+        "chocolate",
+        "cookie"
+      ],
+      "rarity": 3,
+      "sell_price": 134,
+      "hint": "ホイップクリーム・チョコレート・クッキーを組み合わせてみよう！"
+    },
+    {
+      "id": "new_sweet_09",
+      "name": "いちごミルクドーム",
+      "emoji": "🍓",
+      "materials": [
+        "whip",
+        "chocolate",
+        "milk"
+      ],
+      "rarity": 3,
+      "sell_price": 139,
+      "hint": "ホイップクリーム・チョコレート・ミルクを組み合わせてみよう！"
+    },
+    {
+      "id": "new_sweet_10",
+      "name": "濃厚チーズクッキー",
+      "emoji": "🍪",
+      "materials": [
+        "whip",
+        "chocolate",
+        "matcha"
+      ],
+      "rarity": 3,
+      "sell_price": 144,
+      "hint": "ホイップクリーム・チョコレート・抹茶を組み合わせてみよう！"
+    },
+    {
+      "id": "new_sweet_11",
+      "name": "抹茶バナナロール",
+      "emoji": "🌸",
+      "materials": [
+        "whip",
+        "chocolate",
+        "banana"
+      ],
+      "rarity": 3,
+      "sell_price": 149,
+      "hint": "ホイップクリーム・チョコレート・バナナを組み合わせてみよう！"
+    },
+    {
+      "id": "new_sweet_12",
+      "name": "星空チョコタルト",
+      "emoji": "💎",
+      "materials": [
+        "whip",
+        "chocolate",
+        "cheese"
+      ],
+      "rarity": 3,
+      "sell_price": 154,
+      "hint": "ホイップクリーム・チョコレート・クリームチーズを組み合わせてみよう！"
+    },
+    {
+      "id": "new_sweet_13",
+      "name": "キャラメルミルフィーユ",
+      "emoji": "🍯",
+      "materials": [
+        "whip",
+        "chocolate",
+        "caramel"
+      ],
+      "rarity": 3,
+      "sell_price": 159,
+      "hint": "ホイップクリーム・チョコレート・キャラメルを組み合わせてみよう！"
+    },
+    {
+      "id": "new_sweet_14",
+      "name": "苺のチーズパフェ",
+      "emoji": "🌙",
+      "materials": [
+        "whip",
+        "strawberry",
+        "flour"
+      ],
+      "rarity": 3,
+      "sell_price": 129,
+      "hint": "ホイップクリーム・イチゴ・小麦粉を組み合わせてみよう！"
+    },
+    {
+      "id": "new_sweet_15",
+      "name": "ミルクティークッキー",
+      "emoji": "⭐",
+      "materials": [
+        "whip",
+        "strawberry",
+        "cookie"
+      ],
+      "rarity": 3,
+      "sell_price": 134,
+      "hint": "ホイップクリーム・イチゴ・クッキーを組み合わせてみよう！"
+    },
+    {
+      "id": "new_sweet_16",
+      "name": "月夜の抹茶ムース",
+      "emoji": "🍵",
+      "materials": [
+        "whip",
+        "strawberry",
+        "milk"
+      ],
+      "rarity": 3,
+      "sell_price": 139,
+      "hint": "ホイップクリーム・イチゴ・ミルクを組み合わせてみよう！"
+    },
+    {
+      "id": "new_sweet_17",
+      "name": "バナナキャラメルケーキ",
+      "emoji": "🍌",
+      "materials": [
+        "whip",
+        "strawberry",
+        "matcha"
+      ],
+      "rarity": 3,
+      "sell_price": 144,
+      "hint": "ホイップクリーム・イチゴ・抹茶を組み合わせてみよう！"
+    },
+    {
+      "id": "new_sweet_18",
+      "name": "ショコラチーズテリーヌ",
+      "emoji": "🧀",
+      "materials": [
+        "whip",
+        "strawberry",
+        "banana"
+      ],
+      "rarity": 3,
+      "sell_price": 149,
+      "hint": "ホイップクリーム・イチゴ・バナナを組み合わせてみよう！"
+    },
+    {
+      "id": "new_sweet_19",
+      "name": "いちご雲のタルト",
+      "emoji": "🎂",
+      "materials": [
+        "whip",
+        "strawberry",
+        "cheese"
+      ],
+      "rarity": 3,
+      "sell_price": 154,
+      "hint": "ホイップクリーム・イチゴ・クリームチーズを組み合わせてみよう！"
+    },
+    {
+      "id": "new_sweet_20",
+      "name": "黄金ミルクプリン",
+      "emoji": "🍬",
+      "materials": [
+        "whip",
+        "strawberry",
+        "caramel"
+      ],
+      "rarity": 3,
+      "sell_price": 159,
+      "hint": "ホイップクリーム・イチゴ・キャラメルを組み合わせてみよう！"
+    },
+    {
+      "id": "new_sweet_21",
+      "name": "森の抹茶クッキー",
+      "emoji": "🍰",
+      "materials": [
+        "whip",
+        "flour",
+        "cookie"
+      ],
+      "rarity": 4,
+      "sell_price": 157,
+      "hint": "ホイップクリーム・小麦粉・クッキーを組み合わせてみよう！"
+    },
+    {
+      "id": "new_sweet_22",
+      "name": "とろける苺ショコラ",
+      "emoji": "🧁",
+      "materials": [
+        "whip",
+        "flour",
+        "milk"
+      ],
+      "rarity": 4,
+      "sell_price": 162,
+      "hint": "ホイップクリーム・小麦粉・ミルクを組み合わせてみよう！"
+    },
+    {
+      "id": "new_sweet_23",
+      "name": "キャラメルチーズケーキ",
+      "emoji": "🥧",
+      "materials": [
+        "whip",
+        "flour",
+        "matcha"
+      ],
+      "rarity": 4,
+      "sell_price": 167,
+      "hint": "ホイップクリーム・小麦粉・抹茶を組み合わせてみよう！"
+    },
+    {
+      "id": "new_sweet_24",
+      "name": "バナナホイップサンド",
+      "emoji": "🍮",
+      "materials": [
+        "whip",
+        "flour",
+        "banana"
+      ],
+      "rarity": 4,
+      "sell_price": 172,
+      "hint": "ホイップクリーム・小麦粉・バナナを組み合わせてみよう！"
+    },
+    {
+      "id": "new_sweet_25",
+      "name": "ミルクショコラドーム",
+      "emoji": "🍨",
+      "materials": [
+        "whip",
+        "flour",
+        "cheese"
+      ],
+      "rarity": 4,
+      "sell_price": 177,
+      "hint": "ホイップクリーム・小麦粉・クリームチーズを組み合わせてみよう！"
+    },
+    {
+      "id": "new_sweet_26",
+      "name": "春風ストロベリーケーキ",
+      "emoji": "🍡",
+      "materials": [
+        "whip",
+        "flour",
+        "caramel"
+      ],
+      "rarity": 4,
+      "sell_price": 182,
+      "hint": "ホイップクリーム・小麦粉・キャラメルを組み合わせてみよう！"
+    },
+    {
+      "id": "new_sweet_27",
+      "name": "抹茶チーズタルト",
+      "emoji": "🍩",
+      "materials": [
+        "whip",
+        "cookie",
+        "milk"
+      ],
+      "rarity": 4,
+      "sell_price": 187,
+      "hint": "ホイップクリーム・クッキー・ミルクを組み合わせてみよう！"
+    },
+    {
+      "id": "new_sweet_28",
+      "name": "キャラメルバナナパフェ",
+      "emoji": "🍫",
+      "materials": [
+        "whip",
+        "cookie",
+        "matcha"
+      ],
+      "rarity": 4,
+      "sell_price": 157,
+      "hint": "ホイップクリーム・クッキー・抹茶を組み合わせてみよう！"
+    },
+    {
+      "id": "new_sweet_29",
+      "name": "白雪ミルクタルト",
+      "emoji": "🍓",
+      "materials": [
+        "whip",
+        "cookie",
+        "banana"
+      ],
+      "rarity": 4,
+      "sell_price": 162,
+      "hint": "ホイップクリーム・クッキー・バナナを組み合わせてみよう！"
+    },
+    {
+      "id": "new_sweet_30",
+      "name": "チョコレート王冠",
+      "emoji": "🍪",
+      "materials": [
+        "whip",
+        "cookie",
+        "cheese"
+      ],
+      "rarity": 4,
+      "sell_price": 167,
+      "hint": "ホイップクリーム・クッキー・クリームチーズを組み合わせてみよう！"
+    },
+    {
+      "id": "new_sweet_31",
+      "name": "苺と抹茶の宝石菓子",
+      "emoji": "🌸",
+      "materials": [
+        "whip",
+        "cookie",
+        "caramel"
+      ],
+      "rarity": 4,
+      "sell_price": 172,
+      "hint": "ホイップクリーム・クッキー・キャラメルを組み合わせてみよう！"
+    },
+    {
+      "id": "new_sweet_32",
+      "name": "バナナチーズスフレ",
+      "emoji": "💎",
+      "materials": [
+        "whip",
+        "milk",
+        "matcha"
+      ],
+      "rarity": 4,
+      "sell_price": 177,
+      "hint": "ホイップクリーム・ミルク・抹茶を組み合わせてみよう！"
+    },
+    {
+      "id": "new_sweet_33",
+      "name": "キャラメルショコラロール",
+      "emoji": "🍯",
+      "materials": [
+        "whip",
+        "milk",
+        "banana"
+      ],
+      "rarity": 4,
+      "sell_price": 182,
+      "hint": "ホイップクリーム・ミルク・バナナを組み合わせてみよう！"
+    },
+    {
+      "id": "new_sweet_34",
+      "name": "ミルククッキーサンド",
+      "emoji": "🌙",
+      "materials": [
+        "whip",
+        "milk",
+        "cheese"
+      ],
+      "rarity": 4,
+      "sell_price": 187,
+      "hint": "ホイップクリーム・ミルク・クリームチーズを組み合わせてみよう！"
+    },
+    {
+      "id": "new_sweet_35",
+      "name": "森の木の実風タルト",
+      "emoji": "⭐",
+      "materials": [
+        "whip",
+        "milk",
+        "caramel"
+      ],
+      "rarity": 4,
+      "sell_price": 157,
+      "hint": "ホイップクリーム・ミルク・キャラメルを組み合わせてみよう！"
+    },
+    {
+      "id": "new_sweet_36",
+      "name": "いちごキャラメルドーム",
+      "emoji": "🍵",
+      "materials": [
+        "whip",
+        "matcha",
+        "banana"
+      ],
+      "rarity": 4,
+      "sell_price": 162,
+      "hint": "ホイップクリーム・抹茶・バナナを組み合わせてみよう！"
+    },
+    {
+      "id": "new_sweet_37",
+      "name": "抹茶ミルクの三日月",
+      "emoji": "🍌",
+      "materials": [
+        "whip",
+        "matcha",
+        "cheese"
+      ],
+      "rarity": 4,
+      "sell_price": 167,
+      "hint": "ホイップクリーム・抹茶・クリームチーズを組み合わせてみよう！"
+    },
+    {
+      "id": "new_sweet_38",
+      "name": "チーズショコラパフェ",
+      "emoji": "🧀",
+      "materials": [
+        "whip",
+        "matcha",
+        "caramel"
+      ],
+      "rarity": 4,
+      "sell_price": 172,
+      "hint": "ホイップクリーム・抹茶・キャラメルを組み合わせてみよう！"
+    },
+    {
+      "id": "new_sweet_39",
+      "name": "バナナ苺の二層ケーキ",
+      "emoji": "🎂",
+      "materials": [
+        "whip",
+        "banana",
+        "cheese"
+      ],
+      "rarity": 4,
+      "sell_price": 177,
+      "hint": "ホイップクリーム・バナナ・クリームチーズを組み合わせてみよう！"
+    },
+    {
+      "id": "new_sweet_40",
+      "name": "琥珀色のキャラメル菓子",
+      "emoji": "🍬",
+      "materials": [
+        "whip",
+        "banana",
+        "caramel"
+      ],
+      "rarity": 4,
+      "sell_price": 182,
+      "hint": "ホイップクリーム・バナナ・キャラメルを組み合わせてみよう！"
+    },
+    {
+      "id": "new_sweet_41",
+      "name": "ふわふわホイップタワー",
+      "emoji": "🍰",
+      "materials": [
+        "whip",
+        "cheese",
+        "caramel"
+      ],
+      "rarity": 4,
+      "sell_price": 187,
+      "hint": "ホイップクリーム・クリームチーズ・キャラメルを組み合わせてみよう！"
+    },
+    {
+      "id": "new_sweet_42",
+      "name": "深緑の抹茶ショコラ",
+      "emoji": "🧁",
+      "materials": [
+        "chocolate",
+        "strawberry",
+        "flour"
+      ],
+      "rarity": 4,
+      "sell_price": 157,
+      "hint": "チョコレート・イチゴ・小麦粉を組み合わせてみよう！"
+    },
+    {
+      "id": "new_sweet_43",
+      "name": "苺チーズの花かご",
+      "emoji": "🥧",
+      "materials": [
+        "chocolate",
+        "strawberry",
+        "cookie"
+      ],
+      "rarity": 5,
+      "sell_price": 190,
+      "hint": "チョコレート・イチゴ・クッキーを組み合わせてみよう！"
+    },
+    {
+      "id": "new_sweet_44",
+      "name": "バナナミルクの宝箱",
+      "emoji": "🍮",
+      "materials": [
+        "chocolate",
+        "strawberry",
+        "milk"
+      ],
+      "rarity": 5,
+      "sell_price": 195,
+      "hint": "チョコレート・イチゴ・ミルクを組み合わせてみよう！"
+    },
+    {
+      "id": "new_sweet_45",
+      "name": "キャラメルチーズムース",
+      "emoji": "🍨",
+      "materials": [
+        "chocolate",
+        "strawberry",
+        "matcha"
+      ],
+      "rarity": 5,
+      "sell_price": 200,
+      "hint": "チョコレート・イチゴ・抹茶を組み合わせてみよう！"
+    },
+    {
+      "id": "new_sweet_46",
+      "name": "星降るショコラケーキ",
+      "emoji": "🍡",
+      "materials": [
+        "chocolate",
+        "strawberry",
+        "banana"
+      ],
+      "rarity": 5,
+      "sell_price": 205,
+      "hint": "チョコレート・イチゴ・バナナを組み合わせてみよう！"
+    },
+    {
+      "id": "new_sweet_47",
+      "name": "春色ミルクパフェ",
+      "emoji": "🍩",
+      "materials": [
+        "chocolate",
+        "strawberry",
+        "cheese"
+      ],
+      "rarity": 5,
+      "sell_price": 210,
+      "hint": "チョコレート・イチゴ・クリームチーズを組み合わせてみよう！"
+    },
+    {
+      "id": "new_sweet_48",
+      "name": "抹茶キャラメルの雅",
+      "emoji": "🍫",
+      "materials": [
+        "chocolate",
+        "strawberry",
+        "caramel"
+      ],
+      "rarity": 5,
+      "sell_price": 215,
+      "hint": "チョコレート・イチゴ・キャラメルを組み合わせてみよう！"
+    },
+    {
+      "id": "new_sweet_49",
+      "name": "いちごの夢見タルト",
+      "emoji": "🍓",
+      "materials": [
+        "chocolate",
+        "flour",
+        "cookie"
+      ],
+      "rarity": 5,
+      "sell_price": 185,
+      "hint": "チョコレート・小麦粉・クッキーを組み合わせてみよう！"
+    },
+    {
+      "id": "new_sweet_50",
+      "name": "虹色スイーツアソート",
+      "emoji": "🍪",
+      "materials": [
+        "chocolate",
+        "flour",
+        "milk"
+      ],
+      "rarity": 5,
+      "sell_price": 190,
+      "hint": "チョコレート・小麦粉・ミルクを組み合わせてみよう！"
+    }
+  ],
+  "craft_messages": [
+    "{name}完成！美味しそう☺",
+    "凄い！{name}が完成したよ！🎉",
+    "やったね！{name}ができあがり✨",
+    "{name}完成！いい香り〜🍴",
+    "おめでとう！{name}の完成だよ💕",
+    "ふんわり仕上がった！{name}完成！",
+    "じゃじゃーん！{name}の完成です🎊",
+    "{name}が完成！パティシエの腕前だね👨‍🍳",
+    "できた〜！{name}、とっても可愛い出来栄え🎀",
+    "{name}完成！早く食べてもらいたいな😋",
+    "わぁ、見て見て！{name}が完成したよ🌟",
+    "{name}の完成！今日も絶好調だね🔥",
+    "いい仕事したね！{name}が完成したよ👏",
+    "{name}完成！思わず味見したくなっちゃう🍰",
+    "ばっちり！{name}ができたよ(๑>◡<๑)",
+    "お店の新しい仲間、{name}が完成！🏪",
+    "すごーい！{name}、お店に並べるのが楽しみ♪",
+    "{name}完成！甘い幸せの予感💖",
+    "ひらめきが光る！{name}が完成したよ💡",
+    "{name}完成！今日のベストスイーツかも👑"
+  ],
+  "customers": [
+    {
+      "id": "bear",
+      "name": "くまのパンケーキ好き",
+      "emoji": "🐻",
+      "likes": [
+        "🍰",
+        "🥧"
+      ],
+      "style": "highest",
+      "fan_bonus": 1.5,
+      "weight": 2,
+      "personality": "おっとり",
+      "favorite_food": "焼きたてのケーキ",
+      "hint": "甘い焼き菓子の香りに誘われてきたみたい。",
+      "lines": {
+        "love": "わあ、ぼくの大好きな味だ！ふんわりしていて幸せだなあ。",
+        "buy": "これにするね。おうちでゆっくり味わうよ。"
+      }
+    },
+    {
+      "id": "grandma",
+      "name": "花柄エプロンのおばあちゃん",
+      "emoji": "👵",
+      "likes": [
+        "🌼",
+        "🍮"
+      ],
+      "style": "random",
+      "fan_bonus": 1.5,
+      "weight": 2,
+      "personality": "穏やか",
+      "favorite_food": "なめらかプリン",
+      "hint": "やさしい甘さのお菓子が好きなんだって。",
+      "lines": {
+        "love": "まあ、懐かしい味がするね。孫にも買っていこうかしら。",
+        "buy": "こちらをひとついただくね。ありがとう。"
+      }
+    },
+    {
+      "id": "boy",
+      "name": "チョコ探検隊の男の子",
+      "emoji": "🧒",
+      "likes": [
+        "🍫",
+        "🍪"
+      ],
+      "style": "random",
+      "fan_bonus": 1.5,
+      "weight": 2,
+      "personality": "元気",
+      "favorite_food": "チョコクッキー",
+      "hint": "チョコ味のお菓子を見つけると目が輝くよ。",
+      "lines": {
+        "love": "チョコの香りだ！ぼくの大好物だよ！",
+        "buy": "これに決めた！大事に食べるね。"
+      }
+    },
+    {
+      "id": "patissier",
+      "name": "研究熱心なパティシエ",
+      "emoji": "👩‍🍳",
+      "likes": [
+        "💎",
+        "🎂"
+      ],
+      "style": "highest",
+      "fan_bonus": 1.5,
+      "weight": 2,
+      "personality": "探究心旺盛",
+      "favorite_food": "宝石のようなケーキ",
+      "hint": "手の込んだ華やかなスイーツが好み。",
+      "lines": {
+        "love": "見事な組み合わせね。素材の使い方が勉強になるわ。",
+        "buy": "こちらをいただいて、味の工夫を研究したいわ。"
+      }
+    },
+    {
+      "id": "fairy",
+      "name": "花畑に住む妖精",
+      "emoji": "🧚",
+      "likes": [
+        "🍓",
+        "🌸"
+      ],
+      "style": "random",
+      "fan_bonus": 1.5,
+      "weight": 2,
+      "personality": "好奇心いっぱい",
+      "favorite_food": "いちごのタルト",
+      "hint": "ピンク色や花の形のお菓子が大好き。",
+      "lines": {
+        "love": "わあ、春の花みたい！いちごの香りも素敵♪",
+        "buy": "これにするね。花の仲間にも見せたいな。"
+      }
+    },
+    {
+      "id": "cat",
+      "name": "紅茶好きのねこ紳士",
+      "emoji": "🐱",
+      "likes": [
+        "🥧",
+        "🍪"
+      ],
+      "style": "cheapest",
+      "fan_bonus": 1.5,
+      "weight": 2,
+      "personality": "礼儀正しい",
+      "favorite_food": "サクサクタルト",
+      "hint": "さくさくした食感のお菓子に目がないよ。",
+      "lines": {
+        "love": "これは実に香ばしい。紅茶にも合いそうですにゃ。",
+        "buy": "こちらをひとつ、お願いします。"
+      }
+    },
+    {
+      "id": "trendy",
+      "name": "写真が趣味のおしゃれさん",
+      "emoji": "🧑‍🎤",
+      "likes": [
+        "💎",
+        "🌸"
+      ],
+      "style": "highest",
+      "fan_bonus": 1.5,
+      "weight": 2,
+      "personality": "明るい",
+      "favorite_food": "宝石ゼリー",
+      "hint": "見た目もかわいいスイーツを探しているよ。",
+      "lines": {
+        "love": "わあ、色合いがとっても素敵！写真に残したいな。",
+        "buy": "これをください♪お友だちにも紹介するね。"
+      }
+    },
+    {
+      "id": "wizard",
+      "name": "星を読む魔法使い",
+      "emoji": "🧙",
+      "likes": [
+        "👑",
+        "🌙"
+      ],
+      "style": "highest",
+      "fan_bonus": 1.5,
+      "weight": 2,
+      "personality": "物知り",
+      "favorite_food": "月夜のムース",
+      "hint": "珍しくて幻想的なスイーツが好き。",
+      "lines": {
+        "love": "ほほう、星明かりのような美しさじゃな。",
+        "buy": "これをいただこう。すてきな夜のお茶会になりそうじゃ。"
+      }
+    },
+    {
+      "id": "rabbit",
+      "name": "にんじん色のリボンうさぎ",
+      "emoji": "🐰",
+      "likes": [
+        "🍓",
+        "🍮"
+      ],
+      "style": "random",
+      "fan_bonus": 1.5,
+      "weight": 2,
+      "personality": "人懐っこい",
+      "favorite_food": "いちごプリン",
+      "hint": "いちごとぷるぷる食感が大好物。",
+      "lines": {
+        "love": "ぴょん！いちごの甘い香りがするね！",
+        "buy": "これをひとつくださいな。"
+      }
+    },
+    {
+      "id": "fox",
+      "name": "森の読書家きつね",
+      "emoji": "🦊",
+      "likes": [
+        "🍯",
+        "🍪"
+      ],
+      "style": "cheapest",
+      "fan_bonus": 1.5,
+      "weight": 2,
+      "personality": "静か",
+      "favorite_food": "はちみつクッキー",
+      "hint": "はちみつ風味と焼き菓子が好き。",
+      "lines": {
+        "love": "本を読みながら食べたくなる、やさしい甘さだね。",
+        "buy": "こちらを持ち帰ろうかな。"
+      }
+    },
+    {
+      "id": "panda",
+      "name": "笹の葉カフェ店員パンダ",
+      "emoji": "🐼",
+      "likes": [
+        "🍵",
+        "🍡"
+      ],
+      "style": "random",
+      "fan_bonus": 1.5,
+      "weight": 2,
+      "personality": "のんびり",
+      "favorite_food": "抹茶だんご",
+      "hint": "抹茶や和風のお菓子が好物。",
+      "lines": {
+        "love": "抹茶の香りって落ち着くねえ。",
+        "buy": "これをお願いします。休憩時間にいただくよ。"
+      }
+    },
+    {
+      "id": "dog",
+      "name": "お散歩大好きな犬くん",
+      "emoji": "🐶",
+      "likes": [
+        "🍌",
+        "🧁"
+      ],
+      "style": "random",
+      "fan_bonus": 1.5,
+      "weight": 2,
+      "personality": "社交的",
+      "favorite_food": "バナナカップケーキ",
+      "hint": "フルーツ入りのふんわり菓子が好き。",
+      "lines": {
+        "love": "いい匂い！お散歩のごほうびにぴったりだね！",
+        "buy": "これにするよ。おうちで待ってる家族にも見せたいな。"
+      }
+    },
+    {
+      "id": "koala",
+      "name": "ミルク好きのコアラ",
+      "emoji": "🐨",
+      "likes": [
+        "🥛",
+        "🍮"
+      ],
+      "style": "cheapest",
+      "fan_bonus": 1.5,
+      "weight": 2,
+      "personality": "マイペース",
+      "favorite_food": "ミルクプリン",
+      "hint": "ミルク味のなめらかなお菓子が大好き。",
+      "lines": {
+        "love": "ミルクのやさしい香りにほっとするなあ。",
+        "buy": "これをひとつ、お願いします。"
+      }
+    },
+    {
+      "id": "penguin",
+      "name": "氷菓子に目がないペンギン",
+      "emoji": "🐧",
+      "likes": [
+        "🍨",
+        "🍧"
+      ],
+      "style": "random",
+      "fan_bonus": 1.5,
+      "weight": 2,
+      "personality": "さわやか",
+      "favorite_food": "ふわふわかき氷",
+      "hint": "冷たいデザートが大好物。",
+      "lines": {
+        "love": "ひんやりスイーツだ！見ているだけで涼しいね。",
+        "buy": "これを食べていこうっと。"
+      }
+    },
+    {
+      "id": "deer",
+      "name": "森の花屋さんのしか",
+      "emoji": "🦌",
+      "likes": [
+        "🌼",
+        "🍓"
+      ],
+      "style": "random",
+      "fan_bonus": 1.5,
+      "weight": 2,
+      "personality": "やさしい",
+      "favorite_food": "花びらクッキー",
+      "hint": "花や果物を使ったお菓子が好き。",
+      "lines": {
+        "love": "お花みたいでかわいいね。食べるのが楽しみ。",
+        "buy": "こちらをひとついただきます。"
+      }
+    },
+    {
+      "id": "owl",
+      "name": "夜更かしふくろう先生",
+      "emoji": "🦉",
+      "likes": [
+        "☕",
+        "🍫"
+      ],
+      "style": "highest",
+      "fan_bonus": 1.5,
+      "weight": 2,
+      "personality": "知的",
+      "favorite_food": "ビターチョコケーキ",
+      "hint": "コーヒーやチョコの大人っぽい味が好み。",
+      "lines": {
+        "love": "夜の読書に合いそうな、落ち着いた味だね。",
+        "buy": "これを持ち帰って、ゆっくり味わおう。"
+      }
+    },
+    {
+      "id": "hamster",
+      "name": "ほおぶくろいっぱいハムスター",
+      "emoji": "🐹",
+      "likes": [
+        "🍪",
+        "🍩"
+      ],
+      "style": "random",
+      "fan_bonus": 1.5,
+      "weight": 2,
+      "personality": "食いしん坊",
+      "favorite_food": "ひとくちドーナツ",
+      "hint": "ひとくちサイズの焼き菓子が好き。",
+      "lines": {
+        "love": "わあ、小さくてかわいい！いくつでも食べられそう。",
+        "buy": "これにするね。大切にほおばるよ。"
+      }
+    },
+    {
+      "id": "lion",
+      "name": "たてがみ立派なライオン",
+      "emoji": "🦁",
+      "likes": [
+        "🎂",
+        "🍰"
+      ],
+      "style": "highest",
+      "fan_bonus": 1.5,
+      "weight": 2,
+      "personality": "頼もしい",
+      "favorite_food": "王様ショートケーキ",
+      "hint": "豪華なケーキやクリームが大好き。",
+      "lines": {
+        "love": "おお、堂々としたケーキだ！見事な飾りだね。",
+        "buy": "これをいただこう。みんなで分けたいな。"
+      }
+    },
+    {
+      "id": "unicorn",
+      "name": "虹色たてがみのユニコーン",
+      "emoji": "🦄",
+      "likes": [
+        "🌈",
+        "💎"
+      ],
+      "style": "highest",
+      "fan_bonus": 1.5,
+      "weight": 2,
+      "personality": "夢見がち",
+      "favorite_food": "虹色ゼリー",
+      "hint": "虹色や宝石のようなスイーツが好物。",
+      "lines": {
+        "love": "きらきらしていて夢みたい！心が弾むよ。",
+        "buy": "これをひとつ。大切な友だちにも見せたいな。"
+      }
+    },
+    {
+      "id": "frog",
+      "name": "雨の日好きなかえる",
+      "emoji": "🐸",
+      "likes": [
+        "🍵",
+        "🍡"
+      ],
+      "style": "random",
+      "fan_bonus": 1.5,
+      "weight": 2,
+      "personality": "陽気",
+      "favorite_food": "抹茶もち",
+      "hint": "もちもちした和菓子と抹茶が好き。",
+      "lines": {
+        "love": "雨音を聞きながら食べたい味だね！",
+        "buy": "これをください。お池のみんなにも自慢しよう。"
+      }
+    },
+    {
+      "id": "squirrel",
+      "name": "木の実集めのりす",
+      "emoji": "🐿️",
+      "likes": [
+        "🌰",
+        "🍯"
+      ],
+      "style": "cheapest",
+      "fan_bonus": 1.5,
+      "weight": 2,
+      "personality": "勤勉",
+      "favorite_food": "木の実タルト",
+      "hint": "ナッツやはちみつ風味が大好物。",
+      "lines": {
+        "love": "香ばしい香り！森のごちそうみたいだね。",
+        "buy": "これを持って帰るよ。ありがとう！"
+      }
+    },
+    {
+      "id": "sheep",
+      "name": "雲の上のひつじ",
+      "emoji": "🐑",
+      "likes": [
+        "☁️",
+        "🍦"
+      ],
+      "style": "random",
+      "fan_bonus": 1.5,
+      "weight": 2,
+      "personality": "ふんわり",
+      "favorite_food": "雲ホイップ",
+      "hint": "軽い口どけのクリーム菓子が好き。",
+      "lines": {
+        "love": "ふわふわで、雲に乗っているみたい！",
+        "buy": "これにするね。夢の中でも食べたいな。"
+      }
+    },
+    {
+      "id": "monkey",
+      "name": "バナナ博士のおさる",
+      "emoji": "🐵",
+      "likes": [
+        "🍌",
+        "🍫"
+      ],
+      "style": "random",
+      "fan_bonus": 1.5,
+      "weight": 2,
+      "personality": "おしゃべり",
+      "favorite_food": "バナナチョコ",
+      "hint": "バナナとチョコの組み合わせが大好き。",
+      "lines": {
+        "love": "バナナとチョコ！最高の組み合わせだね！",
+        "buy": "これをひとつ！研究仲間にも教えるよ。"
+      }
+    },
+    {
+      "id": "turtle",
+      "name": "ゆっくり歩くかめ",
+      "emoji": "🐢",
+      "likes": [
+        "🍮",
+        "🥧"
+      ],
+      "style": "cheapest",
+      "fan_bonus": 1.5,
+      "weight": 2,
+      "personality": "慎重",
+      "favorite_food": "なめらかタルト",
+      "hint": "なめらかなプリンやタルトが好物。",
+      "lines": {
+        "love": "ゆっくり味わえそうな、やさしいお菓子だね。",
+        "buy": "これをひとつお願いします。大事にいただきます。"
+      }
+    },
+    {
+      "id": "bear2",
+      "name": "森の音楽家くま",
+      "emoji": "🐻",
+      "likes": [
+        "🍯",
+        "🎂"
+      ],
+      "style": "highest",
+      "fan_bonus": 1.5,
+      "weight": 2,
+      "personality": "陽気",
+      "favorite_food": "はちみつケーキ",
+      "hint": "はちみつを使ったケーキが大好き。",
+      "lines": {
+        "love": "甘い香りでメロディーが浮かんできたよ！",
+        "buy": "これを買って、仲間とお茶会をするよ。"
+      }
+    },
+    {
+      "id": "robot",
+      "name": "甘さを計算するロボット",
+      "emoji": "🤖",
+      "likes": [
+        "🍬",
+        "🍫"
+      ],
+      "style": "random",
+      "fan_bonus": 1.5,
+      "weight": 2,
+      "personality": "几帳面",
+      "favorite_food": "チョコキャンディ",
+      "hint": "チョコやキャンディの味を研究しているよ。",
+      "lines": {
+        "love": "分析完了。香りと甘さのバランスがすばらしいです。",
+        "buy": "この商品を購入します。データを記録します。"
+      }
+    },
+    {
+      "id": "mermaid",
+      "name": "海辺の歌姫",
+      "emoji": "🧜‍♀️",
+      "likes": [
+        "🫧",
+        "🍨"
+      ],
+      "style": "highest",
+      "fan_bonus": 1.5,
+      "weight": 2,
+      "personality": "優雅",
+      "favorite_food": "海色ソルベ",
+      "hint": "さっぱりした冷たいお菓子が好き。",
+      "lines": {
+        "love": "波の泡みたいにきれい！涼やかな味がしそうね。",
+        "buy": "これをいただくわ。歌の仲間にも紹介するね。"
+      }
+    },
+    {
+      "id": "artist",
+      "name": "色えんぴつ画家",
+      "emoji": "🎨",
+      "likes": [
+        "🌸",
+        "🍓"
+      ],
+      "style": "random",
+      "fan_bonus": 1.5,
+      "weight": 2,
+      "personality": "想像力豊か",
+      "favorite_food": "花咲くいちごケーキ",
+      "hint": "色鮮やかなフルーツスイーツが好物。",
+      "lines": {
+        "love": "色の重なりがきれい！絵に描きたくなるね。",
+        "buy": "これをひとつください。あとで絵に残すよ。"
+      }
+    },
+    {
+      "id": "astronaut",
+      "name": "宇宙を旅する astronaut",
+      "emoji": "👩‍🚀",
+      "likes": [
+        "🌙",
+        "⭐"
+      ],
+      "style": "highest",
+      "fan_bonus": 1.5,
+      "weight": 2,
+      "personality": "冒険好き",
+      "favorite_food": "星空ムース",
+      "hint": "星や月をイメージしたスイーツが好き。",
+      "lines": {
+        "love": "宇宙に浮かぶ星みたい！旅のおともにぴったりだ。",
+        "buy": "これを持って宇宙船に戻るよ。ありがとう！"
+      }
+    },
+    {
+      "id": "chef",
+      "name": "小さな料理研究家",
+      "emoji": "🧑‍🍳",
+      "likes": [
+        "🧀",
+        "🥧"
+      ],
+      "style": "highest",
+      "fan_bonus": 1.5,
+      "weight": 2,
+      "personality": "研究熱心",
+      "favorite_food": "チーズタルト",
+      "hint": "チーズを使った焼き菓子が大好物。",
+      "lines": {
+        "love": "チーズのコクがいいね。生地との相性も抜群だよ。",
+        "buy": "これをいただきます。家でも作ってみたいな。"
+      }
+    }
+  ]
+}

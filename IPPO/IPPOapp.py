@@ -1280,7 +1280,7 @@ CANDY_SHOP_EXTRA_COST_POINTS = 2   # ショップで買った追加のお菓子�
 
 # お菓子コインはお菓子屋さん内だけで使うゲーム内通貨。
 # IPPOポイントや水族館・恐竜レースの仕組みとは独立させる。
-CANDY_SHOP_MATERIALS = {'whip': {'name': 'ホイップクリーム', 'emoji': '🍦', 'price': 20}, 'chocolate': {'name': 'チョコレート', 'emoji': '🍫', 'price': 20}, 'strawberry': {'name': 'イチゴ', 'emoji': '🍓', 'price': 20}, 'flour': {'name': '小麦粉', 'emoji': '🌾', 'price': 20}, 'cookie': {'name': 'クッキー', 'emoji': '🍪', 'price': 20}, 'milk': {'name': 'ミルク', 'emoji': '🥛', 'price': 20}, 'matcha': {'name': '抹茶', 'emoji': '🍵', 'price': 20}, 'banana': {'name': 'バナナ', 'emoji': '🍌', 'price': 20}, 'cheese': {'name': 'クリームチーズ', 'emoji': '🧀', 'price': 20}, 'caramel': {'name': 'キャラメル', 'emoji': '🍯', 'price': 20}}
+CANDY_SHOP_MATERIALS = {'whip': {'name': 'ホイップクリーム', 'emoji': '🍦', 'price': 50}, 'chocolate': {'name': 'チョコレート', 'emoji': '🍫', 'price': 50}, 'strawberry': {'name': 'イチゴ', 'emoji': '🍓', 'price': 50}, 'flour': {'name': '小麦粉', 'emoji': '🌾', 'price': 50}, 'cookie': {'name': 'クッキー', 'emoji': '🍪', 'price': 50}, 'milk': {'name': 'ミルク', 'emoji': '🥛', 'price': 50}, 'matcha': {'name': '抹茶', 'emoji': '🍵', 'price': 50}, 'banana': {'name': 'バナナ', 'emoji': '🍌', 'price': 50}, 'cheese': {'name': 'クリームチーズ', 'emoji': '🧀', 'price': 50}, 'caramel': {'name': 'キャラメル', 'emoji': '🍯', 'price': 50}}
 
 
 # 最初から瓶に入れられる5種類（🍬🍭🍫🍩🍪）は、これまで通りIPPOポイントだけで入れられる。

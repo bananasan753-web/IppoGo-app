@@ -1280,18 +1280,18 @@ CANDY_SHOP_EXTRA_COST_POINTS = 2   # ショップで買った追加のお菓子�
 
 # お菓子コインはお菓子屋さん内だけで使うゲーム内通貨。
 # IPPOポイントや水族館・恐竜レースの仕組みとは独立させる。
-CANDY_SHOP_MATERIALS = {'whip': {'name': 'ホイップクリーム', 'emoji': '🍦', 'price': 50}, 'chocolate': {'name': 'チョコレート', 'emoji': '🍫', 'price': 50}, 'strawberry': {'name': 'イチゴ', 'emoji': '🍓', 'price': 50}, 'flour': {'name': '小麦粉', 'emoji': '🌾', 'price': 50}, 'cookie': {'name': 'クッキー', 'emoji': '🍪', 'price': 50}, 'milk': {'name': 'ミルク', 'emoji': '🥛', 'price': 50}, 'matcha': {'name': '抹茶', 'emoji': '🍵', 'price': 50}, 'banana': {'name': 'バナナ', 'emoji': '🍌', 'price': 50}, 'cheese': {'name': 'クリームチーズ', 'emoji': '🧀', 'price': 50}, 'caramel': {'name': 'キャラメル', 'emoji': '🍯', 'price': 50}}
+CANDY_SHOP_MATERIALS = {'whip': {'name': 'ホイップクリーム', 'emoji': '🍦', 'price': 20}, 'chocolate': {'name': 'チョコレート', 'emoji': '🍫', 'price': 20}, 'strawberry': {'name': 'イチゴ', 'emoji': '🍓', 'price': 20}, 'flour': {'name': '小麦粉', 'emoji': '🌾', 'price': 15}, 'cookie': {'name': 'クッキー', 'emoji': '🍪', 'price': 15}, 'milk': {'name': 'ミルク', 'emoji': '🥛', 'price': 15}, 'matcha': {'name': '抹茶', 'emoji': '🍵', 'price': 20}, 'banana': {'name': 'バナナ', 'emoji': '🍌', 'price': 15}, 'cheese': {'name': 'クリームチーズ', 'emoji': '🧀', 'price': 25}, 'caramel': {'name': 'キャラメル', 'emoji': '🍯', 'price': 20}}
 
 
 # 最初から瓶に入れられる5種類（🍬🍭🍫🍩🍪）は、これまで通りIPPOポイントだけで入れられる。
 # こちらはショップでお菓子コインを使って買い足せる「追加のお菓子」（最初の5種類とは別の種類）。
 # 追加のお菓子は「買いきり」：一度買えば、以降は何個でも IPPOポイント（CANDY_SHOP_EXTRA_COST_POINTS）だけで瓶に入れられる。
 CANDY_SHOP_JAR_CANDIES = {
-    "cupcake": {"name": "カップケーキ", "emoji": "🧁", "price": 500},
-    "dango": {"name": "おだんご", "emoji": "🍡", "price": 500},
-    "pudding": {"name": "とろとろプリン", "emoji": "🍮", "price": 500},
-    "shaved_ice": {"name": "ふわふわかき氷", "emoji": "🍧", "price": 500},
-    "waffle": {"name": "サクサクワッフル", "emoji": "🧇", "price": 500},
+    "cupcake": {"name": "カップケーキ", "emoji": "🧁", "price": 400},
+    "dango": {"name": "おだんご", "emoji": "🍡", "price": 400},
+    "pudding": {"name": "とろとろプリン", "emoji": "🍮", "price": 400},
+    "shaved_ice": {"name": "ふわふわかき氷", "emoji": "🍧", "price": 400},
+    "waffle": {"name": "サクサクワッフル", "emoji": "🧇", "price": 400},
 }
 
 
@@ -1318,7 +1318,7 @@ CANDY_JAR_DEFAULT_NAME = "瓶詰めお菓子"   # 名前をつけなかったと
 CANDY_JAR_REWARD_DEFAULT = {10: (100, 300), 20: (200, 400), 30: (300, 500)}
 
 
-CANDY_RECIPE_BOOK_PRICE = 500
+CANDY_RECIPE_BOOK_PRICE = 50
 
 
 CANDY_HINT_COST = 5
@@ -2086,13 +2086,6 @@ def render_candy_shop():
                     f"{CANDY_SHOP_MATERIALS[k]['emoji']}{CANDY_SHOP_MATERIALS[k]['name']}" for k in chosen
                 )
                 st.info(f"「{labels}」を使ってスイーツを作る？")
-                chosen_sorted = tuple(sorted(chosen))
-                has_recipe = any(tuple(sorted(r.get("materials", []))) == chosen_sorted
-                                 for r in CANDY_RECIPE_DATA.get("recipes", []))
-                if not has_recipe:
-                    st.caption("🌱 この組み合わせはレシピにないので、★1のスイーツ（ふしぎなお菓子）ができるよ。")
-                elif len(chosen) == 1:
-                    st.caption("🍬 この材料1種類だけで作れるスイーツだよ！")
             needed = {}
             for key in chosen:
                 needed[key] = needed.get(key, 0) + 1
@@ -2110,7 +2103,7 @@ def render_candy_shop():
                     st.error("材料が足りません。")
             if not book_owned:
                 st.caption("材料を3つ選ぶには、ショップで『秘伝のレシピ書』を買ってね！")
-        st.caption("材料2種類のレシピは★2・★3、材料3種類のレシピは★3〜★5。レシピにない組み合わせは★1のスイーツになるよ。")
+        st.caption("材料2つのレシピは★2・★3、材料3つのレシピは★4・★5。レシピにない組み合わせは★1のスイーツになるよ。")
 
         with st.expander("🔎 まだ見つけていないスイーツのヒント（5 IPPOポイント）"):
             if st.session_state.get("candy_shop_last_hint"):
@@ -2284,6 +2277,21 @@ def render_candy_shop():
             st.rerun()
         st.caption("棚を増やすと、一度に展示できる商品数が増えます。")
 
+        st.markdown("#### 💎 IPPOポイント交換")
+        st.caption("お菓子コイン500枚で、IPPOポイントを1ポイント交換できます。")
+        st.write(f"現在のお菓子コイン：🪙 {st.session_state.candy_coins}枚")
+        st.write(f"現在のIPPOポイント：💎 {st.session_state.ippo_points}ポイント")
+        if st.button(
+            "💎 500お菓子コインで1IPPOポイントと交換",
+            disabled=st.session_state.candy_coins < 500,
+            key="candy_shop_exchange_ippo_point",
+        ):
+            st.session_state.candy_coins -= 500
+            st.session_state.ippo_points += 1
+            save_progress()
+            st.success("IPPOポイントを1ポイント受け取ったよ！")
+            st.rerun()
+
     with candy_gacha_tab:
         render_candy_gacha_tab()
 
@@ -2300,37 +2308,23 @@ def render_candy_shop():
         st.metric("発見したスイーツ / 全種類", f"{discovered_count} / {total_count}")
         st.progress(discovered_count / total_count if total_count else 0)
 
-        # いまのバージョンに存在するスイーツ（レシピ＋★1スイーツ）だけを表示する。
-        # 保存データに残っている古いバージョンのスイーツは、表示しないだけで消さずに残しておく。
-        recipe_by_id = {recipe.get("id"): recipe for recipe in all_recipes}
-        fallback_by_id = {fb.get("id"): fb for fb in CANDY_SHOP_FALLBACKS}
-        shown_products = [
-            p for p in st.session_state.candy_shop_discovered
-            if p.get("id") in recipe_by_id or p.get("id") in fallback_by_id
-        ]
-        if not shown_products:
+        if not st.session_state.candy_shop_discovered:
             st.info("まだスイーツが登録されていません。材料を組み合わせて発見しよう！")
         else:
-            for product in shown_products:
-                pid = product.get("id")
-                # 名前・絵文字・★は、いまのJSONのデータを優先して表示する
-                current = recipe_by_id.get(pid) or fallback_by_id.get(pid) or product
-                st.write(f"{current.get('emoji', product.get('emoji', '🍬'))} **{current.get('name', product.get('name', ''))}**"
-                         f"　{'★' * int(current.get('rarity', product.get('rarity', 1)))}")
-                if pid in recipe_by_id:
-                    material_ids = recipe_by_id[pid].get("materials", [])
-                    material_names = [
-                        f"{CANDY_SHOP_MATERIALS.get(mid, {}).get('emoji', '🧺')} "
-                        f"{CANDY_SHOP_MATERIALS.get(mid, {}).get('name', mid)}"
-                        for mid in material_ids
-                    ]
-                    kinds = len(material_ids)
-                    if kinds == 1:
-                        st.caption("作り方：" + material_names[0] + "（1種類だけで作れるよ）")
-                    else:
-                        st.caption("作り方：" + " ＋ ".join(material_names) + f"（{kinds}種類の組み合わせ）")
+            recipe_by_id = {recipe.get("id"): recipe for recipe in all_recipes}
+            for product in st.session_state.candy_shop_discovered:
+                recipe = recipe_by_id.get(product.get("id"), {})
+                material_ids = product.get("materials") or recipe.get("materials", [])
+                material_names = [
+                    f"{CANDY_SHOP_MATERIALS.get(mid, {}).get('emoji', '🧺')} "
+                    f"{CANDY_SHOP_MATERIALS.get(mid, {}).get('name', mid)}"
+                    for mid in material_ids
+                ]
+                st.write(f"{product['emoji']} **{product['name']}**　{'★' * int(product.get('rarity', 1))}")
+                if material_names:
+                    st.caption("作り方：" + " ＋ ".join(material_names))
                 else:
-                    st.caption("作り方：レシピにない組み合わせで、ふしぎとできあがるスイーツだよ（材料は1種類でも、いろいろ混ぜても出ることがあるよ）。")
+                    st.caption("作り方：材料の記録がありません（このスイーツは以前のバージョンで発見したものです）。")
 
 
 def add_single_task(title: str) -> bool:

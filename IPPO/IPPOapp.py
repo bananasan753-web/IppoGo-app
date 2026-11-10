@@ -1433,6 +1433,7 @@ def candy_shop_craft(material_keys: list):
             crafted = {
                 "id": recipe_key, "name": recipe["name"], "emoji": recipe["emoji"],
                 "rarity": int(recipe["rarity"]), "sell_price": int(recipe["sell_price"]),
+                "materials": list(recipe.get("materials", [])),
             }
             break
     if crafted is None:
@@ -1445,6 +1446,7 @@ def candy_shop_craft(material_keys: list):
         st.session_state.candy_shop_discovered.append({
             "id": crafted["id"], "name": crafted["name"], "emoji": crafted["emoji"],
             "rarity": int(crafted.get("rarity", 1)),
+            "materials": list(crafted.get("materials", [])),
         })
     save_progress()
     return True, crafted
@@ -2280,11 +2282,34 @@ def render_candy_shop():
 
     with book_tab:
         st.subheader("📖 スイーツ図鑑")
+        all_recipes = CANDY_RECIPE_DATA.get("recipes", [])
+        all_recipe_ids = {recipe.get("id") for recipe in all_recipes}
+        discovered_ids = {
+            product.get("id") for product in st.session_state.candy_shop_discovered
+            if product.get("id") in all_recipe_ids
+        }
+        discovered_count = len(discovered_ids)
+        total_count = len(all_recipes)
+        st.metric("発見したスイーツ / 全種類", f"{discovered_count} / {total_count}")
+        st.progress(discovered_count / total_count if total_count else 0)
+
         if not st.session_state.candy_shop_discovered:
             st.info("まだスイーツが登録されていません。材料を組み合わせて発見しよう！")
         else:
+            recipe_by_id = {recipe.get("id"): recipe for recipe in all_recipes}
             for product in st.session_state.candy_shop_discovered:
+                recipe = recipe_by_id.get(product.get("id"), {})
+                material_ids = product.get("materials") or recipe.get("materials", [])
+                material_names = [
+                    f"{CANDY_SHOP_MATERIALS.get(mid, {}).get('emoji', '🧺')} "
+                    f"{CANDY_SHOP_MATERIALS.get(mid, {}).get('name', mid)}"
+                    for mid in material_ids
+                ]
                 st.write(f"{product['emoji']} **{product['name']}**　{'★' * int(product.get('rarity', 1))}")
+                if material_names:
+                    st.caption("作り方：" + " ＋ ".join(material_names))
+                else:
+                    st.caption("作り方：材料の記録がありません（このスイーツは以前のバージョンで発見したものです）。")
 
 
 def add_single_task(title: str) -> bool:

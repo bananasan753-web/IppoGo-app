@@ -1287,11 +1287,11 @@ CANDY_SHOP_MATERIALS = {'whip': {'name': 'ホイップクリーム', 'emoji': '�
 # こちらはショップでお菓子コインを使って買い足せる「追加のお菓子」（最初の5種類とは別の種類）。
 # 追加のお菓子は「買いきり」：一度買えば、以降は何個でも IPPOポイント（CANDY_SHOP_EXTRA_COST_POINTS）だけで瓶に入れられる。
 CANDY_SHOP_JAR_CANDIES = {
-    "cupcake": {"name": "カップケーキ", "emoji": "🧁", "price": 400},
-    "dango": {"name": "おだんご", "emoji": "🍡", "price": 400},
-    "pudding": {"name": "とろとろプリン", "emoji": "🍮", "price": 400},
-    "shaved_ice": {"name": "ふわふわかき氷", "emoji": "🍧", "price": 400},
-    "waffle": {"name": "サクサクワッフル", "emoji": "🧇", "price": 400},
+    "cupcake": {"name": "カップケーキ", "emoji": "🧁", "price": 500},
+    "dango": {"name": "おだんご", "emoji": "🍡", "price": 500},
+    "pudding": {"name": "とろとろプリン", "emoji": "🍮", "price": 500},
+    "shaved_ice": {"name": "ふわふわかき氷", "emoji": "🍧", "price": 500},
+    "waffle": {"name": "サクサクワッフル", "emoji": "🧇", "price": 500},
 }
 
 

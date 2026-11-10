@@ -1502,7 +1502,7 @@ def candy_shop_serve_customer(customer: dict) -> dict:
     paid = price_of(product)
     if loved:
         paid = round(paid * float(customer.get("fan_bonus", 1.5)))
-    tip = round(paid * 0.3) if random.random() < 0.15 else 0   # ときどきもらえるチップ
+    tip = round(paid * 0.3) if (loved or random.random() < 0.05) else 0
     paid += tip
 
     notes = st.session_state.candy_shop_customer_notes

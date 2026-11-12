@@ -15,6 +15,16 @@ from supabase import create_client, Client
 JST = zoneinfo.ZoneInfo("Asia/Tokyo")
 
 
+def stage_tab_selector(labels, key):
+    """st.tabs の代わりに使うタブ切り替え。
+    st.tabs は、ボタンを押して画面が更新されるたびに先頭のタブへ戻ってしまう。
+    そこで選んだタブを session_state に覚えておき、アクションの後もそのタブにとどまるようにする。
+    選ばれているタブの名前（labels のどれか）を返す。使う側は `if 選択中 == "ラベル":` で中身を出す。"""
+    if st.session_state.get(key) not in labels:
+        st.session_state[key] = labels[0]
+    return st.radio("タブ", labels, key=key, horizontal=True, label_visibility="collapsed")
+
+
 def get_now_jst():
     """アプリ内時間を常に日本時間に統一するヘルパー関数"""
     return datetime.now(JST)
@@ -850,11 +860,38 @@ def advance_dino(course_key: str, steps: int, partner: dict) -> int:
     return gained
 
 
+DINO_ENEMY_DIFFICULTIES = ["やさしめ", "ふつう", "つよい"]
+
+
+def dino_enemy_stats_by_difficulty(partner: dict, difficulty: str):
+    """模型恐竜・野良恐竜で共通の強さ設定。(難しさ, レベル, HP, 素早さ, 攻撃力) を返す。
+    やさしめ：Lv.1 ／ ふつう：自分と同じ強さ ／ つよい：自分より強い"""
+    partner_level = dino_level(partner)
+    partner_hp = dino_max_hp(partner)
+    partner_speed = dino_speed(partner)
+    partner_attack = dino_attack(partner)
+
+    if difficulty == "やさしめ":
+        return difficulty, 1, 17, 1, 0
+    if difficulty == "つよい":
+        # レベル上限でも、HP・攻撃力・素早さは自分の恐竜より高くする。
+        level = min(DINO_MAX_LEVEL, partner_level + 2)
+        return (difficulty, level,
+                max(14 + 3 * level, partner_hp + 6),
+                max(level, partner_speed + 2),
+                max(dino_power_bonus(level), partner_attack + 1))
+    # ふつう
+    return "ふつう", partner_level, max(12, partner_hp), max(1, partner_speed), partner_attack
+
+
 def make_wild_dino(partner: dict) -> dict:
+    """野良恐竜を作る。強さは模型恐竜と同じ3段階（やさしめ／ふつう／つよい）からランダムに決まる。
+    画面にはレベルだけを表示する（やさしめ等の文字は出さない）。"""
     base = random.choice(WILD_DINOS)
-    level = max(1, min(DINO_MAX_LEVEL, dino_level(partner) + random.randint(-1, 1)))
-    return {"name": base["name"], "emoji": base["emoji"], "level": level, "max_hp": 14 + 3 * level,
-            "speed": level, "attack": (level - 1) // 3}
+    difficulty = random.choice(DINO_ENEMY_DIFFICULTIES)
+    _, level, hp, speed, attack = dino_enemy_stats_by_difficulty(partner, difficulty)
+    return {"name": base["name"], "emoji": base["emoji"], "level": level, "max_hp": hp,
+            "speed": speed, "attack": attack}
 
 
 def apply_dino_square(course_key: str, partner: dict):
@@ -967,28 +1004,8 @@ def start_dino_battle(course_key: str, partner: dict):
 
 def start_dino_practice_battle(partner: dict, difficulty: str = "ふつう"):
     """強さを選べる模型との練習バトル。練習なので経験値・報酬はなし。"""
-    partner_level = dino_level(partner)
     partner_hp = dino_max_hp(partner)
-    partner_speed = dino_speed(partner)
-    partner_attack = dino_attack(partner)
-
-    if difficulty == "やさしめ":
-        level = 1
-        enemy_hp = 17
-        enemy_speed = 1
-        enemy_attack = 0
-    elif difficulty == "つよい":
-        # レベル上限でも、HP・攻撃力・素早さは自分の恐竜より高くする。
-        level = min(DINO_MAX_LEVEL, partner_level + 2)
-        enemy_hp = max(14 + 3 * level, partner_hp + 6)
-        enemy_speed = max(level, partner_speed + 2)
-        enemy_attack = max(dino_power_bonus(level), partner_attack + 1)
-    else:  # ふつう
-        difficulty = "ふつう"
-        level = partner_level
-        enemy_hp = max(12, partner_hp)
-        enemy_speed = max(1, partner_speed)
-        enemy_attack = partner_attack
+    difficulty, level, enemy_hp, enemy_speed, enemy_attack = dino_enemy_stats_by_difficulty(partner, difficulty)
 
     enemy = {"name": "練習用の模型恐竜", "emoji": "🦖", "level": level,
              "max_hp": enemy_hp, "speed": enemy_speed, "attack": enemy_attack}
@@ -1319,6 +1336,7 @@ CANDY_JAR_REWARD_DEFAULT = {10: (100, 300), 20: (200, 400), 30: (300, 500)}
 
 
 CANDY_RECIPE_BOOK_PRICE = 50
+CANDY_INVITE_TICKET_PRICE = 50   # 特別招待チケット1枚の値段（お菓子コイン）
 
 
 CANDY_HINT_COST = 5
@@ -1527,9 +1545,27 @@ def candy_shop_open_for_business():
         return None
     # 来店人数は毎回ランダム。最低1人、棚の商品数を超えず、最大5人。
     count = random.randint(1, min(5, len(st.session_state.candy_shop_displayed)))
-    pool = list(customers)
+    customer_by_id = {c["id"]: c for c in customers}
+
+    # 🎫 特別招待チケットを使ったお客さんは、このお店ひらきで確定で1回来てくれる。
+    invited_ids = [cid for cid in st.session_state.get("candy_shop_invited_customers", [])
+                   if cid in customer_by_id]
     visits = []
-    for _ in range(min(count, len(pool))):
+    served_invited = []
+    for cid in invited_ids:
+        if not st.session_state.candy_shop_displayed:
+            break  # 棚のスイーツが足りないときは、招待は次回に持ち越し（チケットはむだにならない）
+        visit = candy_shop_serve_customer(customer_by_id[cid])
+        visit["invited"] = True
+        visits.append(visit)
+        served_invited.append(cid)
+    st.session_state.candy_shop_invited_customers = [
+        cid for cid in st.session_state.get("candy_shop_invited_customers", []) if cid not in served_invited
+    ]
+
+    # 残りの枠は、いつも通りランダムなお客さんが来る（招待したお客さんは重ならない）。
+    pool = [c for c in customers if c["id"] not in invited_ids]
+    for _ in range(min(max(0, count - len(served_invited)), len(pool))):
         if not st.session_state.candy_shop_displayed:
             break  # 棚のスイーツが全部届いたら、今日はここまで
         weights = [max(1, int(c.get("weight", 1))) for c in pool]
@@ -2049,11 +2085,9 @@ def render_candy_shop():
     else:
         st.success("最高レベルに到達しました！")
 
-    craft_tab, display_tab, order_tab, shop_tab, candy_gacha_tab, book_tab = st.tabs(
-        ["🍓 スイーツを作る", "🧁 商品棚", "🫙 瓶の注文", "🛍️ ショップ", "🎰 お菓子ガチャ", "📖 スイーツ図鑑"]
-    )
+    _candy_tab = stage_tab_selector(["🍓 スイーツを作る", "🧁 商品棚", "🫙 瓶の注文", "🛍️ ショップ", "🎰 お菓子ガチャ", "📖 スイーツ図鑑"], "candy_shop_active_tab")
 
-    with craft_tab:
+    if _candy_tab == "🍓 スイーツを作る":
         st.subheader("材料を組み合わせてスイーツを作ろう")
         craft_done = st.session_state.pop("candy_shop_craft_message", None)
         if craft_done:
@@ -2121,7 +2155,7 @@ def render_candy_shop():
                 save_progress()
                 st.rerun()
 
-    with display_tab:
+    if _candy_tab == "🧁 商品棚":
         st.subheader("商品棚")
         st.write(f"展示中：{len(st.session_state.candy_shop_displayed)} / {st.session_state.candy_shop_shelf_capacity} 個")
         if st.session_state.candy_shop_products:
@@ -2164,7 +2198,7 @@ def render_candy_shop():
         if visit_result:
             for visit in visit_result["visits"]:
                 with st.container(border=True):
-                    st.markdown(f"**{visit['emoji']} {visit['name']}**")
+                    st.markdown(f"**{visit['emoji']} {visit['name']}**" + ("　🎫 特別招待で来てくれたよ！" if visit.get("invited") else ""))
                     st.write(f"「{visit['line']}」")
                     if visit["bought"]:
                         bonus_text = "　💖大好物ボーナス！" if visit["loved"] else ""
@@ -2182,11 +2216,16 @@ def render_candy_shop():
             st.session_state.candy_shop_visit_result = candy_shop_open_for_business()
             st.rerun()
 
-        with st.expander("📒 常連さんノート"):
+        with st.expander("📒 常連さんノート", expanded=bool(st.session_state.pop("candy_notes_keep_open", False))):
             notes = st.session_state.candy_shop_customer_notes
             all_customers = CANDY_RECIPE_DATA.get("customers", [])
             met = sum(1 for c in all_customers if c["id"] in notes)
             st.caption(f"出会ったお客さん：{met} / {len(all_customers)} 人")
+            ticket_count = int(st.session_state.get("candy_shop_invite_tickets", 0))
+            invited_now = st.session_state.get("candy_shop_invited_customers", [])
+            st.write(f"🎫 特別招待チケット：**{ticket_count}枚**")
+            if ticket_count <= 0 and not invited_now:
+                st.caption("チケットは「🛍️ ショップ」で買えるよ。使うと、次にお店をひらいたとき、そのお客さんが1回だけ必ず来てくれます。")
             for customer in all_customers:
                 note = notes.get(customer["id"])
                 with st.container(border=True):
@@ -2200,8 +2239,18 @@ def render_candy_shop():
                     else:
                         st.write(f"🔎 ヒント：{customer.get('hint', '')}")
                     st.caption(f"来店 {note.get('visits', 0)} 回／購入 {note.get('bought', 0)} 回／大好物 {note.get('loved', 0)} 回")
+                    if customer["id"] in invited_now:
+                        st.success("🎫 次にお店をひらいたとき、このお客さんが必ず来てくれるよ！")
+                    elif ticket_count > 0:
+                        if st.button("🎫 このお客さんにチケットを使う！", key=f"candy_shop_use_ticket_{customer['id']}",
+                                     use_container_width=True):
+                            st.session_state.candy_shop_invite_tickets = ticket_count - 1
+                            st.session_state.candy_shop_invited_customers = list(invited_now) + [customer["id"]]
+                            st.session_state.candy_notes_keep_open = True
+                            save_progress()
+                            st.rerun()
 
-    with order_tab:
+    if _candy_tab == "🫙 瓶の注文":
         st.subheader("🫙 瓶の注文")
         order = st.session_state.candy_shop_jar_order
         if order:
@@ -2220,7 +2269,7 @@ def render_candy_shop():
             record_name = f"「{record['name']}」" if record.get("name") else ""
             st.write(f"🫙 {record['date']}：{record_name}{record['quantity']}個入り＋{record['reward']}コイン")
 
-    with shop_tab:
+    if _candy_tab == "🛍️ ショップ":
         st.subheader("ショップ")
         st.markdown("#### 📕 秘伝のレシピ書")
         if st.session_state.get("candy_shop_recipe_book_owned", False):
@@ -2235,6 +2284,17 @@ def render_candy_shop():
                 save_progress()
                 st.success("秘伝のレシピ書を手に入れたよ！")
                 st.rerun()
+        st.markdown("#### 🎫 特別招待チケット")
+        st.write("使うと、次にお店をひらいたとき、選んだお客さんが **1回だけ必ず** 来てくれるよ！（1枚使いきり）")
+        st.caption("使うときは「🧁 商品棚」タブの『📒 常連さんノート』で、会ったことのあるお客さんに使えます。")
+        st.write(f"所持：{int(st.session_state.get('candy_shop_invite_tickets', 0))}枚")
+        if st.button(f"チケットを1枚買う：🪙 {CANDY_INVITE_TICKET_PRICE}",
+                     disabled=st.session_state.candy_coins < CANDY_INVITE_TICKET_PRICE,
+                     key="candy_shop_buy_invite_ticket"):
+            st.session_state.candy_coins -= CANDY_INVITE_TICKET_PRICE
+            st.session_state.candy_shop_invite_tickets = int(st.session_state.get("candy_shop_invite_tickets", 0)) + 1
+            save_progress()
+            st.rerun()
         st.markdown("#### 🧁 材料")
         cols = st.columns(2)
         for idx, (material_key, item) in enumerate(CANDY_SHOP_MATERIALS.items()):
@@ -2292,10 +2352,10 @@ def render_candy_shop():
             st.success("IPPOポイントを1ポイント受け取ったよ！")
             st.rerun()
 
-    with candy_gacha_tab:
+    if _candy_tab == "🎰 お菓子ガチャ":
         render_candy_gacha_tab()
 
-    with book_tab:
+    if _candy_tab == "📖 スイーツ図鑑":
         st.subheader("📖 スイーツ図鑑")
         all_recipes = CANDY_RECIPE_DATA.get("recipes", [])
         all_recipe_ids = {recipe.get("id") for recipe in all_recipes}
@@ -2464,6 +2524,8 @@ PERSISTENT_KEYS = [
     "candy_shop_jar_order",
     "candy_shop_jar_order_log",
     "candy_shop_customer_notes",
+    "candy_shop_invite_tickets",
+    "candy_shop_invited_customers",
     "candy_gacha_owned",
 ]
 
@@ -2524,6 +2586,8 @@ PERSISTENT_DEFAULTS = {
     "candy_shop_jar_order": None,
     "candy_shop_jar_order_log": [],
     "candy_shop_customer_notes": {},
+    "candy_shop_invite_tickets": 0,
+    "candy_shop_invited_customers": [],
     "candy_gacha_owned": {},
 }
 
@@ -4018,6 +4082,7 @@ for _shop_key in (
     "candy_shop_unlocked_recipes", "candy_shop_recipe_book_owned", "candy_shop_products", "candy_shop_displayed",
     "candy_shop_discovered", "candy_shop_shelf_capacity", "candy_shop_level",
     "candy_shop_exp", "candy_shop_jar_order", "candy_shop_jar_order_log", "candy_shop_customer_notes",
+    "candy_shop_invite_tickets", "candy_shop_invited_customers",
     "candy_gacha_owned",
 ):
     if _shop_key not in st.session_state:
@@ -5197,9 +5262,9 @@ elif st.session_state.page in [
                     st.rerun()
 
         st.write("---")
-        shop_tab, gacha_tab, food_tab, decor_tab, decor_gacha_tab = st.tabs(["🐟 魚ショップ", "🎁 魚ガチャ", "🍚 餌ショップ", "🪸 水槽ショップ", "🎰 飾りガチャ"])
+        _aqua_tab = stage_tab_selector(["🐟 魚ショップ", "🎁 魚ガチャ", "🍚 餌ショップ", "🪸 水槽ショップ", "🎰 飾りガチャ"], "aqua_active_tab")
 
-        with shop_tab:
+        if _aqua_tab == "🐟 魚ショップ":
             st.markdown("#### 🐟 ショップ限定の魚")
             shop_cols = st.columns(2)
             for idx, fish_data in enumerate(AQUA_SHOP_FISH):
@@ -5220,7 +5285,7 @@ elif st.session_state.page in [
                         else:
                             st.warning("IPPOポイントが足りません！")
 
-        with gacha_tab:
+        if _aqua_tab == "🎁 魚ガチャ":
             st.markdown("#### 🎁 ガチャ限定の魚")
             st.write("1回 **5 IPPOポイント**。ショップにはいない魚が出ます！")
             if st.button("🎁 5 IPPOポイントでガチャを回す！", type="primary", use_container_width=True, key="aqua_gacha"):
@@ -5240,7 +5305,7 @@ elif st.session_state.page in [
                     st.warning("IPPOポイントが足りません！")
             st.caption("ガチャとショップでは魚の種類を分けています。")
 
-        with food_tab:
+        if _aqua_tab == "🍚 餌ショップ":
             st.markdown("#### 🍚 魚を育てる餌")
             food_cols = st.columns(4)
             for idx, (food_key, food) in enumerate(AQUA_FOOD.items()):
@@ -5265,7 +5330,7 @@ elif st.session_state.page in [
                             st.warning("IPPOポイントが足りません！")
             st.write(f"通常餌：{st.session_state.aqua_food_inventory.get('normal', 0)}回　／　高級餌：{st.session_state.aqua_food_inventory.get('premium', 0)}回　／　みんなの餌の塊：{st.session_state.aqua_food_inventory.get('bundle', 0)}個　／　全体の餌の塊：{st.session_state.aqua_food_inventory.get('grand_bundle', 0)}個")
 
-        with decor_tab:
+        if _aqua_tab == "🪸 水槽ショップ":
             st.markdown("#### 🪸 水槽の飾り")
             decor_cols = st.columns(2)
             for idx, decor in enumerate(AQUA_DECORATIONS):
@@ -5283,7 +5348,7 @@ elif st.session_state.page in [
                         else:
                             st.warning("IPPOポイントが足りません！")
 
-        with decor_gacha_tab:
+        if _aqua_tab == "🎰 飾りガチャ":
             st.markdown("#### 🎰 ガチャ限定の飾り")
             st.write(f"1回 **{AQUA_DECOR_GACHA_PRICE} IPPOポイント**。水槽ショップにはない飾りが出ます！")
             st.caption("☆の数がそのまま豪華度になります（☆1なら+1、☆3なら+3、☆5なら+5）。")
@@ -5575,12 +5640,10 @@ elif st.session_state.page in [
                 for message_text in dino_messages:
                     st.write(message_text)
 
-        race_tab, dino_tab, dino_grow_tab, dino_shop_tab, dino_gacha_tab = st.tabs(
-            ["🏁 レース", "🦖 恐竜たち", "🌱 育成", "🍖 恐竜ショップ", "🎰 恐竜ガチャ"]
-        )
+        _dino_main_tab = stage_tab_selector(["🏁 レース", "🦖 恐竜たち", "🌱 育成", "🍖 恐竜ショップ", "🎰 恐竜ガチャ"], "dino_active_tab")
 
         # ---------------- レース ----------------
-        with race_tab:
+        if _dino_main_tab == "🏁 レース":
             course_keys = ["beginner", "intermediate", "advanced"] + [
                 k for k in ("survival", "relax")
                 if k in st.session_state.get("dino_unlocked_courses", [])
@@ -5734,7 +5797,7 @@ elif st.session_state.page in [
                     st.caption(dino_passive_caption(partner["species"], partner_level))
 
         # ---------------- 恐竜たち ----------------
-        with dino_tab:
+        if _dino_main_tab == "🦖 恐竜たち":
             st.markdown("#### 🦖 あなたの恐竜たち")
             st.caption("名前は自由につけられます。パートナーに選んだ恐竜が、レースとバトルに出ます。")
             for dino in st.session_state.dino_owned:
@@ -5778,7 +5841,7 @@ elif st.session_state.page in [
                         st.rerun()
 
         # ---------------- 恐竜ショップ ----------------
-        with dino_shop_tab:
+        if _dino_main_tab == "🍖 恐竜ショップ":
             st.markdown("#### 🍖 恐竜のごはん")
             st.caption("餌をあげると経験値がたまって、恐竜のレベルが上がります。レースのマスに進んだり、力試しに勝ったりしても経験値がもらえるよ！")
             food_cols = st.columns(len(DINO_FOOD))
@@ -5832,7 +5895,7 @@ elif st.session_state.page in [
                         st.warning("IPPOポイントが足りません！")
 
         # ---------------- 育成（ごはん・木の実・能力アップアイテム） ----------------
-        with dino_grow_tab:
+        if _dino_main_tab == "🌱 育成":
             st.markdown("#### 🌱 恐竜を育てよう")
             st.caption("① 育てる恐竜を選ぶ　→　② ごはん・木の実・アイテムで強くしよう！")
             grow_result = st.session_state.pop("dino_grow_result", None)
@@ -5872,10 +5935,10 @@ elif st.session_state.page in [
                 st.caption("小さな数字は、木の実・アイテム・レベルアップで増えた分だよ。")
 
             st.markdown("##### ② 育てかたを選ぶ")
-            grow_food_tab, grow_berry_tab, grow_item_tab = st.tabs(["🍽️ ごはん", "🍇 木の実", "🧪 能力アップアイテム"])
+            _dino_grow_tab = stage_tab_selector(["🍽️ ごはん", "🍇 木の実", "🧪 能力アップアイテム"], "dino_grow_active_tab")
 
             # --- ごはん ---
-            with grow_food_tab:
+            if _dino_grow_tab == "🍽️ ごはん":
                 st.caption("あげると経験値がたまって、レベルアップ！ ごはんは「🍖 恐竜ショップ」で買えるよ。レースの食べ物マスでも見つかるよ。")
                 food_grow_cols = st.columns(len(DINO_FOOD))
                 for food_col, (food_key, food) in zip(food_grow_cols, DINO_FOOD.items()):
@@ -5899,7 +5962,7 @@ elif st.session_state.page in [
                                 st.rerun()
 
             # --- 木の実 ---
-            with grow_berry_tab:
+            if _dino_grow_tab == "🍇 木の実":
                 st.caption("力試し（バトル）に勝つと、ときどきもらえるよ。食べると、その能力がずっと上がるよ！")
                 berry_cols = st.columns(3)
                 for berry_col, stat_key in zip(berry_cols, ("hp", "attack", "speed")):
@@ -5921,7 +5984,7 @@ elif st.session_state.page in [
                                     st.rerun()
 
             # --- 能力アップアイテム（ドリンクなど） ---
-            with grow_item_tab:
+            if _dino_grow_tab == "🧪 能力アップアイテム":
                 st.caption("拾ったアイテムは無料で使えるよ。IPPOポイントで買って、すぐ使うこともできるよ。"
                            f"　いまのIPPOポイント：{st.session_state.ippo_points}")
                 for item in DINO_SHOP_DATA["stat_items"]:
@@ -5948,7 +6011,7 @@ elif st.session_state.page in [
                                 st.rerun()
 
         # ---------------- 恐竜ガチャ ----------------
-        with dino_gacha_tab:
+        if _dino_main_tab == "🎰 恐竜ガチャ":
             st.markdown("#### 🎰 恐竜ガチャ")
             st.write(f"1回 **{DINO_GACHA_COST_POINTS} IPPOポイント**。新しい恐竜の仲間に会えるよ！")
             st.caption("出会った恐竜は「🦖 恐竜たち」タブに仲間入りして、パートナーにできるよ。"

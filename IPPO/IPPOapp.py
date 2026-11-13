@@ -5176,28 +5176,14 @@ elif st.session_state.page in [
             st.metric("🪸 飾り", len(st.session_state.aqua_decorations))
 
         # --- 今までに集めた魚やアイテム ---
-        with st.expander("📦 今までに集めた魚やアイテム"):
-            owned_fish = st.session_state.aqua_fish
+        with st.expander("📦 持っている飾り・餌"):
+            st.caption("🐟 魚は「📖 魚図鑑」で見られるよ！")
             owned_decors = st.session_state.aqua_decorations
             food_stock = st.session_state.aqua_food_inventory
 
-            st.markdown("#### 🐟 魚")
-            if not owned_fish:
-                st.caption("まだ魚がいません。ショップかガチャで迎えよう！")
-            else:
-                shown_fish = sum(1 for f in owned_fish if f.get("display", True))
-                st.write(f"合計 **{len(owned_fish)}匹**（展示中 {shown_fish}匹 ／ 非展示 {len(owned_fish) - shown_fish}匹）")
-                fish_species = {}
-                for f in owned_fish:
-                    fish_species.setdefault(f.get("id", f.get("name", "魚")), []).append(f)
-                for members in fish_species.values():
-                    first = members[0]
-                    st.write(f"{first.get('emoji', '🐟')} {first.get('name', '魚')}　{'☆' * get_fish_stars(first)}　**{len(members)}/5匹**")
-                st.caption("魚の名前や展示の切り替えは、下の「GETした魚一覧・餌やり」でできます。")
-
             st.markdown("#### 🪸 飾り")
             if not owned_decors:
-                st.caption("まだ飾りがありません。水槽ショップで買ってみよう！")
+                st.caption("まだ飾りがありません。ショップで買ってみよう！")
             else:
                 shown_decors = sum(1 for d in owned_decors if d.get("display", True))
                 st.write(f"合計 **{len(owned_decors)}個**（展示中 {shown_decors}個 ／ 非展示 {len(owned_decors) - shown_decors}個）")
@@ -5262,30 +5248,80 @@ elif st.session_state.page in [
                     st.rerun()
 
         st.write("---")
-        _aqua_tab = stage_tab_selector(["🐟 魚ショップ", "🎁 魚ガチャ", "🍚 餌ショップ", "🪸 水槽ショップ", "🎰 飾りガチャ"], "aqua_active_tab")
+        _aqua_tab = stage_tab_selector(["🛍️ ショップ", "🎰 ガチャ", "🎣 釣り", "🌱 育成", "📖 魚図鑑"], "aqua_active_tab")
 
-        if _aqua_tab == "🐟 魚ショップ":
-            st.markdown("#### 🐟 ショップ限定の魚")
-            shop_cols = st.columns(2)
-            for idx, fish_data in enumerate(AQUA_SHOP_FISH):
-                with shop_cols[idx % 2]:
-                    st.markdown(f"### {fish_data['emoji']} {fish_data['name']}　{'☆' * fish_data['stars']}")
-                    st.write(f"💎 {fish_data['price']} IPPOポイント")
-                    if st.button("購入する", key=f"buy_shop_fish_{fish_data['id']}", use_container_width=True):
-                        if st.session_state.ippo_points >= fish_data["price"]:
-                            st.session_state.ippo_points -= fish_data["price"]
-                            obtained, bonus = obtain_aqua_fish(fish_data)
-                            sync_aqua_tank_history()
-                            save_progress()
-                            if obtained:
-                                st.success(f"{fish_data['emoji']} {fish_data['name']}が仲間入り！")
+        # ===== 🛍️ ショップ（魚・餌・飾りを1つにまとめた）=====
+        if _aqua_tab == "🛍️ ショップ":
+            st.subheader("🛍️ ショップ")
+            _aqua_shop_sub = stage_tab_selector(["🐟 魚", "🍚 餌", "🪸 飾り"], "aqua_shop_sub_tab")
+
+            if _aqua_shop_sub == "🐟 魚":
+                st.markdown("#### 🐟 ショップ限定の魚")
+                shop_cols = st.columns(2)
+                for idx, fish_data in enumerate(AQUA_SHOP_FISH):
+                    with shop_cols[idx % 2]:
+                        st.markdown(f"### {fish_data['emoji']} {fish_data['name']}　{'☆' * fish_data['stars']}")
+                        st.write(f"💎 {fish_data['price']} IPPOポイント")
+                        if st.button("購入する", key=f"buy_shop_fish_{fish_data['id']}", use_container_width=True):
+                            if st.session_state.ippo_points >= fish_data["price"]:
+                                st.session_state.ippo_points -= fish_data["price"]
+                                obtained, bonus = obtain_aqua_fish(fish_data)
+                                sync_aqua_tank_history()
+                                save_progress()
+                                if obtained:
+                                    st.success(f"{fish_data['emoji']} {fish_data['name']}が仲間入り！")
+                                else:
+                                    st.success(f"同じ種類は5匹まで！ 豪華度 +{bonus} に変換しました。")
+                                st.rerun()
                             else:
-                                st.success(f"同じ種類は5匹まで！ 豪華度 +{bonus} に変換しました。")
-                            st.rerun()
-                        else:
-                            st.warning("IPPOポイントが足りません！")
+                                st.warning("IPPOポイントが足りません！")
 
-        if _aqua_tab == "🎁 魚ガチャ":
+            if _aqua_shop_sub == "🍚 餌":
+                st.markdown("#### 🍚 魚を育てる餌")
+                food_cols = st.columns(4)
+                for idx, (food_key, food) in enumerate(AQUA_FOOD.items()):
+                    with food_cols[idx]:
+                        st.markdown(f"### {food['emoji']} {food['name']}")
+                        if food_key == "bundle":
+                            st.write(f"展示水槽の魚全員に1回ずつ ／ {food['price']} IPPOポイント")
+                        elif food_key == "grand_bundle":
+                            st.write(f"所持している魚全員（非展示も含む）に1回ずつ ／ {food['price']} IPPOポイント")
+                            st.write(f"1匹につき **+{food['feed_points']}成長ポイント**（魚が多いほどお得！）")
+                        else:
+                            st.write(f"{food['pack']}回分 ／ {food['price']} IPPOポイント")
+                            st.write(f"1回の餌やりで **+{food['feed_points']}成長ポイント**")
+                        if st.button("購入する", key=f"buy_food_{food_key}", use_container_width=True):
+                            if st.session_state.ippo_points >= food["price"]:
+                                st.session_state.ippo_points -= food["price"]
+                                st.session_state.aqua_food_inventory[food_key] = st.session_state.aqua_food_inventory.get(food_key, 0) + food["pack"]
+                                save_progress()
+                                st.success(f"{food['name']}を{food['pack']}回分購入しました！")
+                                st.rerun()
+                            else:
+                                st.warning("IPPOポイントが足りません！")
+                st.write(f"通常餌：{st.session_state.aqua_food_inventory.get('normal', 0)}回　／　高級餌：{st.session_state.aqua_food_inventory.get('premium', 0)}回　／　みんなの餌の塊：{st.session_state.aqua_food_inventory.get('bundle', 0)}個　／　全体の餌の塊：{st.session_state.aqua_food_inventory.get('grand_bundle', 0)}個")
+
+            if _aqua_shop_sub == "🪸 飾り":
+                st.markdown("#### 🪸 水槽の飾り")
+                decor_cols = st.columns(2)
+                for idx, decor in enumerate(AQUA_DECORATIONS):
+                    with decor_cols[idx % 2]:
+                        st.markdown(f"### {decor['emoji']} {decor['name']}")
+                        st.write(f"{decor['price']} IPPOポイント ／ 豪華度 +{decor['score']}")
+                        if st.button("飾る", key=f"buy_decor_{decor['id']}", use_container_width=True):
+                            if st.session_state.ippo_points >= decor["price"]:
+                                st.session_state.ippo_points -= decor["price"]
+                                st.session_state.aqua_decorations.append({"id": decor["id"], "name": decor["name"], "emoji": decor["emoji"], "score": decor["score"], "display": True})
+                                sync_aqua_tank_history()
+                                save_progress()
+                                st.success(f"{decor['emoji']} {decor['name']}を水槽に置きました！")
+                                st.rerun()
+                            else:
+                                st.warning("IPPOポイントが足りません！")
+
+        # ===== 🎰 ガチャ（魚ガチャ・飾りガチャは別のガチャ。同じページに並べる）=====
+        if _aqua_tab == "🎰 ガチャ":
+            st.subheader("🎰 ガチャ")
             st.markdown("#### 🎁 ガチャ限定の魚")
             st.write("1回 **5 IPPOポイント**。ショップにはいない魚が出ます！")
             if st.button("🎁 5 IPPOポイントでガチャを回す！", type="primary", use_container_width=True, key="aqua_gacha"):
@@ -5305,50 +5341,7 @@ elif st.session_state.page in [
                     st.warning("IPPOポイントが足りません！")
             st.caption("ガチャとショップでは魚の種類を分けています。")
 
-        if _aqua_tab == "🍚 餌ショップ":
-            st.markdown("#### 🍚 魚を育てる餌")
-            food_cols = st.columns(4)
-            for idx, (food_key, food) in enumerate(AQUA_FOOD.items()):
-                with food_cols[idx]:
-                    st.markdown(f"### {food['emoji']} {food['name']}")
-                    if food_key == "bundle":
-                        st.write(f"展示水槽の魚全員に1回ずつ ／ {food['price']} IPPOポイント")
-                    elif food_key == "grand_bundle":
-                        st.write(f"所持している魚全員（非展示も含む）に1回ずつ ／ {food['price']} IPPOポイント")
-                        st.write(f"1匹につき **+{food['feed_points']}成長ポイント**（魚が多いほどお得！）")
-                    else:
-                        st.write(f"{food['pack']}回分 ／ {food['price']} IPPOポイント")
-                        st.write(f"1回の餌やりで **+{food['feed_points']}成長ポイント**")
-                    if st.button("購入する", key=f"buy_food_{food_key}", use_container_width=True):
-                        if st.session_state.ippo_points >= food["price"]:
-                            st.session_state.ippo_points -= food["price"]
-                            st.session_state.aqua_food_inventory[food_key] = st.session_state.aqua_food_inventory.get(food_key, 0) + food["pack"]
-                            save_progress()
-                            st.success(f"{food['name']}を{food['pack']}回分購入しました！")
-                            st.rerun()
-                        else:
-                            st.warning("IPPOポイントが足りません！")
-            st.write(f"通常餌：{st.session_state.aqua_food_inventory.get('normal', 0)}回　／　高級餌：{st.session_state.aqua_food_inventory.get('premium', 0)}回　／　みんなの餌の塊：{st.session_state.aqua_food_inventory.get('bundle', 0)}個　／　全体の餌の塊：{st.session_state.aqua_food_inventory.get('grand_bundle', 0)}個")
-
-        if _aqua_tab == "🪸 水槽ショップ":
-            st.markdown("#### 🪸 水槽の飾り")
-            decor_cols = st.columns(2)
-            for idx, decor in enumerate(AQUA_DECORATIONS):
-                with decor_cols[idx % 2]:
-                    st.markdown(f"### {decor['emoji']} {decor['name']}")
-                    st.write(f"{decor['price']} IPPOポイント ／ 豪華度 +{decor['score']}")
-                    if st.button("飾る", key=f"buy_decor_{decor['id']}", use_container_width=True):
-                        if st.session_state.ippo_points >= decor["price"]:
-                            st.session_state.ippo_points -= decor["price"]
-                            st.session_state.aqua_decorations.append({"id": decor["id"], "name": decor["name"], "emoji": decor["emoji"], "score": decor["score"], "display": True})
-                            sync_aqua_tank_history()
-                            save_progress()
-                            st.success(f"{decor['emoji']} {decor['name']}を水槽に置きました！")
-                            st.rerun()
-                        else:
-                            st.warning("IPPOポイントが足りません！")
-
-        if _aqua_tab == "🎰 飾りガチャ":
+            st.write("---")
             st.markdown("#### 🎰 ガチャ限定の飾り")
             st.write(f"1回 **{AQUA_DECOR_GACHA_PRICE} IPPOポイント**。水槽ショップにはない飾りが出ます！")
             st.caption("☆の数がそのまま豪華度になります（☆1なら+1、☆3なら+3、☆5なら+5）。")
@@ -5378,21 +5371,182 @@ elif st.session_state.page in [
                         st.rerun()
                     else:
                         st.warning("IPPOポイントが足りません！")
-            st.caption("ガチャで出た飾りは、そのまま水槽に飾られます。「今までに集めた魚やアイテム」で展示のON/OFFができます。")
+            st.caption("ガチャで出た飾りは、そのまま水槽に飾られます。「📦 持っている飾り・餌」で展示のON/OFFができます。")
 
-        st.write("---")
-        st.markdown("### 🐟 GETした魚一覧・餌やり")
-        # 魚の成長通知はここ（餌やり欄）に表示する。
-        render_aqua_growth_notifications()
-        if not st.session_state.aqua_fish:
-            st.info("まずはショップかガチャで魚を迎えよう！")
-        else:
+        # ===== 🎣 釣り（準備中）=====
+        if _aqua_tab == "🎣 釣り":
+            st.subheader("🎣 釣り")
+            st.info("🚧 釣りは準備中です！もう少し待っててね🎣✨")
+
+        # ===== 🌱 育成（餌やり）=====
+        if _aqua_tab == "🌱 育成":
+            st.subheader("🌱 育成")
+            # 魚の成長通知はここ（育成ページ）に表示する。
+            render_aqua_growth_notifications()
+            fish_list = st.session_state.aqua_fish
+            if not fish_list:
+                st.info("まずはショップかガチャで魚を迎えよう！")
+            else:
+                st.caption("餌は「🛍️ ショップ」の「🍚 餌」で買えるよ。")
+                st.markdown("#### 🍚 餌やり")
+                st.info("💡 展示中の魚はここから直接餌をあげられます。展示していない魚は、下の「複数の魚にまとめて餌をあげる」から選んでください。")
+
+                normal_stock = st.session_state.aqua_food_inventory.get("normal", 0)
+                premium_stock = st.session_state.aqua_food_inventory.get("premium", 0)
+                bundle_stock = st.session_state.aqua_food_inventory.get("bundle", 0)
+                grand_bundle_stock = st.session_state.aqua_food_inventory.get("grand_bundle", 0)
+
+                # 展示中の魚だけ、直接餌をあげられるように表示する。
+                displayed_fish_indices = [
+                    i for i, fish in enumerate(fish_list)
+                    if fish.get("display", True)
+                ]
+                if displayed_fish_indices:
+                    st.markdown("##### 🐠 展示中の魚に直接餌をあげる")
+                    for i in displayed_fish_indices:
+                        fish = fish_list[i]
+                        stars = get_fish_stars(fish)
+                        size_cm = fish.get("size_mm", 10.0) / 10
+                        progress = fish.get("feed_points", 0) % 5
+                        st.markdown(
+                            f"**{fish_display_name(fish)}**　{'☆' * stars}　"
+                            f"現在 **{size_cm:.1f}cm**　（次の0.1cmまで {progress}/5pt）"
+                        )
+                        feed_col1, feed_col2, feed_col3 = st.columns([2, 2, 2])
+                        with feed_col1:
+                            if st.button(
+                                f"🫧 通常餌をあげる（残り {normal_stock}）",
+                                disabled=normal_stock <= 0,
+                                key=f"aqua_feed_one_normal_{i}",
+                                use_container_width=True,
+                            ):
+                                st.session_state.aqua_food_inventory["normal"] -= 1
+                                give_fish_food(i, "normal")
+                                sync_aqua_tank_history()
+                                save_progress()
+                                st.rerun()
+                        with feed_col2:
+                            if st.button(
+                                f"✨ 高級餌をあげる（残り {premium_stock}）",
+                                disabled=premium_stock <= 0,
+                                key=f"aqua_feed_one_premium_{i}",
+                                use_container_width=True,
+                            ):
+                                st.session_state.aqua_food_inventory["premium"] -= 1
+                                give_fish_food(i, "premium")
+                                sync_aqua_tank_history()
+                                save_progress()
+                                st.rerun()
+                        with feed_col3:
+                            st.write(f"成長ポイント：**{fish.get('feed_points', 0) % 5}/5**")
+                else:
+                    st.caption("現在、展示中の魚はいません。下のまとめて餌やりから魚を選べます。")
+
+                st.markdown("##### 👥 複数の魚にまとめて餌をあげる")
+                st.caption("展示していない魚も、ここから選んで餌をあげられます。展示中の魚もまとめて選択できます。")
+                fish_indices = st.multiselect(
+                    "① 餌をあげる魚を選ぶ",
+                    options=list(range(len(fish_list))),
+                    format_func=lambda i: f"{fish_list[i]['emoji']} {fish_display_name(fish_list[i])}（{'☆' * get_fish_stars(fish_list[i])}・{fish_list[i].get('size_mm', 10.0) / 10:.1f}cm・{'展示中' if fish_list[i].get('display', True) else '非展示'}）",
+                    key="aqua_feed_fish_choices",
+                )
+                st.caption("② 選んだ魚1匹あたりに、何個あげるか指定します。")
+                col_n, col_p = st.columns(2)
+                with col_n:
+                    normal_count = st.number_input(
+                        "🫧 通常餌（1匹あたり）",
+                        min_value=0,
+                        max_value=normal_stock,
+                        value=0,
+                        step=1,
+                        key="aqua_feed_normal_count",
+                    )
+                with col_p:
+                    premium_count = st.number_input(
+                        "✨ 高級餌（1匹あたり）",
+                        min_value=0,
+                        max_value=premium_stock,
+                        value=0,
+                        step=1,
+                        key="aqua_feed_premium_count",
+                    )
+                needed_normal = len(fish_indices) * normal_count
+                needed_premium = len(fish_indices) * premium_count
+                if fish_indices:
+                    st.write(f"③ 必要な餌：通常 **{needed_normal}個** ／ 高級 **{needed_premium}個**")
+                else:
+                    st.caption("魚を選ぶと必要な餌の数が表示されます。")
+                if st.button(
+                    "🐟 選んだ魚にまとめて餌をあげる",
+                    type="primary",
+                    disabled=not fish_indices or (normal_count + premium_count == 0),
+                    key="aqua_feed_selected",
+                    use_container_width=True,
+                ):
+                    if needed_normal > normal_stock or needed_premium > premium_stock:
+                        st.warning("選んだ魚の数に対して餌が足りません。数を調整してね！")
+                    else:
+                        st.session_state.aqua_food_inventory["normal"] -= needed_normal
+                        st.session_state.aqua_food_inventory["premium"] -= needed_premium
+                        for i in fish_indices:
+                            if normal_count:
+                                give_fish_food(i, "normal", normal_count, play_sound=False)
+                            if premium_count:
+                                give_fish_food(i, "premium", premium_count, play_sound=False)
+                        play_aqua_feed_sound(delay=0)
+                        sync_aqua_tank_history()
+                        save_progress()
+                        st.success(f"🐠 {len(fish_indices)}匹に餌をあげました！")
+                        st.rerun()
+
+                st.write("---")
+                st.markdown("#### 🍙 みんなの餌の塊")
+                displayed_indices = [i for i, fish in enumerate(fish_list) if fish.get("display", True)]
+                st.caption("展示水槽にいる魚だけに、1匹あたり+3成長ポイント。")
+                st.write(f"展示中：{len(displayed_indices)}匹 ／ 持っている餌の塊：**{bundle_stock}個**")
+                if st.button("🍙 展示水槽の魚全員にあげる",
+                             disabled=bundle_stock == 0 or not displayed_indices,
+                             key="aqua_feed_bundle", use_container_width=True):
+                    if st.session_state.aqua_food_inventory.get("bundle", 0) > 0 and displayed_indices:
+                        st.session_state.aqua_food_inventory["bundle"] -= 1
+                        for i in displayed_indices:
+                            give_fish_food(i, "bundle", play_sound=False)
+                        play_aqua_feed_sound(delay=0)
+                        sync_aqua_tank_history()
+                        save_progress()
+                        st.success(f"🎉 展示中の{len(displayed_indices)}匹に餌をあげました！")
+                        st.rerun()
+
+                st.markdown("#### 🎁 全体の餌の塊")
+                st.caption("非展示の魚も含め、所持しているすべての魚に1匹あたり+3成長ポイント。")
+                st.write(f"持っている全体の餌の塊：**{grand_bundle_stock}個**")
+                if st.button("🎁 所持している魚全員にあげる",
+                             disabled=grand_bundle_stock == 0,
+                             key="aqua_feed_grand_bundle", use_container_width=True):
+                    if st.session_state.aqua_food_inventory.get("grand_bundle", 0) > 0:
+                        st.session_state.aqua_food_inventory["grand_bundle"] -= 1
+                        for i in range(len(fish_list)):
+                            give_fish_food(i, "grand_bundle", play_sound=False)
+                        play_aqua_feed_sound(delay=0)
+                        sync_aqua_tank_history()
+                        save_progress()
+                        st.success(f"🎉 所持している{len(fish_list)}匹全員に餌をあげました！")
+                        st.rerun()
+
+        # ===== 📖 魚図鑑（今までにGETした魚。名前・展示の設定もここ）=====
+        if _aqua_tab == "📖 魚図鑑":
+            st.subheader("📖 魚図鑑")
             fish_list = st.session_state.aqua_fish
             species_groups = {}
             for i, fish in enumerate(fish_list):
                 species_groups.setdefault(fish.get("id", fish.get("name", "魚")), []).append(i)
-            st.caption("魚の種類を開くと、1匹ずつ名前・展示設定を変更できます。餌は下から複数選択できます。")
-            for species_id, indices in species_groups.items():
+            known_ids = {sp["id"] for sp in ALL_FISH}
+            met_count = sum(1 for sid in species_groups if sid in known_ids)
+            shown_fish = sum(1 for f in fish_list if f.get("display", True))
+            st.write(f"出会った魚：**{met_count} / {len(ALL_FISH)} 種類**　／　飼っている魚：**{len(fish_list)}匹**（展示中 {shown_fish}匹 ／ 非展示 {len(fish_list) - shown_fish}匹）")
+            st.caption("魚の種類を開くと、1匹ずつ名前・展示設定を変更できます。まだ出会っていない魚は「？？？」で表示されます。")
+
+            def _render_owned_species(indices):
                 first = fish_list[indices[0]]
                 with st.expander(f"{first.get('emoji', '🐟')} {first.get('name', '魚')}　{'☆' * get_fish_stars(first)}　（{len(indices)}/5匹）"):
                     for i in indices:
@@ -5409,150 +5563,16 @@ elif st.session_state.page in [
                             fish["display"] = show
                             save_progress()
                     st.caption("この種類は最大5匹まで所持できます。")
-            st.markdown("#### 🍚 餌やり")
-            st.info("💡 展示中の魚はここから直接餌をあげられます。展示していない魚は、下の「複数の魚にまとめて餌をあげる」から選んでください。")
 
-            normal_stock = st.session_state.aqua_food_inventory.get("normal", 0)
-            premium_stock = st.session_state.aqua_food_inventory.get("premium", 0)
-            bundle_stock = st.session_state.aqua_food_inventory.get("bundle", 0)
-            grand_bundle_stock = st.session_state.aqua_food_inventory.get("grand_bundle", 0)
-
-            # 展示中の魚だけ、直接餌をあげられるように表示する。
-            displayed_fish_indices = [
-                i for i, fish in enumerate(fish_list)
-                if fish.get("display", True)
-            ]
-            if displayed_fish_indices:
-                st.markdown("##### 🐠 展示中の魚に直接餌をあげる")
-                for i in displayed_fish_indices:
-                    fish = fish_list[i]
-                    stars = get_fish_stars(fish)
-                    size_cm = fish.get("size_mm", 10.0) / 10
-                    progress = fish.get("feed_points", 0) % 5
-                    st.markdown(
-                        f"**{fish_display_name(fish)}**　{'☆' * stars}　"
-                        f"現在 **{size_cm:.1f}cm**　（次の0.1cmまで {progress}/5pt）"
-                    )
-                    feed_col1, feed_col2, feed_col3 = st.columns([2, 2, 2])
-                    with feed_col1:
-                        if st.button(
-                            f"🫧 通常餌をあげる（残り {normal_stock}）",
-                            disabled=normal_stock <= 0,
-                            key=f"aqua_feed_one_normal_{i}",
-                            use_container_width=True,
-                        ):
-                            st.session_state.aqua_food_inventory["normal"] -= 1
-                            give_fish_food(i, "normal")
-                            sync_aqua_tank_history()
-                            save_progress()
-                            st.rerun()
-                    with feed_col2:
-                        if st.button(
-                            f"✨ 高級餌をあげる（残り {premium_stock}）",
-                            disabled=premium_stock <= 0,
-                            key=f"aqua_feed_one_premium_{i}",
-                            use_container_width=True,
-                        ):
-                            st.session_state.aqua_food_inventory["premium"] -= 1
-                            give_fish_food(i, "premium")
-                            sync_aqua_tank_history()
-                            save_progress()
-                            st.rerun()
-                    with feed_col3:
-                        st.write(f"成長ポイント：**{fish.get('feed_points', 0) % 5}/5**")
-            else:
-                st.caption("現在、展示中の魚はいません。下のまとめて餌やりから魚を選べます。")
-
-            st.markdown("##### 👥 複数の魚にまとめて餌をあげる")
-            st.caption("展示していない魚も、ここから選んで餌をあげられます。展示中の魚もまとめて選択できます。")
-            fish_indices = st.multiselect(
-                "① 餌をあげる魚を選ぶ",
-                options=list(range(len(fish_list))),
-                format_func=lambda i: f"{fish_list[i]['emoji']} {fish_display_name(fish_list[i])}（{'☆' * get_fish_stars(fish_list[i])}・{fish_list[i].get('size_mm', 10.0) / 10:.1f}cm・{'展示中' if fish_list[i].get('display', True) else '非展示'}）",
-                key="aqua_feed_fish_choices",
-            )
-            st.caption("② 選んだ魚1匹あたりに、何個あげるか指定します。")
-            col_n, col_p = st.columns(2)
-            with col_n:
-                normal_count = st.number_input(
-                    "🫧 通常餌（1匹あたり）",
-                    min_value=0,
-                    max_value=normal_stock,
-                    value=0,
-                    step=1,
-                    key="aqua_feed_normal_count",
-                )
-            with col_p:
-                premium_count = st.number_input(
-                    "✨ 高級餌（1匹あたり）",
-                    min_value=0,
-                    max_value=premium_stock,
-                    value=0,
-                    step=1,
-                    key="aqua_feed_premium_count",
-                )
-            needed_normal = len(fish_indices) * normal_count
-            needed_premium = len(fish_indices) * premium_count
-            if fish_indices:
-                st.write(f"③ 必要な餌：通常 **{needed_normal}個** ／ 高級 **{needed_premium}個**")
-            else:
-                st.caption("魚を選ぶと必要な餌の数が表示されます。")
-            if st.button(
-                "🐟 選んだ魚にまとめて餌をあげる",
-                type="primary",
-                disabled=not fish_indices or (normal_count + premium_count == 0),
-                key="aqua_feed_selected",
-                use_container_width=True,
-            ):
-                if needed_normal > normal_stock or needed_premium > premium_stock:
-                    st.warning("選んだ魚の数に対して餌が足りません。数を調整してね！")
+            for species in ALL_FISH:
+                if species["id"] in species_groups:
+                    _render_owned_species(species_groups[species["id"]])
                 else:
-                    st.session_state.aqua_food_inventory["normal"] -= needed_normal
-                    st.session_state.aqua_food_inventory["premium"] -= needed_premium
-                    for i in fish_indices:
-                        if normal_count:
-                            give_fish_food(i, "normal", normal_count, play_sound=False)
-                        if premium_count:
-                            give_fish_food(i, "premium", premium_count, play_sound=False)
-                    play_aqua_feed_sound(delay=0)
-                    sync_aqua_tank_history()
-                    save_progress()
-                    st.success(f"🐠 {len(fish_indices)}匹に餌をあげました！")
-                    st.rerun()
-
-            st.write("---")
-            st.markdown("#### 🍙 みんなの餌の塊")
-            displayed_indices = [i for i, fish in enumerate(fish_list) if fish.get("display", True)]
-            st.caption("展示水槽にいる魚だけに、1匹あたり+3成長ポイント。")
-            st.write(f"展示中：{len(displayed_indices)}匹 ／ 持っている餌の塊：**{bundle_stock}個**")
-            if st.button("🍙 展示水槽の魚全員にあげる",
-                         disabled=bundle_stock == 0 or not displayed_indices,
-                         key="aqua_feed_bundle", use_container_width=True):
-                if st.session_state.aqua_food_inventory.get("bundle", 0) > 0 and displayed_indices:
-                    st.session_state.aqua_food_inventory["bundle"] -= 1
-                    for i in displayed_indices:
-                        give_fish_food(i, "bundle", play_sound=False)
-                    play_aqua_feed_sound(delay=0)
-                    sync_aqua_tank_history()
-                    save_progress()
-                    st.success(f"🎉 展示中の{len(displayed_indices)}匹に餌をあげました！")
-                    st.rerun()
-
-            st.markdown("#### 🎁 全体の餌の塊")
-            st.caption("非展示の魚も含め、所持しているすべての魚に1匹あたり+3成長ポイント。")
-            st.write(f"持っている全体の餌の塊：**{grand_bundle_stock}個**")
-            if st.button("🎁 所持している魚全員にあげる",
-                         disabled=grand_bundle_stock == 0,
-                         key="aqua_feed_grand_bundle", use_container_width=True):
-                if st.session_state.aqua_food_inventory.get("grand_bundle", 0) > 0:
-                    st.session_state.aqua_food_inventory["grand_bundle"] -= 1
-                    for i in range(len(fish_list)):
-                        give_fish_food(i, "grand_bundle", play_sound=False)
-                    play_aqua_feed_sound(delay=0)
-                    sync_aqua_tank_history()
-                    save_progress()
-                    st.success(f"🎉 所持している{len(fish_list)}匹全員に餌をあげました！")
-                    st.rerun()
+                    st.caption(f"❓ ？？？　{'☆' * int(species.get('stars', 1))}　まだ出会っていません")
+            # fish.json にない旧データの魚も、失わないようここに表示する
+            for sid, indices in species_groups.items():
+                if sid not in known_ids:
+                    _render_owned_species(indices)
 
         st.write("---")
         st.markdown("### 📈 水槽レベルアップ条件")

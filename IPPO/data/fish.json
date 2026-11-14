@@ -1,0 +1,845 @@
+[
+  {
+    "id": "clownfish",
+    "name": "カクレクマノミ",
+    "emoji": "🐠",
+    "stars": 1,
+    "gacha": true,
+    "weight": 35,
+    "shop": false,
+    "price": 0,
+    "image": ""
+  },
+  {
+    "id": "blue_tang",
+    "name": "ナンヨウハギ",
+    "emoji": "🐟",
+    "stars": 2,
+    "gacha": true,
+    "weight": 28,
+    "shop": false,
+    "price": 0,
+    "image": ""
+  },
+  {
+    "id": "pufferfish",
+    "name": "ハリセンボン",
+    "emoji": "🐡",
+    "stars": 3,
+    "gacha": true,
+    "weight": 20,
+    "shop": false,
+    "price": 0,
+    "image": ""
+  },
+  {
+    "id": "seahorse",
+    "name": "タツノオトシゴ",
+    "emoji": "🐠",
+    "stars": 3,
+    "gacha": true,
+    "weight": 20,
+    "shop": false,
+    "price": 0,
+    "image": ""
+  },
+  {
+    "id": "angelfish",
+    "name": "エンゼルフィッシュ",
+    "emoji": "🐠",
+    "stars": 4,
+    "gacha": true,
+    "weight": 12,
+    "shop": false,
+    "price": 0,
+    "image": ""
+  },
+  {
+    "id": "jellyfish",
+    "name": "クラゲ",
+    "emoji": "🪼",
+    "stars": 5,
+    "gacha": true,
+    "weight": 5,
+    "shop": false,
+    "price": 0,
+    "image": ""
+  },
+  {
+    "id": "goldfish",
+    "name": "金魚",
+    "emoji": "🐟",
+    "stars": 1,
+    "gacha": false,
+    "weight": 0,
+    "shop": true,
+    "price": 8,
+    "image": "",
+    "fishing": true,
+    "areas": [
+      "river"
+    ],
+    "fishing_weight": 15,
+    "hint": "どこかから逃げ出した金魚が、川でのんびり泳いでいるみたい…？"
+  },
+  {
+    "id": "koi",
+    "name": "錦鯉",
+    "emoji": "🐟",
+    "stars": 2,
+    "gacha": false,
+    "weight": 0,
+    "shop": true,
+    "price": 12,
+    "image": "",
+    "fishing": true,
+    "areas": [
+      "river"
+    ],
+    "fishing_weight": 12,
+    "hint": "川の流れの中を、ゆったり泳ぐ大きな鯉。"
+  },
+  {
+    "id": "tropical",
+    "name": "トロピカルフィッシュ",
+    "emoji": "🐠",
+    "stars": 3,
+    "gacha": false,
+    "weight": 0,
+    "shop": true,
+    "price": 15,
+    "image": ""
+  },
+  {
+    "id": "octopus",
+    "name": "ミニタコ",
+    "emoji": "🐙",
+    "stars": 4,
+    "gacha": false,
+    "weight": 0,
+    "shop": true,
+    "price": 18,
+    "image": ""
+  },
+  {
+    "id": "sardine",
+    "name": "イワシ",
+    "emoji": "🐟",
+    "stars": 1,
+    "gacha": true,
+    "weight": 25,
+    "shop": false,
+    "price": 0,
+    "image": "",
+    "fishing": true,
+    "areas": [
+      "sea"
+    ],
+    "fishing_weight": 25,
+    "hint": "海の浅いところで、きらきら群れているよ。"
+  },
+  {
+    "id": "garden_eel",
+    "name": "チンアナゴ",
+    "emoji": "🐟",
+    "stars": 2,
+    "gacha": true,
+    "weight": 18,
+    "shop": false,
+    "price": 0,
+    "image": ""
+  },
+  {
+    "id": "sunfish",
+    "name": "マンボウ",
+    "emoji": "🐟",
+    "stars": 2,
+    "gacha": true,
+    "weight": 16,
+    "shop": false,
+    "price": 0,
+    "image": ""
+  },
+  {
+    "id": "stingray",
+    "name": "アカエイ",
+    "emoji": "🦈",
+    "stars": 3,
+    "gacha": true,
+    "weight": 14,
+    "shop": false,
+    "price": 0,
+    "image": ""
+  },
+  {
+    "id": "sea_turtle",
+    "name": "ウミガメ",
+    "emoji": "🐢",
+    "stars": 3,
+    "gacha": true,
+    "weight": 12,
+    "shop": false,
+    "price": 0,
+    "image": ""
+  },
+  {
+    "id": "lionfish",
+    "name": "ミノカサゴ",
+    "emoji": "🐠",
+    "stars": 4,
+    "gacha": true,
+    "weight": 9,
+    "shop": false,
+    "price": 0,
+    "image": ""
+  },
+  {
+    "id": "shark",
+    "name": "サメ",
+    "emoji": "🦈",
+    "stars": 4,
+    "gacha": true,
+    "weight": 7,
+    "shop": false,
+    "price": 0,
+    "image": ""
+  },
+  {
+    "id": "whale_shark",
+    "name": "ジンベエザメ",
+    "emoji": "🦈",
+    "stars": 5,
+    "gacha": true,
+    "weight": 4,
+    "shop": false,
+    "price": 0,
+    "image": ""
+  },
+  {
+    "id": "oarfish",
+    "name": "リュウグウノツカイ",
+    "emoji": "🐟",
+    "stars": 5,
+    "gacha": true,
+    "weight": 3,
+    "shop": false,
+    "price": 0,
+    "image": ""
+  },
+  {
+    "id": "coelacanth",
+    "name": "シーラカンス",
+    "emoji": "🐟",
+    "stars": 5,
+    "gacha": true,
+    "weight": 2,
+    "shop": false,
+    "price": 0,
+    "image": ""
+  },
+  {
+    "id": "medaka",
+    "name": "メダカ",
+    "emoji": "🐟",
+    "stars": 1,
+    "gacha": false,
+    "weight": 0,
+    "shop": false,
+    "price": 0,
+    "image": "",
+    "fishing": true,
+    "fishing_only": true,
+    "areas": [
+      "river"
+    ],
+    "fishing_weight": 30,
+    "hint": "小川のきれいな水で、ちいさくひらひら泳いでいるよ。"
+  },
+  {
+    "id": "oikawa",
+    "name": "オイカワ",
+    "emoji": "🐟",
+    "stars": 1,
+    "gacha": false,
+    "weight": 0,
+    "shop": false,
+    "price": 0,
+    "image": "",
+    "fishing": true,
+    "fishing_only": true,
+    "areas": [
+      "river"
+    ],
+    "fishing_weight": 25,
+    "hint": "川の流れのゆるやかなところで、よく見かけるよ。"
+  },
+  {
+    "id": "ayu",
+    "name": "アユ",
+    "emoji": "🐟",
+    "stars": 2,
+    "gacha": false,
+    "weight": 0,
+    "shop": false,
+    "price": 0,
+    "image": "",
+    "fishing": true,
+    "fishing_only": true,
+    "areas": [
+      "river"
+    ],
+    "fishing_weight": 22,
+    "hint": "きれいな流れが大好き。浅瀬や岩のそばを探してみよう。",
+    "spots": [
+      "A",
+      "B"
+    ]
+  },
+  {
+    "id": "yamame",
+    "name": "ヤマメ",
+    "emoji": "🐟",
+    "stars": 2,
+    "gacha": false,
+    "weight": 0,
+    "shop": false,
+    "price": 0,
+    "image": "",
+    "fishing": true,
+    "fishing_only": true,
+    "areas": [
+      "river"
+    ],
+    "fishing_weight": 18,
+    "hint": "冷たい水を好む渓流の魚。岩かげや上流にいるよ。",
+    "spots": [
+      "B",
+      "D"
+    ]
+  },
+  {
+    "id": "sawagani",
+    "name": "サワガニ",
+    "emoji": "🦀",
+    "stars": 2,
+    "gacha": false,
+    "weight": 0,
+    "shop": false,
+    "price": 0,
+    "image": "",
+    "fishing": true,
+    "fishing_only": true,
+    "areas": [
+      "river"
+    ],
+    "fishing_weight": 14,
+    "hint": "岩のすきまや、上流の水辺でそっと動いているよ。",
+    "spots": [
+      "B",
+      "D"
+    ]
+  },
+  {
+    "id": "namazu",
+    "name": "ナマズ",
+    "emoji": "🐟",
+    "stars": 3,
+    "gacha": false,
+    "weight": 0,
+    "shop": false,
+    "price": 0,
+    "image": "",
+    "fishing": true,
+    "fishing_only": true,
+    "areas": [
+      "river"
+    ],
+    "fishing_weight": 18,
+    "hint": "深いふちの底で、ひげをゆらしてじっとしているよ。",
+    "spots": [
+      "C"
+    ]
+  },
+  {
+    "id": "rainbow_trout",
+    "name": "ニジマス",
+    "emoji": "🐟",
+    "stars": 3,
+    "gacha": false,
+    "weight": 0,
+    "shop": false,
+    "price": 0,
+    "image": "",
+    "fishing": true,
+    "fishing_only": true,
+    "areas": [
+      "river"
+    ],
+    "fishing_weight": 16,
+    "hint": "虹色にかがやく魚。岩かげ・深いふち・上流で出会えるよ。",
+    "spots": [
+      "B",
+      "C",
+      "D"
+    ]
+  },
+  {
+    "id": "suppon",
+    "name": "スッポン",
+    "emoji": "🐢",
+    "stars": 3,
+    "gacha": false,
+    "weight": 0,
+    "shop": false,
+    "price": 0,
+    "image": "",
+    "fishing": true,
+    "fishing_only": true,
+    "areas": [
+      "river"
+    ],
+    "fishing_weight": 12,
+    "hint": "浅瀬や深いふちで、ゆっくり首をのばしているよ。",
+    "spots": [
+      "A",
+      "C"
+    ]
+  },
+  {
+    "id": "eel",
+    "name": "ウナギ",
+    "emoji": "🐟",
+    "stars": 4,
+    "gacha": false,
+    "weight": 0,
+    "shop": false,
+    "price": 0,
+    "image": "",
+    "fishing": true,
+    "fishing_only": true,
+    "areas": [
+      "river"
+    ],
+    "fishing_weight": 10,
+    "hint": "岩かげや深いふちに、にょろにょろ隠れているよ。",
+    "spots": [
+      "B",
+      "C"
+    ]
+  },
+  {
+    "id": "sturgeon",
+    "name": "チョウザメ",
+    "emoji": "🐟",
+    "stars": 4,
+    "gacha": false,
+    "weight": 0,
+    "shop": false,
+    "price": 0,
+    "image": "",
+    "fishing": true,
+    "fishing_only": true,
+    "areas": [
+      "river"
+    ],
+    "fishing_weight": 8,
+    "hint": "深いふちや滝つぼに、大きな影が見えたらチャンス！",
+    "spots": [
+      "C",
+      "D"
+    ]
+  },
+  {
+    "id": "itou",
+    "name": "イトウ",
+    "emoji": "🐟",
+    "stars": 5,
+    "gacha": false,
+    "weight": 0,
+    "shop": false,
+    "price": 0,
+    "image": "",
+    "fishing": true,
+    "fishing_only": true,
+    "areas": [
+      "river"
+    ],
+    "fishing_weight": 5,
+    "hint": "幻の巨大魚。深いふちの底で、じっと大物を待っているらしい…。",
+    "spots": [
+      "C"
+    ]
+  },
+  {
+    "id": "golden_koi",
+    "name": "黄金の錦鯉",
+    "emoji": "🐟",
+    "stars": 5,
+    "gacha": false,
+    "weight": 0,
+    "shop": false,
+    "price": 0,
+    "image": "",
+    "fishing": true,
+    "fishing_only": true,
+    "areas": [
+      "river"
+    ],
+    "fishing_weight": 3,
+    "hint": "滝つぼで金色にかがやく鯉を見た人がいるらしい…？",
+    "spots": [
+      "D"
+    ]
+  },
+  {
+    "id": "aji",
+    "name": "アジ",
+    "emoji": "🐟",
+    "stars": 1,
+    "gacha": false,
+    "weight": 0,
+    "shop": false,
+    "price": 0,
+    "image": "",
+    "fishing": true,
+    "fishing_only": true,
+    "areas": [
+      "sea"
+    ],
+    "fishing_weight": 30,
+    "hint": "海のどこでも出会える、ひとなつっこい魚。"
+  },
+  {
+    "id": "kisu",
+    "name": "キス",
+    "emoji": "🐟",
+    "stars": 1,
+    "gacha": false,
+    "weight": 0,
+    "shop": false,
+    "price": 0,
+    "image": "",
+    "fishing": true,
+    "fishing_only": true,
+    "areas": [
+      "sea"
+    ],
+    "fishing_weight": 22,
+    "hint": "砂浜の近くの、砂地でぴょんぴょんしているよ。",
+    "spots": [
+      "A"
+    ]
+  },
+  {
+    "id": "mejina",
+    "name": "メジナ",
+    "emoji": "🐟",
+    "stars": 2,
+    "gacha": false,
+    "weight": 0,
+    "shop": false,
+    "price": 0,
+    "image": "",
+    "fishing": true,
+    "fishing_only": true,
+    "areas": [
+      "sea"
+    ],
+    "fishing_weight": 20,
+    "hint": "岩場や防波堤のまわりで、すいすい泳いでいるよ。",
+    "spots": [
+      "B",
+      "C"
+    ]
+  },
+  {
+    "id": "kasago",
+    "name": "カサゴ",
+    "emoji": "🐟",
+    "stars": 2,
+    "gacha": false,
+    "weight": 0,
+    "shop": false,
+    "price": 0,
+    "image": "",
+    "fishing": true,
+    "fishing_only": true,
+    "areas": [
+      "sea"
+    ],
+    "fishing_weight": 18,
+    "hint": "岩場のすきまに、ちょこんと隠れているよ。",
+    "spots": [
+      "B"
+    ]
+  },
+  {
+    "id": "squid",
+    "name": "ヤリイカ",
+    "emoji": "🦑",
+    "stars": 2,
+    "gacha": false,
+    "weight": 0,
+    "shop": false,
+    "price": 0,
+    "image": "",
+    "fishing": true,
+    "fishing_only": true,
+    "areas": [
+      "sea"
+    ],
+    "fishing_weight": 15,
+    "hint": "防波堤の先や沖合で、すーっと泳いでいるよ。",
+    "spots": [
+      "C",
+      "D"
+    ]
+  },
+  {
+    "id": "madai",
+    "name": "マダイ",
+    "emoji": "🐟",
+    "stars": 3,
+    "gacha": false,
+    "weight": 0,
+    "shop": false,
+    "price": 0,
+    "image": "",
+    "fishing": true,
+    "fishing_only": true,
+    "areas": [
+      "sea"
+    ],
+    "fishing_weight": 18,
+    "hint": "防波堤や沖合で出会える、お祝いの魚。",
+    "spots": [
+      "C",
+      "D"
+    ]
+  },
+  {
+    "id": "kawahagi",
+    "name": "カワハギ",
+    "emoji": "🐡",
+    "stars": 3,
+    "gacha": false,
+    "weight": 0,
+    "shop": false,
+    "price": 0,
+    "image": "",
+    "fishing": true,
+    "fishing_only": true,
+    "areas": [
+      "sea"
+    ],
+    "fishing_weight": 16,
+    "hint": "岩場や防波堤のまわりで、えさをつついているよ。",
+    "spots": [
+      "B",
+      "C"
+    ]
+  },
+  {
+    "id": "hirame",
+    "name": "ヒラメ",
+    "emoji": "🐟",
+    "stars": 3,
+    "gacha": false,
+    "weight": 0,
+    "shop": false,
+    "price": 0,
+    "image": "",
+    "fishing": true,
+    "fishing_only": true,
+    "areas": [
+      "sea"
+    ],
+    "fishing_weight": 14,
+    "hint": "砂浜の近くの砂の中に、ぺたっと隠れているよ。",
+    "spots": [
+      "A"
+    ]
+  },
+  {
+    "id": "buri",
+    "name": "ブリ",
+    "emoji": "🐟",
+    "stars": 4,
+    "gacha": false,
+    "weight": 0,
+    "shop": false,
+    "price": 0,
+    "image": "",
+    "fishing": true,
+    "fishing_only": true,
+    "areas": [
+      "sea"
+    ],
+    "fishing_weight": 10,
+    "hint": "防波堤の先や沖合で、力強く泳いでいるよ。",
+    "spots": [
+      "C",
+      "D"
+    ]
+  },
+  {
+    "id": "lobster",
+    "name": "イセエビ",
+    "emoji": "🦞",
+    "stars": 4,
+    "gacha": false,
+    "weight": 0,
+    "shop": false,
+    "price": 0,
+    "image": "",
+    "fishing": true,
+    "fishing_only": true,
+    "areas": [
+      "sea"
+    ],
+    "fishing_weight": 8,
+    "hint": "岩場のかげで、長いひげをゆらしているよ。",
+    "spots": [
+      "B"
+    ]
+  },
+  {
+    "id": "marlin",
+    "name": "カジキ",
+    "emoji": "🐟",
+    "stars": 4,
+    "gacha": false,
+    "weight": 0,
+    "shop": false,
+    "price": 0,
+    "image": "",
+    "fishing": true,
+    "fishing_only": true,
+    "areas": [
+      "sea"
+    ],
+    "fishing_weight": 7,
+    "hint": "沖合を、ものすごいスピードで駆けぬける魚。",
+    "spots": [
+      "D"
+    ]
+  },
+  {
+    "id": "tuna",
+    "name": "クロマグロ",
+    "emoji": "🐟",
+    "stars": 5,
+    "gacha": false,
+    "weight": 0,
+    "shop": false,
+    "price": 0,
+    "image": "",
+    "fishing": true,
+    "fishing_only": true,
+    "areas": [
+      "sea"
+    ],
+    "fishing_weight": 5,
+    "hint": "広い沖合を泳ぐ、海の王様。",
+    "spots": [
+      "D"
+    ]
+  },
+  {
+    "id": "giant_squid",
+    "name": "ダイオウイカ",
+    "emoji": "🦑",
+    "stars": 5,
+    "gacha": false,
+    "weight": 0,
+    "shop": false,
+    "price": 0,
+    "image": "",
+    "fishing": true,
+    "fishing_only": true,
+    "areas": [
+      "sea"
+    ],
+    "fishing_weight": 3,
+    "hint": "沖合の深いところに、大きな影が潜んでいるらしい…。",
+    "spots": [
+      "D"
+    ]
+  },
+  {
+    "id": "haze",
+    "name": "ハゼ",
+    "emoji": "🐟",
+    "stars": 1,
+    "gacha": false,
+    "weight": 0,
+    "shop": false,
+    "price": 0,
+    "image": "",
+    "fishing": true,
+    "fishing_only": true,
+    "areas": [
+      "river",
+      "sea"
+    ],
+    "fishing_weight": 25,
+    "hint": "川の下流でも海のそばでも、のんびり泳いでいるよ。"
+  },
+  {
+    "id": "bora",
+    "name": "ボラ",
+    "emoji": "🐟",
+    "stars": 2,
+    "gacha": false,
+    "weight": 0,
+    "shop": false,
+    "price": 0,
+    "image": "",
+    "fishing": true,
+    "fishing_only": true,
+    "areas": [
+      "river",
+      "sea"
+    ],
+    "fishing_weight": 18,
+    "hint": "川と海がまじわるところで、ぴょんと跳ねているよ。"
+  },
+  {
+    "id": "suzuki",
+    "name": "スズキ",
+    "emoji": "🐟",
+    "stars": 3,
+    "gacha": false,
+    "weight": 0,
+    "shop": false,
+    "price": 0,
+    "image": "",
+    "fishing": true,
+    "fishing_only": true,
+    "areas": [
+      "river",
+      "sea"
+    ],
+    "fishing_weight": 16,
+    "hint": "川でも海でも、大きな口で元気にえさを追っているよ。"
+  },
+  {
+    "id": "salmon",
+    "name": "サケ",
+    "emoji": "🐟",
+    "stars": 4,
+    "gacha": false,
+    "weight": 0,
+    "shop": false,
+    "price": 0,
+    "image": "",
+    "fishing": true,
+    "fishing_only": true,
+    "areas": [
+      "river",
+      "sea"
+    ],
+    "fishing_weight": 9,
+    "hint": "川と海を行き来する旅の魚。どちらでも出会えるよ。"
+  }
+]

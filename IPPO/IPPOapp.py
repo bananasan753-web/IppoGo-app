@@ -181,6 +181,482 @@ AQUA_FOOD = {
 }
 
 
+# =====================================================
+# 🪙 おさかなコイン ＆ 🎣 釣りモード
+# =====================================================
+# ・おさかなコインは水族館の中だけで使うゲーム内通貨です（お菓子コイン・恐竜コインとは別もの）。
+# ・水族館のショップは「おさかなコイン」だけで買えます。ガチャは「おさかなコイン」でも「IPPOポイント」でもOK。
+# ・釣りで釣った魚は「育てる」か「リリース」を選べます。リリースするとおさかなコインがもらえます。
+# ・釣れる魚は fish.json で管理します。釣り用の項目：
+#     "fishing": true            … 釣りで出会える魚
+#     "areas": ["river","sea"]   … 出るエリア（river=川 / sea=海。両方書けば両方で釣れる）
+#     "spots": ["C","D"]         … 出る地点（書かなければ A〜D どこでも）
+#     "fishing_weight": 20       … 同じ☆の中での出やすさ
+#     "hint": "…"                … 図鑑に出す、ちょっとしたヒント（任意）
+AQUA_START_COINS = 30                                   # はじめにもらえるおさかなコイン
+AQUA_RELEASE_COINS = {1: 2, 2: 4, 3: 7, 4: 12, 5: 20}   # リリースしたときにもらえるコイン（☆ごと）
+AQUA_GACHA_COST_COINS = 20                              # 魚ガチャ1回（コイン）
+AQUA_GACHA_COST_POINTS = 5                              # 魚ガチャ1回（IPPOポイント）
+AQUA_DECOR_GACHA_COST_COINS = 20                        # 飾りガチャ1回（コイン）※ポイントは AQUA_DECOR_GACHA_PRICE
+GOLD_ROD_SHOW_UNMET_NAMES = True                        # 金の釣り竿の魚えらびで、まだ出会っていない魚の名前も見せる
+
+FISH_BY_ID = {f["id"]: f for f in ALL_FISH}
+FISHING_ALL = [f for f in ALL_FISH if f.get("fishing")]
+
+FISHING_AREAS = {
+    "river": {"name": "川", "emoji": "🏞️",
+              "spots": {"A": "浅瀬", "B": "岩のかげ", "C": "深いふち", "D": "上流の滝つぼ"}},
+    "sea": {"name": "海", "emoji": "🌊",
+            "spots": {"A": "砂浜", "B": "岩場", "C": "防波堤", "D": "沖合"}},
+}
+
+# rates は「☆ごとの出やすさ」。合計が100でなくても、割合に直して使います。
+FISHING_RODS = {
+    "handmade": {"name": "手作り釣り竿", "emoji": "🎋", "price": 0, "power": 2,
+                 "rates": {1: 70, 2: 20, 3: 10, 4: 5, 5: 1},
+                 "desc": "はじめから持っている、あたたかい手作りの竿。何度でも使えるよ。"},
+    "copper": {"name": "銅の釣り竿", "emoji": "🥉", "price": 10, "power": 3,
+               "rates": {1: 45, 2: 27, 3: 16, 4: 9, 5: 3},
+               "desc": "手作りより、ちょっといい魚が出やすい。1回使いきり。"},
+    "silver": {"name": "銀の釣り竿", "emoji": "🥈", "price": 25, "power": 4,
+               "rates": {1: 22, 2: 27, 3: 26, 4: 16, 5: 9},
+               "desc": "さらにいい魚が出やすい。1回使いきり。"},
+    "gold": {"name": "金の釣り竿", "emoji": "🥇", "price": 60, "power": 6,
+             "rates": None,
+             "desc": "釣りで出会える魚の中から、好きな1匹を必ず釣れる特別な竿。1回使いきり。"},
+}
+
+FISHING_STAMINA = {1: 4, 2: 6, 3: 8, 4: 10, 5: 12}   # 魚の元気（☆ごと）。0になると釣り上げ成功
+FISHING_TENSION_MAX = 3                               # 糸のぴんぴん度がここまでたまると、ひと休み
+FISHING_COMBO_BONUS_AT = 3                            # 何回連続でうまくいくと、おまけで強く引き寄せられるか
+
+# 魚のようすと、うまくいく操作。（ようすは毎回画面に出るので、迷ったらヒントを見ればOK）
+FISHING_MOODS = {
+    "thrash": {"text": "🌊 魚がバシャバシャ暴れている！", "answer": "loosen"},
+    "pull": {"text": "💨 魚がぐいぐい引っ張っている！", "answer": "hold"},
+    "tired": {"text": "😮‍💨 魚がちょっと疲れてきた…！", "answer": "reel"},
+}
+FISHING_MOVES = {
+    "reel": "🎣 巻く",
+    "loosen": "🤏 ゆるめる",
+    "hold": "💪 こらえる",
+}
+
+
+def pay_with(method: str, coin_key: str, coin_cost: int, point_cost: int) -> bool:
+    """ガチャの支払い。method が "coin" ならそのコインで、"point" ならIPPOポイントで払う。払えなければFalse。"""
+    if method == "coin":
+        if int(st.session_state.get(coin_key, 0)) < coin_cost:
+            return False
+        st.session_state[coin_key] = int(st.session_state.get(coin_key, 0)) - coin_cost
+        return True
+    if int(st.session_state.get("ippo_points", 0)) < point_cost:
+        return False
+    st.session_state.ippo_points -= point_cost
+    return True
+
+
+def register_fish_discovered(species_id: str):
+    """魚図鑑に載せる（手に入れた回数も数える）。リリースした魚も図鑑には残る。"""
+    discovered = st.session_state.setdefault("aqua_fish_discovered", {})
+    discovered[species_id] = int(discovered.get(species_id, 0)) + 1
+
+
+def fish_obtain_methods(fish: dict) -> list:
+    """その魚の入手方法（図鑑のヒント用）。"""
+    methods = []
+    if fish.get("gacha"):
+        methods.append("🎰 魚ガチャ")
+    if fish.get("shop"):
+        methods.append("🛍️ ショップ")
+    if fish.get("fishing"):
+        for area_key in fish.get("areas", []):
+            area = FISHING_AREAS.get(area_key)
+            if not area:
+                continue
+            spots = [s for s in fish.get("spots", []) if s in area["spots"]]
+            if spots:
+                spot_text = "・".join(f"{s}地点（{area['spots'][s]}）" for s in spots)
+                methods.append(f"🎣 {area['emoji']}{area['name']}の{spot_text}")
+            else:
+                methods.append(f"🎣 {area['emoji']}{area['name']}（どの地点でも）")
+    return methods
+
+
+def fish_hint_text(fish: dict) -> str:
+    text = "　／　".join(fish_obtain_methods(fish)) or "入手方法は準備中"
+    flavor = fish.get("hint")
+    return f"{text}" + (f"　✨{flavor}" if flavor else "")
+
+
+def fishing_rod_rate_text(rod_key: str) -> str:
+    rates = FISHING_RODS[rod_key]["rates"]
+    if not rates:
+        return "好きな魚を必ず釣れる！"
+    total = sum(rates.values()) or 1
+    return "　".join(f"☆{s} {rates[s] / total * 100:.0f}%" for s in sorted(rates))
+
+
+def fishing_pick_fish(area_key: str, spot_key: str, rod_key: str, gold_target=None) -> dict:
+    """釣れる魚を決める。魚は必ずかかる。
+    ・金の釣り竿：選んだ魚が必ず釣れる
+    ・それ以外：竿の☆の出やすさで☆を決め、その☆の魚（そのエリア・地点にいる魚）からえらぶ。
+      その☆の魚がいない地点では、いる☆だけで割合を計算し直す。"""
+    if rod_key == "gold" and gold_target in FISH_BY_ID:
+        return FISH_BY_ID[gold_target]
+    candidates = [f for f in FISHING_ALL if area_key in f.get("areas", [])
+                  and (not f.get("spots") or spot_key in f["spots"])] or list(FISHING_ALL)
+    rates = FISHING_RODS[rod_key].get("rates") or FISHING_RODS["handmade"]["rates"]
+    star_list = sorted({int(f["stars"]) for f in candidates})
+    weights = [max(0.0, float(rates.get(s, 0))) for s in star_list]
+    if sum(weights) <= 0:
+        weights = [1.0] * len(star_list)
+    stars = random.choices(star_list, weights=weights, k=1)[0]
+    pool = [f for f in candidates if int(f["stars"]) == stars]
+    return random.choices(pool, weights=[max(0.1, float(f.get("fishing_weight", 10))) for f in pool], k=1)[0]
+
+
+# ---------------- 釣り場のイラスト（SVG） ----------------
+def _svg_small_fish(x, y, color, scale=1.0, flip=False):
+    sx = -scale if flip else scale
+    return (f'<g transform="translate({x},{y}) scale({sx},{scale})" opacity="0.75">'
+            f'<ellipse cx="0" cy="0" rx="12" ry="6" fill="{color}"/>'
+            f'<path d="M10,0 L20,-6 L20,6 Z" fill="{color}"/>'
+            f'<circle cx="-6" cy="-1" r="1.6" fill="#fff"/></g>')
+
+
+def _fishing_spot_marker(x, y, letter, selected):
+    if selected:
+        return (
+            f'<circle cx="{x}" cy="{y}" r="20" fill="#ffd54f" stroke="#e53935" stroke-width="4">'
+            f'<animate attributeName="r" values="19;25;19" dur="1.6s" repeatCount="indefinite"/></circle>'
+            f'<text x="{x}" y="{y + 8}" text-anchor="middle" font-size="24" font-weight="bold" '
+            f'fill="#b71c1c" font-family="sans-serif">{letter}</text>'
+            f'<circle cx="{x}" cy="{y - 40}" r="7" fill="#e53935" stroke="#fff" stroke-width="2"/>'
+            f'<circle cx="{x}" cy="{y - 28}" r="6" fill="#ffffff" stroke="#e53935" stroke-width="2"/>'
+        )
+    return (
+        f'<circle cx="{x}" cy="{y}" r="17" fill="#ffffff" fill-opacity="0.88" stroke="#1565c0" stroke-width="3"/>'
+        f'<text x="{x}" y="{y + 7}" text-anchor="middle" font-size="19" font-weight="bold" '
+        f'fill="#1565c0" font-family="sans-serif">{letter}</text>'
+    )
+
+
+def render_fishing_map_svg(area_key: str, selected_spot: str) -> str:
+    """釣り場のイラスト。川（浅瀬・岩のかげ・深いふち・上流の滝つぼ）と海（砂浜・岩場・防波堤・沖合）。"""
+    if area_key == "river":
+        spots = {"A": (110, 250), "B": (240, 190), "C": (380, 215), "D": (545, 165)}
+        body = (
+            '<defs>'
+            '<linearGradient id="fsSkyR" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#bfe9ff"/>'
+            '<stop offset="1" stop-color="#eaf9ff"/></linearGradient>'
+            '<linearGradient id="fsRiver" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#6cc3ee"/>'
+            '<stop offset="1" stop-color="#2b8fc7"/></linearGradient></defs>'
+            '<rect width="640" height="360" fill="url(#fsSkyR)"/>'
+            '<circle cx="70" cy="50" r="26" fill="#ffe082"/>'
+            '<ellipse cx="250" cy="45" rx="48" ry="14" fill="#fff" opacity="0.9"/>'
+            '<ellipse cx="285" cy="38" rx="32" ry="12" fill="#fff" opacity="0.9"/>'
+            '<path d="M0,120 Q90,50 200,110 T400,95 T640,85 L640,360 L0,360 Z" fill="#a8dc88"/>'
+            '<path d="M0,150 Q160,105 320,140 T640,118 L640,360 L0,360 Z" fill="#7cc25a"/>'
+            # 木
+            '<rect x="38" y="78" width="9" height="34" fill="#8d6e63"/><circle cx="42" cy="68" r="26" fill="#43a047"/>'
+            '<rect x="440" y="62" width="8" height="30" fill="#8d6e63"/><circle cx="444" cy="54" r="22" fill="#388e3c"/>'
+            # 川
+            '<path d="M0,140 C120,100 240,150 360,120 S560,92 640,112 L640,255 C520,300 440,270 340,300 '
+            'S120,332 0,292 Z" fill="url(#fsRiver)"/>'
+            '<ellipse cx="380" cy="212" rx="72" ry="40" fill="#1f6fa8" opacity="0.5"/>'
+            '<ellipse cx="380" cy="212" rx="45" ry="24" fill="#164f7c" opacity="0.35"/>'
+            # 滝
+            '<rect x="505" y="0" width="135" height="104" fill="#8d8d8d"/>'
+            '<rect x="505" y="0" width="135" height="14" fill="#6fbf4a"/>'
+            '<rect x="535" y="14" width="12" height="92" fill="#fff" opacity="0.85"/>'
+            '<rect x="560" y="14" width="14" height="92" fill="#fff" opacity="0.7"/>'
+            '<rect x="588" y="14" width="10" height="92" fill="#fff" opacity="0.8"/>'
+            '<ellipse cx="565" cy="112" rx="46" ry="11" fill="#fff" opacity="0.8"/>'
+            # 岩（岩のかげ）
+            '<ellipse cx="205" cy="162" rx="26" ry="16" fill="#9e9e9e"/>'
+            '<ellipse cx="268" cy="168" rx="20" ry="12" fill="#8a8a8a"/>'
+            '<ellipse cx="236" cy="156" rx="15" ry="9" fill="#b0b0b0"/>'
+            # 浅瀬の小石
+            '<circle cx="60" cy="288" r="6" fill="#d7ccc8"/><circle cx="82" cy="296" r="5" fill="#bcaaa4"/>'
+            '<circle cx="150" cy="300" r="6" fill="#d7ccc8"/><circle cx="172" cy="292" r="4" fill="#bcaaa4"/>'
+            # 水面の波
+            '<path d="M60,215 q12,-8 24,0 t24,0" stroke="#fff" stroke-width="3" fill="none" opacity="0.6"/>'
+            '<path d="M300,150 q12,-8 24,0 t24,0" stroke="#fff" stroke-width="3" fill="none" opacity="0.6"/>'
+            '<path d="M440,250 q12,-8 24,0 t24,0" stroke="#fff" stroke-width="3" fill="none" opacity="0.6"/>'
+            # 草
+            '<path d="M20,330 l4,-26 l5,26 M34,332 l3,-20 l5,20 M590,335 l4,-26 l5,26 M606,336 l3,-20 l5,20" '
+            'stroke="#2e7d32" stroke-width="4" fill="none"/>'
+            + _svg_small_fish(300, 255, "#ffb74d", 0.9) + _svg_small_fish(430, 190, "#ef9a9a", 1.1, True)
+            + _svg_small_fish(150, 235, "#fff176", 0.7)
+        )
+    else:
+        spots = {"A": (200, 300), "B": (470, 292), "C": (395, 250), "D": (445, 168)}
+        body = (
+            '<defs>'
+            '<linearGradient id="fsSkyS" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#8fd3ff"/>'
+            '<stop offset="1" stop-color="#e6f7ff"/></linearGradient>'
+            '<linearGradient id="fsSea" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#55b9ec"/>'
+            '<stop offset="1" stop-color="#0f5f94"/></linearGradient></defs>'
+            '<rect width="640" height="360" fill="url(#fsSkyS)"/>'
+            '<circle cx="80" cy="60" r="30" fill="#ffe082"/>'
+            '<ellipse cx="300" cy="50" rx="55" ry="15" fill="#fff" opacity="0.92"/>'
+            '<ellipse cx="338" cy="42" rx="34" ry="12" fill="#fff" opacity="0.92"/>'
+            '<ellipse cx="520" cy="80" rx="40" ry="11" fill="#fff" opacity="0.85"/>'
+            '<rect x="0" y="120" width="640" height="240" fill="url(#fsSea)"/>'
+            '<path d="M0,128 q20,-8 40,0 t40,0 t40,0 t40,0 t40,0 t40,0 t40,0 t40,0 t40,0 t40,0 t40,0 t40,0 t40,0 t40,0 t40,0 t40,0" '
+            'stroke="#fff" stroke-width="3" fill="none" opacity="0.5"/>'
+            '<path d="M240,215 q12,-8 24,0 t24,0" stroke="#fff" stroke-width="3" fill="none" opacity="0.45"/>'
+            '<path d="M520,235 q12,-8 24,0 t24,0" stroke="#fff" stroke-width="3" fill="none" opacity="0.45"/>'
+            # 砂浜
+            '<path d="M0,230 C80,250 150,300 230,360 L0,360 Z" fill="#f3dfa2"/>'
+            '<path d="M0,230 C80,250 150,300 230,360" stroke="#fff" stroke-width="5" fill="none" opacity="0.85"/>'
+            '<line x1="52" y1="305" x2="52" y2="348" stroke="#8d6e63" stroke-width="4"/>'
+            '<path d="M22,306 Q52,270 82,306 Z" fill="#ef5350"/>'
+            '<path d="M37,306 Q52,270 67,306 Z" fill="#fff" opacity="0.8"/>'
+            # 岩場
+            '<ellipse cx="545" cy="318" rx="46" ry="26" fill="#7d7d7d"/>'
+            '<ellipse cx="600" cy="332" rx="34" ry="22" fill="#8f8f8f"/>'
+            '<ellipse cx="505" cy="338" rx="30" ry="18" fill="#9a9a9a"/>'
+            '<ellipse cx="560" cy="305" rx="20" ry="11" fill="#a9a9a9"/>'
+            # 防波堤と灯台
+            '<polygon points="305,360 340,360 353,190 322,190" fill="#b0b0b0"/>'
+            '<rect x="298" y="180" width="64" height="14" fill="#9e9e9e"/>'
+            '<rect x="322" y="140" width="16" height="40" fill="#fff" stroke="#e53935" stroke-width="2"/>'
+            '<rect x="322" y="152" width="16" height="9" fill="#e53935"/>'
+            '<path d="M320,140 L330,126 L340,140 Z" fill="#e53935"/>'
+            # 沖合の船
+            '<path d="M495,160 L575,160 L560,182 L510,182 Z" fill="#b5651d"/>'
+            '<line x1="535" y1="160" x2="535" y2="108" stroke="#6d4c41" stroke-width="3"/>'
+            '<path d="M537,112 L537,156 L572,156 Z" fill="#fff"/>'
+            + _svg_small_fish(300, 300, "#ffcc80", 0.9, True) + _svg_small_fish(410, 205, "#b3e5fc", 0.8)
+            + _svg_small_fish(260, 245, "#fff59d", 0.7)
+        )
+    markers = "".join(_fishing_spot_marker(x, y, k, k == selected_spot) for k, (x, y) in spots.items())
+    return (f'<svg viewBox="0 0 640 360" xmlns="http://www.w3.org/2000/svg" '
+            f'style="width:100%;max-width:640px;display:block;margin:6px auto;border-radius:16px;'
+            f'box-shadow:0 2px 8px rgba(0,0,0,.18);">{body}{markers}</svg>')
+
+
+# ---------------- 釣りの流れ ----------------
+def fishing_new_state(area_key, spot_key, rod_key, species):
+    max_stamina = FISHING_STAMINA.get(int(species["stars"]), 8)
+    return {"phase": "hit", "area": area_key, "spot": spot_key, "rod": rod_key, "fish_id": species["id"],
+            "stamina": max_stamina, "max": max_stamina, "tension": 0, "combo": 0,
+            "mood": random.choice(list(FISHING_MOODS)), "log": []}
+
+
+def fishing_finish_catch(state: dict):
+    """釣り上げ成功。図鑑に載せ、金・銀・銅の竿はここで1本使い切る。育てる／リリースの選択は保存される。"""
+    species = FISH_BY_ID[state["fish_id"]]
+    discovered = st.session_state.setdefault("aqua_fish_discovered", {})
+    was_new = species["id"] not in discovered
+    register_fish_discovered(species["id"])
+    rod_key = state["rod"]
+    if rod_key != "handmade":
+        rods = st.session_state.setdefault("aqua_rods", {})
+        rods[rod_key] = max(0, int(rods.get(rod_key, 0)) - 1)
+    state["phase"] = "caught"
+    state["was_new"] = was_new
+    st.session_state.aqua_pending_catch = {"id": species["id"], "rod": rod_key, "was_new": was_new,
+                                           "area": state["area"], "spot": state["spot"]}
+    save_progress()
+
+
+def fishing_do_move(move: str):
+    """魚とのやりとり1ターン。魚のようすに合った操作だと魚を引き寄せられる。
+    合わなくても魚は逃げない（糸がぴんぴんになりすぎたら、ひと休みして仕切り直し）。"""
+    state = st.session_state.aqua_fishing
+    mood = state["mood"]
+    rod = FISHING_RODS[state["rod"]]
+    if FISHING_MOODS[mood]["answer"] == move:
+        state["combo"] += 1
+        damage = int(rod["power"]) + (1 if state["combo"] >= FISHING_COMBO_BONUS_AT else 0)
+        state["stamina"] = max(0, state["stamina"] - damage)
+        text = f"✨ ナイス！ 魚を {damage} 引き寄せた！"
+        if state["combo"] >= FISHING_COMBO_BONUS_AT:
+            text += f"（{state['combo']}回連続！ おまけ+1）"
+        state["log"] = [text]
+    else:
+        state["combo"] = 0
+        state["tension"] += 1
+        state["log"] = ["😅 ちょっと違ったみたい…でも大丈夫！ 魚は逃げないよ。"]
+        if state["tension"] >= FISHING_TENSION_MAX:
+            state["tension"] = 0
+            state["stamina"] = min(state["max"], state["stamina"] + 1)
+            state["log"].append("🧵 糸がぴんぴんになったので、ひと休み。魚も少し元気になったよ。仕切り直そう！")
+    if state["stamina"] <= 0:
+        fishing_finish_catch(state)
+    else:
+        state["mood"] = random.choices(list(FISHING_MOODS), weights=[35, 35, 30], k=1)[0]
+
+
+def fishing_close(message: str):
+    st.session_state.aqua_pending_catch = None
+    st.session_state.aqua_fishing = None
+    st.session_state.aqua_fishing_message = message
+    save_progress()
+    st.rerun()
+
+
+def _render_fishing_select():
+    message = st.session_state.pop("aqua_fishing_message", None)
+    if message:
+        st.success(message)
+    st.caption("魚は必ずかかるよ！ ①エリア → ②地点 → ③釣り竿 を選んで、釣りスタート🎣")
+    st.write(f"いまのおさかなコイン：🪙 **{st.session_state.fish_coins}**")
+
+    area_key = st.radio("① エリアを選ぶ", list(FISHING_AREAS), horizontal=True, key="aqua_fishing_area",
+                        format_func=lambda k: f"{FISHING_AREAS[k]['emoji']} {FISHING_AREAS[k]['name']}")
+    area = FISHING_AREAS[area_key]
+    spot_key = st.radio("② 地点を選ぶ", list(area["spots"]), horizontal=True, key=f"aqua_fishing_spot_{area_key}",
+                        format_func=lambda s: f"{s}地点：{area['spots'][s]}")
+    st.markdown(render_fishing_map_svg(area_key, spot_key), unsafe_allow_html=True)
+    st.caption(f"📍 {area['name']}の {spot_key}地点（{area['spots'][spot_key]}）　"
+               "※地点によって、出会える魚が変わるよ")
+
+    rods_owned = st.session_state.aqua_rods
+    rod_keys = [k for k in FISHING_RODS if k == "handmade" or int(rods_owned.get(k, 0)) > 0]
+    if st.session_state.get("aqua_fishing_rod") not in rod_keys:
+        st.session_state["aqua_fishing_rod"] = "handmade"
+    rod_key = st.selectbox(
+        "③ 釣り竿を選ぶ", rod_keys, key="aqua_fishing_rod",
+        format_func=lambda k: (f"{FISHING_RODS[k]['emoji']} {FISHING_RODS[k]['name']}（何度でも）" if k == "handmade"
+                               else f"{FISHING_RODS[k]['emoji']} {FISHING_RODS[k]['name']}（残り{int(rods_owned.get(k, 0))}本）"))
+    rod = FISHING_RODS[rod_key]
+    st.caption(f"{rod['desc']}　／　出やすさ：{fishing_rod_rate_text(rod_key)}")
+    if rod_key != "gold":
+        st.caption("※ そのエリア・地点にいる魚の中から選ばれるよ。")
+
+    gold_target = None
+    if rod_key == "gold":
+        gold_options = sorted(FISHING_ALL, key=lambda f: (int(f["stars"]), f["name"]))
+        gold_ids = [f["id"] for f in gold_options]
+        if st.session_state.get("aqua_gold_target") not in gold_ids:
+            st.session_state["aqua_gold_target"] = gold_ids[0]
+        discovered = st.session_state.get("aqua_fish_discovered", {})
+
+        def _gold_label(fid):
+            f = FISH_BY_ID[fid]
+            area_text = "・".join(FISHING_AREAS[a]["name"] for a in f.get("areas", []) if a in FISHING_AREAS)
+            if GOLD_ROD_SHOW_UNMET_NAMES or fid in discovered:
+                return f"{f['emoji']} {f['name']}　{'☆' * int(f['stars'])}　（{area_text}）"
+            return f"❓ ？？？　{'☆' * int(f['stars'])}　（{area_text}）"
+
+        gold_target = st.selectbox("🌟 釣りたい魚をえらぶ（必ず釣れるよ！）", gold_ids, key="aqua_gold_target",
+                                   format_func=_gold_label)
+
+    if st.button("🎣 釣りスタート！", type="primary", use_container_width=True, key="aqua_fishing_start"):
+        species = fishing_pick_fish(area_key, spot_key, rod_key, gold_target)
+        st.session_state.aqua_fishing = fishing_new_state(area_key, spot_key, rod_key, species)
+        st.rerun()
+
+
+def _render_fishing_hit(state):
+    st.markdown(render_fishing_map_svg(state["area"], state["spot"]), unsafe_allow_html=True)
+    area = FISHING_AREAS[state["area"]]
+    rod = FISHING_RODS[state["rod"]]
+    st.caption(f"{rod['emoji']} {rod['name']}　📍 {area['name']}の {state['spot']}地点（{area['spots'][state['spot']]}）")
+    st.markdown("### 🫧 ウキがぴくぴく動いた…！")
+    st.write("何かがかかったみたい！ タイミングを合わせて「あわせる！」を押そう🎣")
+    col_hit, col_back = st.columns([3, 1])
+    with col_hit:
+        if st.button("🎣 あわせる！", type="primary", use_container_width=True, key="aqua_fishing_hit"):
+            state["phase"] = "fight"
+            state["log"] = ["⚡ ヒット！ 大物の予感…！ 魚とのやりとりが始まったよ！"]
+            st.rerun()
+    with col_back:
+        if st.button("↩️ やめる", use_container_width=True, key="aqua_fishing_cancel_hit"):
+            st.session_state.aqua_fishing = None
+            st.rerun()
+
+
+def _render_fishing_fight(state):
+    st.markdown(render_fishing_map_svg(state["area"], state["spot"]), unsafe_allow_html=True)
+    rod = FISHING_RODS[state["rod"]]
+    mood = FISHING_MOODS[state["mood"]]
+    with st.container(border=True):
+        st.markdown(f"### {mood['text']}")
+        pulled = 1 - state["stamina"] / state["max"]
+        st.progress(max(0.0, min(1.0, pulled)), text=f"🎣 引き寄せ {round(pulled * 100)}%")
+        tension = "🟥" * state["tension"] + "⬜" * (FISHING_TENSION_MAX - state["tension"])
+        st.write(f"🧵 糸のぴんぴん度：{tension}　　🔥 連続：{state['combo']}回")
+        st.caption(f"{rod['emoji']} {rod['name']}")
+    for line in state.get("log", []):
+        st.write(line)
+    st.caption("💡 暴れているときは『ゆるめる』／ 引っ張っているときは『こらえる』／ 疲れているときは『巻く』がぴったり！"
+               "　まちがえても魚は逃げないから、ゆっくり楽しもう。")
+    cols = st.columns(3)
+    for col, (move_key, label) in zip(cols, FISHING_MOVES.items()):
+        with col:
+            if st.button(label, use_container_width=True, key=f"aqua_fishing_move_{move_key}"):
+                fishing_do_move(move_key)
+                st.rerun()
+    if st.button("↩️ 釣りをやめる（竿は減らないよ）", key="aqua_fishing_cancel_fight"):
+        st.session_state.aqua_fishing = None
+        st.rerun()
+
+
+def _render_fishing_caught(state):
+    species = FISH_BY_ID.get(state["fish_id"])
+    if species is None:
+        st.session_state.aqua_pending_catch = None
+        st.session_state.aqua_fishing = None
+        st.rerun()
+        return
+    stars = int(species["stars"])
+    if not state.get("sound_done"):
+        play_aqua_gacha_sound(stars, delay=0)
+        if stars >= 4:
+            st.balloons()
+        state["sound_done"] = True
+    st.markdown(f'<div style="text-align:center; font-size:84px; line-height:1.1;">{species["emoji"]}</div>',
+                unsafe_allow_html=True)
+    st.markdown(f"## 🎉 {species['name']}が釣れた！　{'☆' * stars}")
+    if state.get("was_new"):
+        st.success("📖 魚図鑑に新しく載ったよ！ おめでとう！")
+    else:
+        st.info("📖 魚図鑑に載っている魚だよ。")
+    owned = sum(1 for f in st.session_state.aqua_fish if f.get("id") == species["id"])
+    release_coins = AQUA_RELEASE_COINS.get(stars, 1)
+    st.write("この魚をどうする？")
+    col_keep, col_release = st.columns(2)
+    with col_keep:
+        if st.button("🐠 育てる（水槽の仲間にする）", type="primary", use_container_width=True,
+                     disabled=owned >= 5, key="aqua_fishing_keep"):
+            obtain_aqua_fish(species, register=False)
+            sync_aqua_tank_history()
+            fishing_close(f"🐠 {species['emoji']} {species['name']}が水槽の仲間になったよ！ 「📖 魚図鑑」で名前をつけられるよ。")
+    with col_release:
+        if st.button(f"🌊 リリースする（🪙+{release_coins}）", use_container_width=True, key="aqua_fishing_release"):
+            st.session_state.fish_coins += release_coins
+            fishing_close(f"🌊 {species['emoji']} {species['name']}を自然に帰したよ。ありがとう！　🪙 おさかなコイン +{release_coins}")
+    if owned >= 5:
+        st.caption("この種類はすでに5匹いるので、リリースしておさかなコインにしよう！")
+    else:
+        st.caption(f"リリースすると 🪙{release_coins} おさかなコインがもらえるよ（図鑑にはそのまま残ります）。")
+
+
+def render_aqua_fishing_tab():
+    st.subheader("🎣 釣り")
+    state = st.session_state.get("aqua_fishing")
+    pending = st.session_state.get("aqua_pending_catch")
+    if state is None and pending:
+        # 釣り上げたあと、育てる／リリースを選ぶ前に画面を閉じてしまった場合の復元
+        state = {"phase": "caught", "fish_id": pending["id"], "rod": pending.get("rod", "handmade"),
+                 "was_new": bool(pending.get("was_new")), "area": pending.get("area", "river"),
+                 "spot": pending.get("spot", "A")}
+        st.session_state.aqua_fishing = state
+    if state is None:
+        _render_fishing_select()
+    elif state["phase"] == "hit":
+        _render_fishing_hit(state)
+    elif state["phase"] == "fight":
+        _render_fishing_fight(state)
+    else:
+        _render_fishing_caught(state)
+
+
 def get_fish_stars(fish: dict) -> int:
     """旧データのN/R/SRも星に移行し、既存の魚を失わない。"""
     if "stars" in fish:
@@ -207,6 +683,8 @@ def normalize_aqua_fish():
         fish.setdefault("default_name", f"{fish.get('name', '魚')}{fish_letter(ordinal)}")
         fish.setdefault("custom_name", "")
         fish.setdefault("display", True)
+        # 以前から飼っている魚も図鑑に載せる
+        st.session_state.setdefault("aqua_fish_discovered", {}).setdefault(fish.get("id", fish.get("name", "unknown")), 1)
 
 
 def normalize_aqua_decorations():
@@ -231,8 +709,10 @@ def fish_letter(number: int) -> str:
     return result
 
 
-def obtain_aqua_fish(species: dict) -> tuple[bool, int]:
-    """同種5匹まで。超過時は星数ぶん豪華度に変換。"""
+def obtain_aqua_fish(species: dict, register: bool = True) -> tuple[bool, int]:
+    """同種5匹まで。超過時は星数ぶん豪華度に変換。（register=Falseは、釣りで図鑑に載せ済みのとき）"""
+    if register:
+        register_fish_discovered(species["id"])
     owned = sum(f.get("id") == species["id"] for f in st.session_state.aqua_fish)
     if owned >= 5:
         bonus = species["stars"]
@@ -458,6 +938,15 @@ with open(DINO_SHOP_DATA_PATH, "r", encoding="utf-8") as f:
 DINO_GACHA_COST_POINTS = 5              # 恐竜ガチャ1回に必要なIPPOポイント
 DINO_GACHA_RATES = {1: 40, 2: 30, 3: 18, 4: 9, 5: 3}   # ★ごとの出やすさ
 DINO_GACHA_DUP_EXP_PER_STAR = 10       # すでに仲間の恐竜が出たとき、★1つにつきもらえる経験値
+
+# ---------- 🪙 恐竜コイン（恐竜レースの中だけで使うゲーム内通貨。お菓子コイン・おさかなコインとは別もの） ----------
+# ・恐竜ショップは「恐竜コイン」だけで買えます。恐竜ガチャは「恐竜コイン」でも「IPPOポイント」でもOK。
+# ・サイコロを振るときだけは、これまで通りIPPOポイントを使います。
+DINO_COIN_START = 30                   # はじめにもらえる恐竜コイン
+DINO_COIN_GOAL_PER_KM = 6              # ゴール（完走）で、コースの距離1kmにつきもらえる恐竜コイン（5km→30枚）
+DINO_COIN_BATTLE_WIN = 5               # 力試しに勝ったとき
+DINO_COIN_BATTLE_LOSE = 1              # 力試しに負けたとき（挑戦ごほうび）
+DINO_GACHA_COST_COINS = 20             # 恐竜ガチャ1回（恐竜コイン）。ポイントは DINO_GACHA_COST_POINTS
 
 # ---------- 固有技（バトル）の種類。dino.json の "special" で指定する ----------
 # （書いていない恐竜は、下の初期設定を使う。新しい種類を増やすときは dino_special_effect に1つ足す）
@@ -836,12 +1325,25 @@ def render_dino_board(course_key: str, pos: int, token: str) -> str:
     )
 
 
+def add_dino_coins(amount: int, reason: str = "", silent: bool = False) -> str:
+    """恐竜コインを増やす。silent=Falseなら画面メッセージにも出す。表示用の文章を返す。"""
+    amount = int(amount)
+    if amount <= 0:
+        return ""
+    st.session_state.dino_coins = int(st.session_state.get("dino_coins", 0)) + amount
+    text = f"🪙 {reason}恐竜コイン +{amount}！"
+    if not silent:
+        add_dino_message(text)
+    return text
+
+
 def finish_dino_race(course_key: str):
     race = get_dino_race(course_key)
     if race["finished"]:
         return
     race["finished"] = True
     race["laps"] += 1
+    add_dino_coins(int(DINO_COURSES[course_key]["distance_km"]) * DINO_COIN_GOAL_PER_KM, "完走ごほうび！ ")
     st.session_state.course_complete_log.append({
         "date": get_now_jst().strftime("%Y/%m/%d %H:%M"),
         "course": DINO_COURSES[course_key]["name"],
@@ -1053,13 +1555,12 @@ def dino_gacha_pool() -> list:
     return [(key, info) for key, info in DINO_SPECIES.items() if int(info.get("stars", 0)) > 0]
 
 
-def dino_gacha_spin() -> bool:
-    """恐竜ガチャを1回回す。IPPOポイントを使い、結果を dino_gacha_result に入れる。回せなければFalse。
+def dino_gacha_spin(method: str = "coin") -> bool:
+    """恐竜ガチャを1回回す。恐竜コイン（method="coin"）かIPPOポイント（"point"）を使い、結果を dino_gacha_result に入れる。回せなければFalse。
     すでに仲間の恐竜が出たときは、★の数に応じた経験値がその恐竜に入る。"""
     pool = dino_gacha_pool()
-    if not pool or st.session_state.ippo_points < DINO_GACHA_COST_POINTS:
+    if not pool or not pay_with(method, "dino_coins", DINO_GACHA_COST_COINS, DINO_GACHA_COST_POINTS):
         return False
-    st.session_state.ippo_points -= DINO_GACHA_COST_POINTS
     star_list = sorted({int(info["stars"]) for _, info in pool})
     weights = [max(0.0, float(DINO_GACHA_RATES.get(s, 0))) for s in star_list]
     if sum(weights) <= 0:
@@ -1263,6 +1764,7 @@ def resolve_dino_battle_turn(partner: dict, action: str):
             else:
                 st.session_state.dino_special_dice = int(st.session_state.get("dino_special_dice", 0)) + 1
                 log.append("🌟 戦利品：スペシャルダイスを1個手に入れた！")
+            log.append(add_dino_coins(DINO_COIN_BATTLE_WIN, "", silent=True))
             log_dino_event(f"⚔️ {pname}が野良の{ename}との力試しに勝利！")
         queue_dino_sound("achieve")
     elif battle["player_hp"] <= 0:
@@ -1272,6 +1774,7 @@ def resolve_dino_battle_turn(partner: dict, action: str):
         else:
             log.append(f"😵 {pname}はたおれてしまった… でも挑戦はすごいこと！ 経験値 +{DINO_BATTLE_LOSE_EXP}")
             add_dino_exp(partner, DINO_BATTLE_LOSE_EXP)
+            log.append(add_dino_coins(DINO_COIN_BATTLE_LOSE, "挑戦ごほうび！ ", silent=True))
             if battle.get("ambush"):   # いきなりバトルに負けたら、出た目のぶん後戻り
                 lose_race = get_dino_race(battle["course_key"])
                 old_pos = lose_race["pos"]
@@ -1341,6 +1844,7 @@ CANDY_INVITE_TICKET_PRICE = 50   # 特別招待チケット1枚の値段（お�
 
 CANDY_HINT_COST = 5
 CANDY_GACHA_COST_COINS = 20   # お菓子ガチャ1回に必要なお菓子コイン
+CANDY_GACHA_COST_POINTS = 5   # お菓子ガチャは、お菓子コインの代わりにIPPOポイントでも回せる
 CANDY_GACHA_DEFAULT_RATES = {1: 40, 2: 30, 3: 18, 4: 9, 5: 3}   # ★ごとの出やすさ（JSONのgacha_ratesで調整できる）
 
 
@@ -1917,12 +2421,11 @@ def candy_gacha_give_materials(stars: int) -> dict:
     return gained
 
 
-def candy_gacha_spin():
-    """ガチャを1回回す。コインを使い、結果を candy_gacha_result に入れる。回せなければFalse。"""
+def candy_gacha_spin(method: str = "coin"):
+    """ガチャを1回回す。お菓子コイン（method="coin"）かIPPOポイント（"point"）を使い、結果を candy_gacha_result に入れる。回せなければFalse。"""
     pool = candy_gacha_pool()
-    if not pool or st.session_state.candy_coins < CANDY_GACHA_COST_COINS:
+    if not pool or not pay_with(method, "candy_coins", CANDY_GACHA_COST_COINS, CANDY_GACHA_COST_POINTS):
         return False
-    st.session_state.candy_coins -= CANDY_GACHA_COST_COINS
 
     rates = candy_gacha_rates()
     star_list = sorted({int(c["stars"]) for c in pool})
@@ -1951,10 +2454,12 @@ def candy_gacha_spin():
 def render_candy_gacha_tab():
     """お菓子ガチャの画面。"""
     st.subheader("🎰 お菓子ガチャ")
-    st.write(f"1回 **🪙{CANDY_GACHA_COST_COINS}**。瓶の注文で使えるお菓子が出るよ！")
+    st.write(f"1回 **🪙{CANDY_GACHA_COST_COINS} お菓子コイン** または **💎{CANDY_GACHA_COST_POINTS} IPPOポイント**。瓶の注文で使えるお菓子が出るよ！")
     st.caption(f"当たったお菓子は「瓶の注文」の瓶に、1個につき {CANDY_SHOP_EXTRA_COST_POINTS} IPPOポイントで入れられます。"
                "すでに持っているお菓子が出たときは、持っている材料からプレゼントがもらえるよ🎁")
-    st.metric("🪙 お菓子コイン", st.session_state.candy_coins)
+    _cm1, _cm2 = st.columns(2)
+    _cm1.metric("🪙 お菓子コイン", st.session_state.candy_coins)
+    _cm2.metric("💎 IPPOポイント", st.session_state.ippo_points)
 
     # 直前のガチャ結果は、画面更新後にここで表示・効果音を鳴らす（効果音は1回だけ）
     result = st.session_state.pop("candy_gacha_result", None)
@@ -1980,12 +2485,20 @@ def render_candy_gacha_tab():
     pool = candy_gacha_pool()
     if not pool:
         st.info("🚧 ガチャのお菓子は準備中です！（candy_jar_orders.json の candy_catalog にガチャのお菓子を入れると遊べます）")
-    elif st.button(f"🎰 ガチャを回す（🪙{CANDY_GACHA_COST_COINS}）", type="primary", use_container_width=True,
-                   disabled=st.session_state.candy_coins < CANDY_GACHA_COST_COINS, key="candy_gacha_spin_button"):
-        if candy_gacha_spin():
-            st.rerun()
-    if pool and st.session_state.candy_coins < CANDY_GACHA_COST_COINS:
-        st.caption("コインがたまったら回せるよ🪙 スイーツを売ったり、瓶を渡したりして集めよう！")
+    else:
+        _cgc, _cgp = st.columns(2)
+        with _cgc:
+            if st.button(f"🪙 {CANDY_GACHA_COST_COINS}コインで回す", type="primary", use_container_width=True,
+                         disabled=st.session_state.candy_coins < CANDY_GACHA_COST_COINS, key="candy_gacha_spin_coin"):
+                if candy_gacha_spin("coin"):
+                    st.rerun()
+        with _cgp:
+            if st.button(f"💎 {CANDY_GACHA_COST_POINTS}ポイントで回す", type="primary", use_container_width=True,
+                         disabled=st.session_state.ippo_points < CANDY_GACHA_COST_POINTS, key="candy_gacha_spin_point"):
+                if candy_gacha_spin("point"):
+                    st.rerun()
+        if st.session_state.candy_coins < CANDY_GACHA_COST_COINS and st.session_state.ippo_points < CANDY_GACHA_COST_POINTS:
+            st.caption("コイン（スイーツを売ったり、瓶を渡したりして集めよう🪙）か、IPPOポイントが貯まったら回せるよ！")
 
     st.write("---")
     got_count = sum(1 for c in pool if candy_gacha_owned(c["id"]))
@@ -2498,6 +3011,11 @@ PERSISTENT_KEYS = [
     "aqua_duplicate_bonus",
     "aqua_goal_log",
     "aqua_tank_history",
+    "fish_coins",
+    "aqua_rods",
+    "aqua_fish_discovered",
+    "aqua_pending_catch",
+    "dino_coins",
     "dino_owned",
     "dino_partner",
     "dino_food",
@@ -2559,6 +3077,11 @@ PERSISTENT_DEFAULTS = {
     "aqua_duplicate_bonus": 0,
     "aqua_goal_log": [],
     "aqua_tank_history": None,
+    "fish_coins": AQUA_START_COINS,      # おさかなコイン（水族館専用）
+    "aqua_rods": {"copper": 0, "silver": 0, "gold": 0},   # 使いきりの釣り竿の所持数
+    "aqua_fish_discovered": {},          # 魚図鑑：手に入れた魚 {魚のid: 回数}
+    "aqua_pending_catch": None,          # 釣り上げたまま「育てる／リリース」を選んでいない魚
+    "dino_coins": DINO_COIN_START,       # 恐竜コイン（恐竜レース専用）
     "dino_owned": [],
     "dino_partner": None,
     "dino_food": {"meat": 0, "feast": 0},
@@ -4053,6 +4576,9 @@ if "aqua_goal_log" not in st.session_state:
     st.session_state.aqua_goal_log = []
 if "aqua_tank_history" not in st.session_state:
     st.session_state.aqua_tank_history = None
+for _coin_key in ("fish_coins", "aqua_rods", "aqua_fish_discovered", "aqua_pending_catch", "dino_coins"):
+    if _coin_key not in st.session_state:
+        st.session_state[_coin_key] = copy.deepcopy(PERSISTENT_DEFAULTS[_coin_key])
 if "dino_owned" not in st.session_state:
     st.session_state.dino_owned = []
 if "dino_partner" not in st.session_state:
@@ -5167,9 +5693,11 @@ elif st.session_state.page in [
         st.caption("🌊 展示水槽（魚一覧で展示・非展示を切り替えられます）")
         st.markdown(render_aquarium_tank(), unsafe_allow_html=True)
 
-        stat1, stat2, stat3 = st.columns(3)
+        stat1, stat1b, stat2, stat3 = st.columns(4)
         with stat1:
             st.metric("💎 IPPOポイント", st.session_state.ippo_points)
+        with stat1b:
+            st.metric("🪙 おさかなコイン", st.session_state.fish_coins)
         with stat2:
             st.metric("🐟 飼っている魚", len(st.session_state.aqua_fish))
         with stat3:
@@ -5253,7 +5781,8 @@ elif st.session_state.page in [
         # ===== 🛍️ ショップ（魚・餌・飾りを1つにまとめた）=====
         if _aqua_tab == "🛍️ ショップ":
             st.subheader("🛍️ ショップ")
-            _aqua_shop_sub = stage_tab_selector(["🐟 魚", "🍚 餌", "🪸 飾り"], "aqua_shop_sub_tab")
+            _aqua_shop_sub = stage_tab_selector(["🐟 魚", "🍚 餌", "🪸 飾り", "🎣 釣り竿"], "aqua_shop_sub_tab")
+            st.caption(f"ショップはおさかなコインで買えるよ。いまのおさかなコイン：🪙 {st.session_state.fish_coins}　（釣った魚をリリースすると増えるよ！）")
 
             if _aqua_shop_sub == "🐟 魚":
                 st.markdown("#### 🐟 ショップ限定の魚")
@@ -5261,10 +5790,10 @@ elif st.session_state.page in [
                 for idx, fish_data in enumerate(AQUA_SHOP_FISH):
                     with shop_cols[idx % 2]:
                         st.markdown(f"### {fish_data['emoji']} {fish_data['name']}　{'☆' * fish_data['stars']}")
-                        st.write(f"💎 {fish_data['price']} IPPOポイント")
+                        st.write(f"🪙 {fish_data['price']} おさかなコイン")
                         if st.button("購入する", key=f"buy_shop_fish_{fish_data['id']}", use_container_width=True):
-                            if st.session_state.ippo_points >= fish_data["price"]:
-                                st.session_state.ippo_points -= fish_data["price"]
+                            if st.session_state.fish_coins >= fish_data["price"]:
+                                st.session_state.fish_coins -= fish_data["price"]
                                 obtained, bonus = obtain_aqua_fish(fish_data)
                                 sync_aqua_tank_history()
                                 save_progress()
@@ -5274,7 +5803,7 @@ elif st.session_state.page in [
                                     st.success(f"同じ種類は5匹まで！ 豪華度 +{bonus} に変換しました。")
                                 st.rerun()
                             else:
-                                st.warning("IPPOポイントが足りません！")
+                                st.warning("おさかなコインが足りません！")
 
             if _aqua_shop_sub == "🍚 餌":
                 st.markdown("#### 🍚 魚を育てる餌")
@@ -5283,22 +5812,22 @@ elif st.session_state.page in [
                     with food_cols[idx]:
                         st.markdown(f"### {food['emoji']} {food['name']}")
                         if food_key == "bundle":
-                            st.write(f"展示水槽の魚全員に1回ずつ ／ {food['price']} IPPOポイント")
+                            st.write(f"展示水槽の魚全員に1回ずつ ／ {food['price']} おさかなコイン")
                         elif food_key == "grand_bundle":
-                            st.write(f"所持している魚全員（非展示も含む）に1回ずつ ／ {food['price']} IPPOポイント")
+                            st.write(f"所持している魚全員（非展示も含む）に1回ずつ ／ {food['price']} おさかなコイン")
                             st.write(f"1匹につき **+{food['feed_points']}成長ポイント**（魚が多いほどお得！）")
                         else:
-                            st.write(f"{food['pack']}回分 ／ {food['price']} IPPOポイント")
+                            st.write(f"{food['pack']}回分 ／ {food['price']} おさかなコイン")
                             st.write(f"1回の餌やりで **+{food['feed_points']}成長ポイント**")
                         if st.button("購入する", key=f"buy_food_{food_key}", use_container_width=True):
-                            if st.session_state.ippo_points >= food["price"]:
-                                st.session_state.ippo_points -= food["price"]
+                            if st.session_state.fish_coins >= food["price"]:
+                                st.session_state.fish_coins -= food["price"]
                                 st.session_state.aqua_food_inventory[food_key] = st.session_state.aqua_food_inventory.get(food_key, 0) + food["pack"]
                                 save_progress()
                                 st.success(f"{food['name']}を{food['pack']}回分購入しました！")
                                 st.rerun()
                             else:
-                                st.warning("IPPOポイントが足りません！")
+                                st.warning("おさかなコインが足りません！")
                 st.write(f"通常餌：{st.session_state.aqua_food_inventory.get('normal', 0)}回　／　高級餌：{st.session_state.aqua_food_inventory.get('premium', 0)}回　／　みんなの餌の塊：{st.session_state.aqua_food_inventory.get('bundle', 0)}個　／　全体の餌の塊：{st.session_state.aqua_food_inventory.get('grand_bundle', 0)}個")
 
             if _aqua_shop_sub == "🪸 飾り":
@@ -5307,43 +5836,79 @@ elif st.session_state.page in [
                 for idx, decor in enumerate(AQUA_DECORATIONS):
                     with decor_cols[idx % 2]:
                         st.markdown(f"### {decor['emoji']} {decor['name']}")
-                        st.write(f"{decor['price']} IPPOポイント ／ 豪華度 +{decor['score']}")
+                        st.write(f"{decor['price']} おさかなコイン ／ 豪華度 +{decor['score']}")
                         if st.button("飾る", key=f"buy_decor_{decor['id']}", use_container_width=True):
-                            if st.session_state.ippo_points >= decor["price"]:
-                                st.session_state.ippo_points -= decor["price"]
+                            if st.session_state.fish_coins >= decor["price"]:
+                                st.session_state.fish_coins -= decor["price"]
                                 st.session_state.aqua_decorations.append({"id": decor["id"], "name": decor["name"], "emoji": decor["emoji"], "score": decor["score"], "display": True})
                                 sync_aqua_tank_history()
                                 save_progress()
                                 st.success(f"{decor['emoji']} {decor['name']}を水槽に置きました！")
                                 st.rerun()
                             else:
-                                st.warning("IPPOポイントが足りません！")
+                                st.warning("おさかなコインが足りません！")
+
+            if _aqua_shop_sub == "🎣 釣り竿":
+                st.markdown("#### 🎣 釣り竿（使いきり）")
+                st.caption("手作り釣り竿は、はじめから持っていて何度でも使えるよ。ほかの竿は1回釣ったら使いきりです。")
+                rod_cols = st.columns(3)
+                for idx, rod_key in enumerate(("copper", "silver", "gold")):
+                    rod = FISHING_RODS[rod_key]
+                    with rod_cols[idx]:
+                        st.markdown(f"### {rod['emoji']} {rod['name']}")
+                        st.write(f"🪙 {rod['price']} おさかなコイン")
+                        st.caption(rod["desc"])
+                        st.caption(f"出やすさ：{fishing_rod_rate_text(rod_key)}")
+                        st.caption(f"持っている数：{int(st.session_state.aqua_rods.get(rod_key, 0))}本")
+                        if st.button("購入する", key=f"buy_rod_{rod_key}", use_container_width=True):
+                            if st.session_state.fish_coins >= rod["price"]:
+                                st.session_state.fish_coins -= rod["price"]
+                                st.session_state.aqua_rods[rod_key] = int(st.session_state.aqua_rods.get(rod_key, 0)) + 1
+                                save_progress()
+                                st.success(f"{rod['emoji']} {rod['name']}を買いました！ 「🎣 釣り」で使えるよ。")
+                                st.rerun()
+                            else:
+                                st.warning("おさかなコインが足りません！")
 
         # ===== 🎰 ガチャ（魚ガチャ・飾りガチャは別のガチャ。同じページに並べる）=====
         if _aqua_tab == "🎰 ガチャ":
             st.subheader("🎰 ガチャ")
             st.markdown("#### 🎁 ガチャ限定の魚")
-            st.write("1回 **5 IPPOポイント**。ショップにはいない魚が出ます！")
-            if st.button("🎁 5 IPPOポイントでガチャを回す！", type="primary", use_container_width=True, key="aqua_gacha"):
-                if st.session_state.ippo_points >= 5:
-                    st.session_state.ippo_points -= 5
+            st.write(f"1回 **🪙{AQUA_GACHA_COST_COINS} おさかなコイン** または **💎{AQUA_GACHA_COST_POINTS} IPPOポイント**。ショップにはいない魚が出ます！")
+            st.caption(f"いまのおさかなコイン：🪙 {st.session_state.fish_coins}　／　IPPOポイント：💎 {st.session_state.ippo_points}")
+            fish_gacha_result = st.session_state.pop("aqua_fish_gacha_result", None)
+            if fish_gacha_result:
+                play_aqua_gacha_sound(fish_gacha_result["stars"], delay=0)
+                if fish_gacha_result["obtained"]:
+                    st.success(f"🎉 {'☆' * fish_gacha_result['stars']}！ {fish_gacha_result['emoji']} {fish_gacha_result['name']}が出ました！")
+                else:
+                    st.success(f"🎉 {fish_gacha_result['name']}は5匹所持済み！ 豪華度 +{fish_gacha_result['bonus']} に変換しました。")
+            _fg_coin_col, _fg_point_col = st.columns(2)
+            _fish_gacha_method = None
+            with _fg_coin_col:
+                if st.button(f"🪙 {AQUA_GACHA_COST_COINS}コインで回す！", type="primary", use_container_width=True,
+                             disabled=st.session_state.fish_coins < AQUA_GACHA_COST_COINS, key="aqua_gacha_coin"):
+                    _fish_gacha_method = "coin"
+            with _fg_point_col:
+                if st.button(f"💎 {AQUA_GACHA_COST_POINTS}ポイントで回す！", type="primary", use_container_width=True,
+                             disabled=st.session_state.ippo_points < AQUA_GACHA_COST_POINTS, key="aqua_gacha_point"):
+                    _fish_gacha_method = "point"
+            if _fish_gacha_method:
+                if pay_with(_fish_gacha_method, "fish_coins", AQUA_GACHA_COST_COINS, AQUA_GACHA_COST_POINTS):
                     got = random.choices(AQUA_GACHA_FISH, weights=[f["weight"] for f in AQUA_GACHA_FISH], k=1)[0]
-                    play_aqua_gacha_sound(get_fish_stars(got), delay=0)
                     obtained, bonus = obtain_aqua_fish(got)
+                    st.session_state.aqua_fish_gacha_result = {"stars": get_fish_stars(got), "emoji": got["emoji"],
+                                                              "name": got["name"], "obtained": obtained, "bonus": bonus}
                     sync_aqua_tank_history()
                     save_progress()
-                    if obtained:
-                        st.success(f"🎉 {'☆' * got['stars']}！ {got['emoji']} {got['name']}が出ました！")
-                    else:
-                        st.success(f"🎉 {got['name']}は5匹所持済み！ 豪華度 +{bonus} に変換しました。")
                     st.rerun()
                 else:
-                    st.warning("IPPOポイントが足りません！")
-            st.caption("ガチャとショップでは魚の種類を分けています。")
+                    st.warning("コイン（またはIPPOポイント）が足りません！")
+            st.caption("ガチャとショップでは魚の種類を分けています。釣り限定の魚もいるよ🎣")
 
             st.write("---")
             st.markdown("#### 🎰 ガチャ限定の飾り")
-            st.write(f"1回 **{AQUA_DECOR_GACHA_PRICE} IPPOポイント**。水槽ショップにはない飾りが出ます！")
+            st.write(f"1回 **🪙{AQUA_DECOR_GACHA_COST_COINS} おさかなコイン** または **💎{AQUA_DECOR_GACHA_PRICE} IPPOポイント**。水槽ショップにはない飾りが出ます！")
             st.caption("☆の数がそのまま豪華度になります（☆1なら+1、☆3なら+3、☆5なら+5）。")
 
             # 直前のガチャ結果は、画面更新後にここで表示・効果音を鳴らす
@@ -5355,10 +5920,18 @@ elif st.session_state.page in [
             if not AQUA_GACHA_DECORATIONS:
                 st.info("🚧 飾りガチャは準備中です！（data/goods.json にガチャの飾りを入れると遊べます）")
             else:
-                if st.button(f"🎰 {AQUA_DECOR_GACHA_PRICE} IPPOポイントで飾りガチャを回す！", type="primary",
-                             use_container_width=True, key="aqua_decor_gacha"):
-                    if st.session_state.ippo_points >= AQUA_DECOR_GACHA_PRICE:
-                        st.session_state.ippo_points -= AQUA_DECOR_GACHA_PRICE
+                _dg_coin_col, _dg_point_col = st.columns(2)
+                _decor_gacha_method = None
+                with _dg_coin_col:
+                    if st.button(f"🪙 {AQUA_DECOR_GACHA_COST_COINS}コインで飾りガチャ！", type="primary", use_container_width=True,
+                                 disabled=st.session_state.fish_coins < AQUA_DECOR_GACHA_COST_COINS, key="aqua_decor_gacha_coin"):
+                        _decor_gacha_method = "coin"
+                with _dg_point_col:
+                    if st.button(f"💎 {AQUA_DECOR_GACHA_PRICE}ポイントで飾りガチャ！", type="primary", use_container_width=True,
+                                 disabled=st.session_state.ippo_points < AQUA_DECOR_GACHA_PRICE, key="aqua_decor_gacha_point"):
+                        _decor_gacha_method = "point"
+                if _decor_gacha_method:
+                    if pay_with(_decor_gacha_method, "fish_coins", AQUA_DECOR_GACHA_COST_COINS, AQUA_DECOR_GACHA_PRICE):
                         got = random.choices(AQUA_GACHA_DECORATIONS,
                                              weights=[g["weight"] for g in AQUA_GACHA_DECORATIONS], k=1)[0]
                         st.session_state.aqua_decorations.append({
@@ -5370,13 +5943,12 @@ elif st.session_state.page in [
                         save_progress()
                         st.rerun()
                     else:
-                        st.warning("IPPOポイントが足りません！")
+                        st.warning("コイン（またはIPPOポイント）が足りません！")
             st.caption("ガチャで出た飾りは、そのまま水槽に飾られます。「📦 持っている飾り・餌」で展示のON/OFFができます。")
 
-        # ===== 🎣 釣り（準備中）=====
+        # ===== 🎣 釣り =====
         if _aqua_tab == "🎣 釣り":
-            st.subheader("🎣 釣り")
-            st.info("🚧 釣りは準備中です！もう少し待っててね🎣✨")
+            render_aqua_fishing_tab()
 
         # ===== 🌱 育成（餌やり）=====
         if _aqua_tab == "🌱 育成":
@@ -5537,14 +6109,15 @@ elif st.session_state.page in [
         if _aqua_tab == "📖 魚図鑑":
             st.subheader("📖 魚図鑑")
             fish_list = st.session_state.aqua_fish
+            discovered_fish = st.session_state.get("aqua_fish_discovered", {})
             species_groups = {}
             for i, fish in enumerate(fish_list):
                 species_groups.setdefault(fish.get("id", fish.get("name", "魚")), []).append(i)
             known_ids = {sp["id"] for sp in ALL_FISH}
-            met_count = sum(1 for sid in species_groups if sid in known_ids)
+            met_count = sum(1 for sid in known_ids if sid in species_groups or sid in discovered_fish)
             shown_fish = sum(1 for f in fish_list if f.get("display", True))
             st.write(f"出会った魚：**{met_count} / {len(ALL_FISH)} 種類**　／　飼っている魚：**{len(fish_list)}匹**（展示中 {shown_fish}匹 ／ 非展示 {len(fish_list) - shown_fish}匹）")
-            st.caption("魚の種類を開くと、1匹ずつ名前・展示設定を変更できます。まだ出会っていない魚は「？？？」で表示されます。")
+            st.caption("魚の種類を開くと、1匹ずつ名前・展示設定を変更できます。まだ出会っていない魚は「？？？」と、入手のヒントが出ます。")
 
             def _render_owned_species(indices):
                 first = fish_list[indices[0]]
@@ -5562,13 +6135,22 @@ elif st.session_state.page in [
                             fish["custom_name"] = new_name.strip()
                             fish["display"] = show
                             save_progress()
+                    species_data = FISH_BY_ID.get(first.get("id"))
+                    if species_data:
+                        st.caption(f"📌 入手方法：{'　／　'.join(fish_obtain_methods(species_data))}")
                     st.caption("この種類は最大5匹まで所持できます。")
 
             for species in ALL_FISH:
+                star_text = "☆" * int(species.get("stars", 1))
                 if species["id"] in species_groups:
                     _render_owned_species(species_groups[species["id"]])
+                elif species["id"] in discovered_fish:
+                    st.markdown(f"✅ {species['emoji']} **{species['name']}**　{star_text}　"
+                                f"（今は飼っていません／手に入れた回数 {int(discovered_fish[species['id']])}回）")
+                    st.caption(f"📌 入手方法：{'　／　'.join(fish_obtain_methods(species))}")
                 else:
-                    st.caption(f"❓ ？？？　{'☆' * int(species.get('stars', 1))}　まだ出会っていません")
+                    st.markdown(f"❓ ？？？　{star_text}　まだ出会っていません")
+                    st.caption(f"💡 ヒント：{fish_hint_text(species)}")
             # fish.json にない旧データの魚も、失わないようここに表示する
             for sid, indices in species_groups.items():
                 if sid not in known_ids:
@@ -5612,9 +6194,11 @@ elif st.session_state.page in [
         st.caption("サイコロで進むすごろくレース！ 1マス＝100m。戻るマスはないので、安心して進もう🦖")
 
         # ポイント・パートナー表示
-        info1, info2, info3 = st.columns(3)
+        info1, info1b, info2, info3 = st.columns(4)
         with info1:
             st.metric("💎 IPPOポイント", st.session_state.ippo_points)
+        with info1b:
+            st.metric("🪙 恐竜コイン", st.session_state.dino_coins)
         with info2:
             if partner:
                 st.metric("🤝 パートナー", f"{DINO_SPECIES[partner['species']]['emoji']} {dino_display_name(partner)}")
@@ -5813,7 +6397,7 @@ elif st.session_state.page in [
                             roll_dino_dice(course_key, special_dice_value=int(special_value))
                             st.rerun()
                     else:
-                        st.caption("🌟 スペシャルダイスはショップで購入できます（1個5 IPPOポイント）。")
+                        st.caption("🌟 スペシャルダイスはショップで購入できます（1個5 恐竜コイン）。")
                     st.caption(dino_passive_caption(partner["species"], partner_level))
 
         # ---------------- 恐竜たち ----------------
@@ -5862,57 +6446,59 @@ elif st.session_state.page in [
 
         # ---------------- 恐竜ショップ ----------------
         if _dino_main_tab == "🍖 恐竜ショップ":
+            st.caption(f"ショップは恐竜コインで買えるよ。いまの恐竜コイン：🪙 {st.session_state.dino_coins}"
+                       "　（レースを完走したり、力試しに挑戦したりするともらえるよ！）")
             st.markdown("#### 🍖 恐竜のごはん")
             st.caption("餌をあげると経験値がたまって、恐竜のレベルが上がります。レースのマスに進んだり、力試しに勝ったりしても経験値がもらえるよ！")
             food_cols = st.columns(len(DINO_FOOD))
             for food_col, (food_key, food) in zip(food_cols, DINO_FOOD.items()):
                 with food_col:
                     st.markdown(f"### {food['emoji']} {food['name']}")
-                    st.write(f"{food['price']} IPPOポイント ／ 経験値 +{food['exp']}")
+                    st.write(f"{food['price']} 恐竜コイン ／ 経験値 +{food['exp']}")
                     st.caption(f"持っている数：{st.session_state.dino_food.get(food_key, 0)}個")
                     if st.button("購入する", key=f"dino_buy_{food_key}", use_container_width=True):
-                        if st.session_state.ippo_points >= food["price"]:
-                            st.session_state.ippo_points -= food["price"]
+                        if st.session_state.dino_coins >= food["price"]:
+                            st.session_state.dino_coins -= food["price"]
                             st.session_state.dino_food[food_key] = st.session_state.dino_food.get(food_key, 0) + 1
                             save_progress()
                             st.success(f"{food['emoji']} {food['name']}を買いました！")
                             st.rerun()
                         else:
-                            st.warning("IPPOポイントが足りません！")
+                            st.warning("恐竜コインが足りません！")
 
             st.write("---")
             st.markdown("#### 🌟 スペシャルダイス")
-            st.write("**スペシャルダイス** — 5 IPPOポイント ／ 1回だけ、1〜6から好きな目を選べます。")
+            st.write("**スペシャルダイス** — 5 恐竜コイン ／ 1回だけ、1〜6から好きな目を選べます。")
             st.caption(f"所持数：{int(st.session_state.get('dino_special_dice', 0))}個")
-            if st.button("🌟 スペシャルダイスを購入（5 IPPOポイント）", key="dino_buy_special_dice", use_container_width=True):
-                if st.session_state.ippo_points >= 5:
-                    st.session_state.ippo_points -= 5
+            if st.button("🌟 スペシャルダイスを購入（5 恐竜コイン）", key="dino_buy_special_dice", use_container_width=True):
+                if st.session_state.dino_coins >= 5:
+                    st.session_state.dino_coins -= 5
                     st.session_state.dino_special_dice = int(st.session_state.get("dino_special_dice", 0)) + 1
                     save_progress()
                     st.success("スペシャルダイスを1個購入しました！レースで好きな目を選んで使えます。")
                     st.rerun()
                 else:
-                    st.warning("IPPOポイントが足りません！")
+                    st.warning("恐竜コインが足りません！")
 
             st.write("---")
             st.markdown("#### 🏁 コースショップ")
-            st.caption("IPPOポイントで新しいすごろくコースを解放できます。")
+            st.caption("恐竜コインで新しいすごろくコースを解放できます。")
             for course_key in ("survival", "relax"):
                 course_data = DINO_COURSES[course_key]
                 owned_course = course_key in st.session_state.get("dino_unlocked_courses", [])
-                st.markdown(f"**{('🏆' if course_key == 'survival' else '🌸')} {course_data['name']}** — {course_data['price']} IPPOポイント")
+                st.markdown(f"**{('🏆' if course_key == 'survival' else '🌸')} {course_data['name']}** — {course_data['price']} 恐竜コイン")
                 st.caption("バトルマスがたくさん！手ごわいサバイバル。" if course_key == "survival" else "和むイベントマスがたくさんある、のんびりコース。")
                 if owned_course:
                     st.success("購入済み")
-                elif st.button(f"購入する（{course_data['price']} IPPOポイント）", key=f"dino_course_buy_{course_key}", use_container_width=True):
-                    if st.session_state.ippo_points >= course_data["price"]:
-                        st.session_state.ippo_points -= course_data["price"]
+                elif st.button(f"購入する（{course_data['price']} 恐竜コイン）", key=f"dino_course_buy_{course_key}", use_container_width=True):
+                    if st.session_state.dino_coins >= course_data["price"]:
+                        st.session_state.dino_coins -= course_data["price"]
                         st.session_state.setdefault("dino_unlocked_courses", []).append(course_key)
                         save_progress()
                         st.success(f"{course_data['name']}を解放しました！")
                         st.rerun()
                     else:
-                        st.warning("IPPOポイントが足りません！")
+                        st.warning("恐竜コインが足りません！")
 
         # ---------------- 育成（ごはん・木の実・能力アップアイテム） ----------------
         if _dino_main_tab == "🌱 育成":
@@ -6005,8 +6591,8 @@ elif st.session_state.page in [
 
             # --- 能力アップアイテム（ドリンクなど） ---
             if _dino_grow_tab == "🧪 能力アップアイテム":
-                st.caption("拾ったアイテムは無料で使えるよ。IPPOポイントで買って、すぐ使うこともできるよ。"
-                           f"　いまのIPPOポイント：{st.session_state.ippo_points}")
+                st.caption("拾ったアイテムは無料で使えるよ。恐竜コインで買って、すぐ使うこともできるよ。"
+                           f"　いまの恐竜コイン：🪙 {st.session_state.dino_coins}")
                 for item in DINO_SHOP_DATA["stat_items"]:
                     owned_count = int(st.session_state.get("dino_stat_items", {}).get(item["id"], 0))
                     stat_label = DINO_GROWTH_STATS[item["stat"]]["label"]
@@ -6023,9 +6609,9 @@ elif st.session_state.page in [
                                 st.session_state.dino_grow_result = use_dino_stat_item(grow_target, item)
                                 save_progress()
                                 st.rerun()
-                            if st.button(f"買って使う（{item['price']} IPPO）", key=f"dino_grow_item_{item['id']}",
-                                         disabled=st.session_state.ippo_points < item["price"], use_container_width=True):
-                                st.session_state.ippo_points -= item["price"]
+                            if st.button(f"買って使う（🪙{item['price']}）", key=f"dino_grow_item_{item['id']}",
+                                         disabled=st.session_state.dino_coins < item["price"], use_container_width=True):
+                                st.session_state.dino_coins -= item["price"]
                                 st.session_state.dino_grow_result = use_dino_stat_item(grow_target, item)
                                 save_progress()
                                 st.rerun()
@@ -6033,10 +6619,12 @@ elif st.session_state.page in [
         # ---------------- 恐竜ガチャ ----------------
         if _dino_main_tab == "🎰 恐竜ガチャ":
             st.markdown("#### 🎰 恐竜ガチャ")
-            st.write(f"1回 **{DINO_GACHA_COST_POINTS} IPPOポイント**。新しい恐竜の仲間に会えるよ！")
+            st.write(f"1回 **🪙{DINO_GACHA_COST_COINS} 恐竜コイン** または **💎{DINO_GACHA_COST_POINTS} IPPOポイント**。新しい恐竜の仲間に会えるよ！")
             st.caption("出会った恐竜は「🦖 恐竜たち」タブに仲間入りして、パートナーにできるよ。"
                        "すでに仲間の恐竜が出たときは、その恐竜に経験値がもらえるよ🎁")
-            st.metric("💎 IPPOポイント", st.session_state.ippo_points)
+            _gm1, _gm2 = st.columns(2)
+            _gm1.metric("🪙 恐竜コイン", st.session_state.dino_coins)
+            _gm2.metric("💎 IPPOポイント", st.session_state.ippo_points)
 
             gacha_result = st.session_state.pop("dino_gacha_result", None)
             if gacha_result:
@@ -6056,12 +6644,20 @@ elif st.session_state.page in [
             gacha_pool = dino_gacha_pool()
             if not gacha_pool:
                 st.info("🚧 ガチャの恐竜は準備中です！（dino.json に stars 付きの恐竜を入れると遊べます）")
-            elif st.button(f"🎰 ガチャを回す（{DINO_GACHA_COST_POINTS} IPPOポイント）", type="primary", use_container_width=True,
-                           disabled=st.session_state.ippo_points < DINO_GACHA_COST_POINTS, key="dino_gacha_spin_button"):
-                if dino_gacha_spin():
-                    st.rerun()
-            if gacha_pool and st.session_state.ippo_points < DINO_GACHA_COST_POINTS:
-                st.caption("IPPOポイントがたまったら回せるよ💎 目標を達成してためよう！")
+            else:
+                _dgc, _dgp = st.columns(2)
+                with _dgc:
+                    if st.button(f"🪙 {DINO_GACHA_COST_COINS}コインで回す", type="primary", use_container_width=True,
+                                 disabled=st.session_state.dino_coins < DINO_GACHA_COST_COINS, key="dino_gacha_spin_coin"):
+                        if dino_gacha_spin("coin"):
+                            st.rerun()
+                with _dgp:
+                    if st.button(f"💎 {DINO_GACHA_COST_POINTS}ポイントで回す", type="primary", use_container_width=True,
+                                 disabled=st.session_state.ippo_points < DINO_GACHA_COST_POINTS, key="dino_gacha_spin_point"):
+                        if dino_gacha_spin("point"):
+                            st.rerun()
+                if st.session_state.dino_coins < DINO_GACHA_COST_COINS and st.session_state.ippo_points < DINO_GACHA_COST_POINTS:
+                    st.caption("恐竜コイン（レースで集まるよ）か、IPPOポイント（目標を達成してためよう）が貯まったら回せるよ🎰")
 
             st.write("---")
             met = sum(1 for key, _ in gacha_pool if any(d["species"] == key for d in st.session_state.dino_owned))

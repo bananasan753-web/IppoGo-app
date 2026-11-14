@@ -1153,8 +1153,8 @@ DINO_PASSIVE_KIND_LABELS = {"pickup": "🎒 拾う系", "move": "👣 進む系"
 DINO_BERRY_PICKUP_DEFAULT = {"hp": 3, "attack": 3, "speed": 3, "hp_plus": 1, "attack_plus": 1, "speed_plus": 1}
 
 DINO_FOOD = {
-    "meat": {"name": "こんがり肉", "emoji": "🍖", "price": 2, "exp": 3},
-    "feast": {"name": "ごちそう肉", "emoji": "🍗", "price": 5, "exp": 8},
+    "meat": {"name": "こんがり肉", "emoji": "🍖", "price": 5, "exp": 3},
+    "feast": {"name": "ごちそう肉", "emoji": "🍗", "price": 10, "exp": 8},
 }
 
 # 野良恐竜（力試しの相手）

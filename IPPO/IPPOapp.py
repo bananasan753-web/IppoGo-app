@@ -6067,8 +6067,30 @@ elif st.session_state.page in [
         # ===== 🛍️ ショップ（魚・餌・飾りを1つにまとめた）=====
         if _aqua_tab == "🛍️ ショップ":
             st.subheader("🛍️ ショップ")
-            _aqua_shop_sub = stage_tab_selector(["🐟 魚", "🍚 餌", "🪸 飾り", "🎣 釣り竿"], "aqua_shop_sub_tab")
+            _aqua_shop_sub = stage_tab_selector(["🐟 魚", "🍚 餌", "🪸 飾り", "🎣 釣り竿", "💎 ポイント交換"], "aqua_shop_sub_tab")
             st.caption(f"ショップはおさかなコインで買えるよ。いまのおさかなコイン：🪙 {st.session_state.fish_coins}　（釣った魚をリリースすると増えるよ！）")
+
+            if _aqua_shop_sub == "💎 ポイント交換":
+                st.markdown("#### 💎 おさかなコインをIPPOポイントに交換")
+                st.caption("おさかなコイン100枚で、IPPOポイントを1ポイント交換できます。")
+                st.write(f"🪙 おさかなコイン：**{st.session_state.fish_coins}枚**　／　💎 IPPOポイント：**{st.session_state.ippo_points}ポイント**")
+                _fish_exchange_max = int(st.session_state.fish_coins) // 100
+                _fish_exchange_count = st.number_input(
+                    "交換するIPPOポイント数", min_value=1, max_value=max(1, _fish_exchange_max),
+                    value=1, step=1, key="fish_coin_exchange_count",
+                    disabled=_fish_exchange_max < 1,
+                )
+                if st.button("💎 交換する", key="fish_coin_exchange_button",
+                             use_container_width=True, disabled=_fish_exchange_max < 1):
+                    _fish_exchange_coins = int(_fish_exchange_count) * 100
+                    if st.session_state.fish_coins >= _fish_exchange_coins:
+                        st.session_state.fish_coins -= _fish_exchange_coins
+                        st.session_state.ippo_points += int(_fish_exchange_count)
+                        save_progress()
+                        st.success(f"🪙 { _fish_exchange_coins }枚を交換して、💎 IPPOポイントを{int(_fish_exchange_count)}ポイント獲得しました！")
+                        st.rerun()
+                    else:
+                        st.warning("おさかなコインが足りません！")
 
             if _aqua_shop_sub == "🐟 魚":
                 st.markdown("#### 🐟 ショップ限定の魚")
@@ -6807,6 +6829,28 @@ elif st.session_state.page in [
                     st.rerun()
                 else:
                     st.warning("恐竜コイン（またはIPPOポイント）が足りません！")
+
+            st.write("---")
+            st.markdown("#### 💎 恐竜コインをIPPOポイントに交換")
+            st.caption("恐竜コイン100枚で、IPPOポイントを1ポイント交換できます。")
+            st.write(f"🪙 恐竜コイン：**{st.session_state.dino_coins}枚**　／　💎 IPPOポイント：**{st.session_state.ippo_points}ポイント**")
+            _dino_exchange_max = int(st.session_state.dino_coins) // 100
+            _dino_exchange_count = st.number_input(
+                "交換するIPPOポイント数", min_value=1, max_value=max(1, _dino_exchange_max),
+                value=1, step=1, key="dino_coin_exchange_count",
+                disabled=_dino_exchange_max < 1,
+            )
+            if st.button("💎 交換する", key="dino_coin_exchange_button",
+                         use_container_width=True, disabled=_dino_exchange_max < 1):
+                _dino_exchange_coins = int(_dino_exchange_count) * 100
+                if st.session_state.dino_coins >= _dino_exchange_coins:
+                    st.session_state.dino_coins -= _dino_exchange_coins
+                    st.session_state.ippo_points += int(_dino_exchange_count)
+                    save_progress()
+                    st.success(f"🪙 {_dino_exchange_coins}枚を交換して、💎 IPPOポイントを{int(_dino_exchange_count)}ポイント獲得しました！")
+                    st.rerun()
+                else:
+                    st.warning("恐竜コインが足りません！")
 
             st.write("---")
             st.markdown("#### 🏁 コースショップ")

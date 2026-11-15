@@ -58,6 +58,8 @@ st.markdown("""
 # =====================================================
 # 🌐 Supabase 接続設定
 # =====================================================
+
+
 @st.cache_resource
 def init_supabase() -> Client:
     url = st.secrets["SUPABASE_URL"]
@@ -261,6 +263,7 @@ FISHING_MOVES = {
     "reel": "🎣 巻く",
     "loosen": "🤏 ゆるめる",
     "hold": "💪 こらえる",
+    "steady": "🧵 糸を整える",
 }
 
 
@@ -338,6 +341,8 @@ def fishing_pick_fish(area_key: str, spot_key: str, rod_key: str, gold_target=No
 
 
 # ---------------- 釣り場のイラスト（SVG） ----------------
+
+
 def _svg_small_fish(x, y, color, scale=1.0, flip=False):
     sx = -scale if flip else scale
     return (f'<g transform="translate({x},{y}) scale({sx},{scale})" opacity="0.75">'
@@ -524,7 +529,14 @@ def fishing_do_move(move: str):
     mood = state["mood"]
     rod = FISHING_RODS[state["rod"]]
     unbreakable = state["rod"] == "gold"
-    if FISHING_MOODS[mood]["answer"] == move:
+    if move == "steady":
+        # 攻めずに糸の張りを整える。安全になる代わりに連続成功ボーナスは途切れる。
+        state["combo"] = 0
+        state["tension"] = max(0, state["tension"] - 1)
+        state["log"] = ["🧵 糸を整えた！ 魚は引き寄せられないけれど、糸の張りが1段階ゆるんだよ。"]
+        if state["tension"] == 0:
+            state["log"].append("✨ 糸に余裕ができたよ。次の動きを見極めよう！")
+    elif FISHING_MOODS[mood]["answer"] == move:
         state["combo"] += 1
         damage = int(rod["power"]) + (1 if state["combo"] >= FISHING_COMBO_BONUS_AT else 0)
         state["stamina"] = max(0, state["stamina"] - damage)
@@ -680,9 +692,7 @@ def _render_fishing_fight(state):
             st.caption(f"{rod['emoji']} {rod['name']}：🟥が{FISHING_TENSION_MAX}つたまると糸が切れちゃうよ。うまくいくと、張りがゆるむよ。")
     for line in state.get("log", []):
         st.write(line)
-    st.caption("💡 暴れているときは『ゆるめる』／ 引っ張っているときは『こらえる』／ 疲れているときは『巻く』がぴったり！"
-               "　失敗しても大丈夫、挑戦するだけでえらいよ🌟")
-    cols = st.columns(3)
+    cols = st.columns(4)
     for col, (move_key, label) in zip(cols, FISHING_MOVES.items()):
         with col:
             if st.button(label, use_container_width=True, key=f"aqua_fishing_move_{move_key}"):
@@ -929,6 +939,7 @@ def queue_aqua_growth_notification(fish: dict, old_size_mm: float, new_size_mm: 
     for cm in range(first_milestone, last_milestone + 1):
         if old_cm < cm <= new_cm:
             queue.append({"type":"milestone", "name":name, "cm":cm, "emoji":fish.get("emoji","🐟")})
+
 
 def render_aqua_growth_notifications():
     """餌やり欄に魚の成長メッセージを表示し、成長に応じた効果音を鳴らす。"""
@@ -1206,8 +1217,10 @@ def dino_max_hp(dino: dict) -> int:
 def dino_attack(dino: dict) -> int:
     return dino_power_bonus(dino_level(dino)) + int(dino.get("attack_bonus", 0))
 
+
 def dino_speed(dino: dict) -> int:
     return dino_level(dino) + int(dino.get("speed_bonus", 0))
+
 
 def dino_base_dodge_rate(speed: int) -> int:
     """素早さに応じた基本回避率（%）。"""
@@ -1223,12 +1236,14 @@ def dino_base_dodge_rate(speed: int) -> int:
         return 40
     return 50
 
+
 def dino_dodge_rate(defender_speed: int, attacker_speed: int, special: bool = False) -> int:
     """相手との素早さ差と攻撃種別を反映した回避率（%）。"""
     rate = dino_base_dodge_rate(defender_speed) + defender_speed - attacker_speed
     if special:
         rate -= 20
     return max(0, min(30 if special else 50, rate))
+
 
 def dino_power_bonus(level: int) -> int:
     """Lv4でダメージ+1、Lv7で+2、Lv10で+3。"""
@@ -1286,6 +1301,8 @@ def dino_passive_move(passive: dict, dice: int, chance: float, who: str, info: d
         extra = int(passive.get("steps", 1))
         return dice + extra, f"💨 {who}の『{name}』！ さらに +{extra}マス進む！（合計 {dice + extra}マス）"
     return dice, None
+
+
 def dino_passive_pickup(passive: dict, who: str, info: dict):
     """拾う系。決まった種類のものを1つだけ拾ってくる。"""
     name = info["passive_name"]
@@ -1657,6 +1674,8 @@ def restart_dino_race(course_key: str):
 
 
 # ---------------- バトル（力試し） ----------------
+
+
 def start_dino_battle(course_key: str, partner: dict):
     race = get_dino_race(course_key)
     enemy = race["pending_battle"]
@@ -2067,6 +2086,7 @@ CANDY_SHOP_FALLBACKS = CANDY_RECIPE_DATA.get("fallback_sweets", [])
 # 🍰 お菓子屋さん ③ 共通のヘルパー（経験値・瓶の名前）
 # =====================================================
 
+
 def candy_shop_add_exp(amount: int):
     """販売・瓶注文の経験値を加算して店レベルを更新する。"""
     if amount <= 0:
@@ -2087,6 +2107,7 @@ def candy_jar_display_name() -> str:
 # =====================================================
 # 🍓 お菓子屋さん ④ スイーツ作り（材料の購入・合成・完成セリフ）
 # =====================================================
+
 
 def candy_shop_buy_material(material_key: str, quantity: int = 1):
     item = CANDY_SHOP_MATERIALS[material_key]
@@ -2153,6 +2174,7 @@ def candy_shop_craft_message(product: dict) -> str:
 # =====================================================
 # 🧁 お菓子屋さん ⑤ 商品棚とお客さん（棚から戻す・お店をひらく）
 # =====================================================
+
 
 def candy_shop_return_displayed(index: int):
     """棚に並べた商品を、持ち物（商品）に戻す。"""
@@ -2253,6 +2275,7 @@ def candy_shop_open_for_business():
 # =====================================================
 # 🫙 お菓子屋さん ⑥ 瓶の注文（注文づくり・お菓子を入れる・渡す・瓶の画面）
 # =====================================================
+
 
 def candy_rule_target(rule: dict, size: int) -> int:
     """注文ルールから、瓶の大きさ(個数)に合った目標値を返す。旧形式（targetだけ）にも対応。"""
@@ -2556,6 +2579,8 @@ def render_candy_jar_section():
 # =====================================================
 # 🎰 お菓子屋さん ⑦ お菓子ガチャ（瓶の注文で使えるお菓子が出る）
 # =====================================================
+
+
 def candy_gacha_pool() -> list:
     """ガチャで出るお菓子の一覧。candy_jar_orders.json の candy_catalog のうち、stars（★1〜5）があるもの。"""
     return [c for c in CANDY_JAR_ORDER_DATA.get("candy_catalog", [])
@@ -2686,6 +2711,7 @@ def render_candy_gacha_tab():
 # 📖 お菓子屋さん ⑧ 手に入れたお菓子一覧ページ
 # =====================================================
 
+
 def candy_is_obtained(emoji: str) -> bool:
     """そのお菓子を手に入れたことがあるか。最初の5種類は最初から所持、
     追加のお菓子はショップで買った（買いきり）か、瓶に入れたことがあれば所持扱い。
@@ -2747,6 +2773,7 @@ def render_candy_collection_page():
 # =====================================================
 # 🏪 お菓子屋さん ⑨ お菓子屋さんのメイン画面（タブ構成）
 # =====================================================
+
 
 def render_candy_shop():
     """お菓子屋さんステージ内に表示するショップ・制作・販売・瓶注文UI。"""
@@ -4531,6 +4558,8 @@ def render_schedule_and_events(date_str: str, editable: bool, clipboard_at_botto
 # =====================================================
 # 🔊 音声読み込み
 # =====================================================
+
+
 @st.cache_data
 def load_sound_base64(path: str):
     if not os.path.exists(path):
@@ -6067,30 +6096,8 @@ elif st.session_state.page in [
         # ===== 🛍️ ショップ（魚・餌・飾りを1つにまとめた）=====
         if _aqua_tab == "🛍️ ショップ":
             st.subheader("🛍️ ショップ")
-            _aqua_shop_sub = stage_tab_selector(["🐟 魚", "🍚 餌", "🪸 飾り", "🎣 釣り竿", "💎 ポイント交換"], "aqua_shop_sub_tab")
+            _aqua_shop_sub = stage_tab_selector(["🐟 魚", "🍚 餌", "🪸 飾り", "🎣 釣り竿"], "aqua_shop_sub_tab")
             st.caption(f"ショップはおさかなコインで買えるよ。いまのおさかなコイン：🪙 {st.session_state.fish_coins}　（釣った魚をリリースすると増えるよ！）")
-
-            if _aqua_shop_sub == "💎 ポイント交換":
-                st.markdown("#### 💎 おさかなコインをIPPOポイントに交換")
-                st.caption("おさかなコイン100枚で、IPPOポイントを1ポイント交換できます。")
-                st.write(f"🪙 おさかなコイン：**{st.session_state.fish_coins}枚**　／　💎 IPPOポイント：**{st.session_state.ippo_points}ポイント**")
-                _fish_exchange_max = int(st.session_state.fish_coins) // 100
-                _fish_exchange_count = st.number_input(
-                    "交換するIPPOポイント数", min_value=1, max_value=max(1, _fish_exchange_max),
-                    value=1, step=1, key="fish_coin_exchange_count",
-                    disabled=_fish_exchange_max < 1,
-                )
-                if st.button("💎 交換する", key="fish_coin_exchange_button",
-                             use_container_width=True, disabled=_fish_exchange_max < 1):
-                    _fish_exchange_coins = int(_fish_exchange_count) * 100
-                    if st.session_state.fish_coins >= _fish_exchange_coins:
-                        st.session_state.fish_coins -= _fish_exchange_coins
-                        st.session_state.ippo_points += int(_fish_exchange_count)
-                        save_progress()
-                        st.success(f"🪙 { _fish_exchange_coins }枚を交換して、💎 IPPOポイントを{int(_fish_exchange_count)}ポイント獲得しました！")
-                        st.rerun()
-                    else:
-                        st.warning("おさかなコインが足りません！")
 
             if _aqua_shop_sub == "🐟 魚":
                 st.markdown("#### 🐟 ショップ限定の魚")
@@ -6829,28 +6836,6 @@ elif st.session_state.page in [
                     st.rerun()
                 else:
                     st.warning("恐竜コイン（またはIPPOポイント）が足りません！")
-
-            st.write("---")
-            st.markdown("#### 💎 恐竜コインをIPPOポイントに交換")
-            st.caption("恐竜コイン100枚で、IPPOポイントを1ポイント交換できます。")
-            st.write(f"🪙 恐竜コイン：**{st.session_state.dino_coins}枚**　／　💎 IPPOポイント：**{st.session_state.ippo_points}ポイント**")
-            _dino_exchange_max = int(st.session_state.dino_coins) // 100
-            _dino_exchange_count = st.number_input(
-                "交換するIPPOポイント数", min_value=1, max_value=max(1, _dino_exchange_max),
-                value=1, step=1, key="dino_coin_exchange_count",
-                disabled=_dino_exchange_max < 1,
-            )
-            if st.button("💎 交換する", key="dino_coin_exchange_button",
-                         use_container_width=True, disabled=_dino_exchange_max < 1):
-                _dino_exchange_coins = int(_dino_exchange_count) * 100
-                if st.session_state.dino_coins >= _dino_exchange_coins:
-                    st.session_state.dino_coins -= _dino_exchange_coins
-                    st.session_state.ippo_points += int(_dino_exchange_count)
-                    save_progress()
-                    st.success(f"🪙 {_dino_exchange_coins}枚を交換して、💎 IPPOポイントを{int(_dino_exchange_count)}ポイント獲得しました！")
-                    st.rerun()
-                else:
-                    st.warning("恐竜コインが足りません！")
 
             st.write("---")
             st.markdown("#### 🏁 コースショップ")

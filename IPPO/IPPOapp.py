@@ -3198,6 +3198,8 @@ PERSISTENT_KEYS = [
     "dino_unlocked_courses",
     "single_tasks",
     "single_task_completion_log",
+    "ebbinghaus_tasks",
+    "ebbinghaus_completion_log",
     "candy_coins",
     "candy_shop_materials",
     "candy_shop_jar_candy_stock",
@@ -3264,6 +3266,8 @@ PERSISTENT_DEFAULTS = {
     "dino_unlocked_courses": [],
     "single_tasks": [],
     "single_task_completion_log": [],
+    "ebbinghaus_tasks": [],
+    "ebbinghaus_completion_log": [],
     # お菓子屋さんは初期コイン100枚と少量の材料から開始（追加のお菓子はショップで購入）
     "candy_coins": 100,
     "candy_shop_materials": {"whip": 2, "chocolate": 2, "strawberry": 2, "flour": 2, "cookie": 2},
@@ -3664,6 +3668,12 @@ def get_ippo_events_for_date(date_str: str) -> list:
         )
         if st_task.get("completed") and completed_at and completed_at.startswith(date_str) and not already_logged:
             events.append((completed_at.split(" ")[1], f"✅ 単発タスク『{st_task.get('title', '')}』完了（💎{SINGLE_TASK_POINTS} IPPOポイント）"))
+    # エビングハウス復習の完了ログ
+    for completion in st.session_state.get("ebbinghaus_completion_log", []):
+        completed_at = completion.get("date", "")
+        if completed_at.startswith(date_str):
+            event_time = completed_at.split(" ")[1] if " " in completed_at else "--:--"
+            events.append((event_time, f"🧠 エビングハウス『{completion.get('title','')}』{completion.get('round',1)}回目の復習完了（💎1 IPPOポイント）"))
     # 恐竜レースでの出来事（レベルアップ・力試しなど）
     for de in st.session_state.get("dino_event_log", []):
         if de["date"].startswith(date_str):
@@ -4242,6 +4252,33 @@ def render_single_task_reminders(date_str: str):
                     st.rerun()
 
 
+def render_ebbinghaus_tasks(date_str: str):
+    """指定日に到来するエビングハウス復習タスク。リマインドと異なる専用カードで表示。"""
+    due_items = []
+    for task in st.session_state.get("ebbinghaus_tasks", []):
+        try:
+            base = datetime.strptime(task.get("created_date", ""), "%Y/%m/%d").date()
+        except ValueError:
+            continue
+        for index, days_after in enumerate(task.get("days", [])[:20], start=1):
+            due_date = (base + timedelta(days=int(days_after))).strftime("%Y/%m/%d")
+            completion_key = f"{task.get('id')}:{int(days_after)}"
+            if due_date == date_str and completion_key not in task.get("completed_dates", []):
+                due_items.append((task, index, completion_key))
+    if not due_items:
+        return
+    st.markdown("### 🧠 エビングハウスタスク（復習）")
+    for task, index, completion_key in due_items:
+        with st.container(border=True):
+            st.markdown(f"<div style='background:linear-gradient(110deg,#eef7ff,#f3e8ff);border-left:6px solid #8b75c9;border-radius:10px;padding:12px;color:#35275c;'><div style='font-size:12px;font-weight:800;'>🧠 記憶の定着タイム・{index}回目！</div><div style='font-size:18px;font-weight:800;margin-top:4px;'>{html.escape(task.get('title','勉強タスク'))} {index}回目！</div><div style='font-size:12px;margin-top:4px;'>エビングハウス復習</div></div>", unsafe_allow_html=True)
+            if st.button("✅ 復習完了！ +1 IPPOポイント", key=f"eb_done_{task.get('id')}_{index}_{date_str}", use_container_width=True):
+                task.setdefault("completed_dates", []).append(completion_key)
+                st.session_state.ippo_points += 1
+                now = get_now_jst().strftime("%Y/%m/%d %H:%M")
+                st.session_state.setdefault("ebbinghaus_completion_log", []).append({"task_id":task.get("id"),"title":task.get("title",""),"date":now,"round":index,"points":1})
+                add_sticker_for_date(date_str); save_progress(); st.success("復習完了！1 IPPOポイント獲得！"); st.rerun()
+
+
 def render_schedule_and_events(date_str: str, editable: bool, clipboard_at_bottom: bool = False):
     """
     指定した日の「予定／記録」帯グラフと、隣にIPPOイベントログを表示する。
@@ -4250,6 +4287,7 @@ def render_schedule_and_events(date_str: str, editable: bool, clipboard_at_botto
     day_schedule = st.session_state.daily_schedule.setdefault(date_str, {"planned": [], "actual": []})
 
     render_single_task_reminders(date_str)
+    render_ebbinghaus_tasks(date_str)
 
     if editable:
         if not clipboard_at_bottom:
@@ -5048,7 +5086,7 @@ elif st.session_state.page == "menu_select":
 elif st.session_state.page in [
     "target_page", "calendar_page", "stage_page",
     "candy_page", "candy_collection_page", "aquarium_page", "dino_page", "schedule_page",
-    "future_schedule_page", "schedule_print_page", "quick_add_page"
+    "future_schedule_page", "schedule_print_page", "quick_add_page", "ebbinghaus_page"
 ]:
 
     # サイドバーメニュー
@@ -5087,6 +5125,10 @@ elif st.session_state.page in [
     # --- 目標登録画面 ---
     if st.session_state.page == "target_page":
         st.title("🎯 目標登録画面")
+        st.markdown("<div style='background:linear-gradient(110deg,#fff7df,#ffedd5);border:1px solid #f3c879;border-radius:14px;padding:12px 14px;margin:8px 0 14px;color:#754b13;font-weight:700;'>復習のタイミングを自分で決めて、忘れにくくしよう！</div>", unsafe_allow_html=True)
+        if st.button("★勉強用★エビングハウスタスク登録はこちら", type="primary", use_container_width=True, key="open_ebbinghaus_page"):
+            st.session_state.page = "ebbinghaus_page"
+            st.rerun()
 
         # ===== 📝 単発のタスク（完了すると3ポイント） =====
         with st.container(border=True):
@@ -5410,6 +5452,80 @@ elif st.session_state.page in [
                                 play_click_sound(delay=0)
                                 st.session_state.confirm_delete_target_index = i
                                 st.rerun()
+
+    # --- エビングハウスタスク専用登録ページ ---
+    elif st.session_state.page == "ebbinghaus_page":
+        st.title("★ 勉強用 ★ エビングハウスタスク登録")
+        st.caption("目標を登録し、復習する日を最大20回まで設定できます。日付は登録日（今日）を基準に計算します。")
+        if st.button("↩️ いつもの目標登録に戻る", key="back_from_ebbinghaus"):
+            st.session_state.page = "target_page"
+            st.rerun()
+
+        with st.container(border=True):
+            st.markdown("### 📚 新しい復習目標を作る")
+            eb_title = st.text_input("勉強する目標・内容", placeholder="例：英単語 Unit 1 を覚える", key="eb_new_title")
+            st.markdown("#### ⏰ 何日後に復習する？")
+            eb_days = st.number_input("登録日から何日後？", min_value=1, max_value=3650, value=1, step=1, key="eb_new_day")
+            if st.button("＋ この復習日を追加", key="eb_add_day"):
+                days = st.session_state.setdefault("ebbinghaus_draft_days", [])
+                if len(days) >= 20:
+                    st.warning("復習日は最大20回まで設定できます。")
+                elif int(eb_days) in days:
+                    st.warning("その日数はすでに追加されています。")
+                else:
+                    days.append(int(eb_days)); days.sort()
+                    st.rerun()
+            draft_days = st.session_state.get("ebbinghaus_draft_days", [])
+            if draft_days:
+                st.write("設定した復習日：" + " ／ ".join(f"{d}日後（{(get_now_jst().date()+timedelta(days=d)).strftime('%Y/%m/%d')}）" for d in draft_days))
+                remove_day = st.selectbox("取り消す日数", draft_days, key="eb_remove_day")
+                if st.button("選択した復習日を取り消す", key="eb_remove_day_btn"):
+                    st.session_state.ebbinghaus_draft_days.remove(remove_day); st.rerun()
+            if st.button("📌 エビングハウスタスクを登録する", type="primary", use_container_width=True, key="eb_register"):
+                if not eb_title.strip():
+                    st.error("目標・内容を入力してください。")
+                elif not draft_days:
+                    st.error("復習日を1つ以上追加してください。")
+                else:
+                    today = get_now_jst().date()
+                    st.session_state.ebbinghaus_tasks.append({
+                        "id": f"eb_{int(time.time()*1000)}_{random.randint(1000,9999)}",
+                        "title": eb_title.strip(), "created_date": today.strftime('%Y/%m/%d'),
+                        "days": list(draft_days), "completed_dates": [], "completed": False
+                    })
+                    st.session_state.ebbinghaus_draft_days = []
+                    save_progress(); st.success("エビングハウスタスクを登録しました！")
+                    st.rerun()
+
+        st.markdown("### 🗂️ 登録済みエビングハウスタスク")
+        if not st.session_state.get("ebbinghaus_tasks"):
+            st.info("まだ登録されていません。上から復習目標を作成してください。")
+        for task in st.session_state.get("ebbinghaus_tasks", []):
+            with st.expander(f"📘 {task.get('title','勉強タスク')}", expanded=False):
+                st.write(f"登録日：{task.get('created_date','')}")
+                st.write("復習日：" + " ／ ".join(f"{d}日後" for d in task.get("days", [])))
+                edit_key = f"eb_edit_{task['id']}"
+                if st.session_state.get(edit_key, False):
+                    new_title = st.text_input("目標名", value=task.get("title", ""), key=f"eb_title_edit_{task['id']}")
+                    new_days_text = st.text_input("復習する日数（カンマ区切り・1〜3650、最大20個）", value=",".join(map(str,task.get('days',[]))), key=f"eb_days_edit_{task['id']}")
+                    c1,c2=st.columns(2)
+                    with c1:
+                        if st.button("💾 編集を保存", key=f"eb_save_{task['id']}"):
+                            try:
+                                parsed=sorted(set(int(x.strip()) for x in new_days_text.split(',') if x.strip()))
+                                if not new_title.strip() or not parsed or len(parsed)>20 or any(x<1 or x>3650 for x in parsed): raise ValueError
+                                task['title']=new_title.strip(); task['days']=parsed
+                                st.session_state[edit_key]=False; save_progress(); st.rerun()
+                            except ValueError: st.error("目標名と、1〜3650日の復習日を最大20個入力してください。")
+                    with c2:
+                        if st.button("キャンセル", key=f"eb_cancel_{task['id']}"):
+                            st.session_state[edit_key]=False; st.rerun()
+                else:
+                    if st.button("✏️ 編集", key=f"eb_edit_open_{task['id']}"):
+                        st.session_state[edit_key]=True; st.rerun()
+                if st.button("🗑️ このタスクを削除", key=f"eb_delete_{task['id']}"):
+                    st.session_state.ebbinghaus_tasks=[x for x in st.session_state.ebbinghaus_tasks if x.get('id')!=task.get('id')]
+                    save_progress(); st.rerun()
 
     # --- カレンダー画面 ---
     elif st.session_state.page == "calendar_page":

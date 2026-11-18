@@ -5486,6 +5486,69 @@ elif st.session_state.page in [
     elif st.session_state.page == "ebbinghaus_page":
         st.title("★ 勉強用 ★ エビングハウスタスク登録")
         st.caption("目標を登録し、復習する日を最大20回まで設定できます。日付は登録日（今日）を基準に計算します。")
+
+        # エビングハウス表：登録済み目標を行、予定された復習日を列にして一覧表示
+        with st.expander("📊 エビングハウス表を表示する", expanded=False):
+            eb_tasks_for_table = st.session_state.get("ebbinghaus_tasks", [])
+            eb_date_columns = set()
+            eb_due_by_task = {}
+            for eb_task in eb_tasks_for_table:
+                try:
+                    eb_base = datetime.strptime(eb_task.get("created_date", ""), "%Y/%m/%d").date()
+                except (ValueError, TypeError):
+                    continue
+                scheduled = {}
+                for eb_day in eb_task.get("days", [])[:20]:
+                    try:
+                        eb_day = int(eb_day)
+                        due = (eb_base + timedelta(days=eb_day)).strftime("%Y/%m/%d")
+                    except (ValueError, TypeError):
+                        continue
+                    completion_key = f"{eb_task.get('id')}:{eb_day}"
+                    scheduled[due] = completion_key
+                    eb_date_columns.add(due)
+                eb_due_by_task[eb_task.get("id")] = scheduled
+
+            eb_date_columns = sorted(eb_date_columns, key=lambda x: datetime.strptime(x, "%Y/%m/%d"))
+            if not eb_tasks_for_table or not eb_date_columns:
+                st.info("復習目標を登録すると、ここにエビングハウス表が表示されます。")
+            else:
+                table_html = [
+                    "<div style='overflow-x:auto;max-width:100%;'>",
+                    "<table style='border-collapse:collapse;white-space:nowrap;width:max-content;min-width:100%;font-size:13px;'>",
+                    "<thead><tr>",
+                    "<th style='position:sticky;left:0;background:#eef3fb;padding:9px;border:1px solid #ccd4e0;z-index:2;text-align:left;'>目標名</th>"
+                ]
+                for eb_date in eb_date_columns:
+                    label = datetime.strptime(eb_date, "%Y/%m/%d").strftime("%m/%d")
+                    table_html.append(
+                        f"<th style='background:#eef3fb;padding:9px;border:1px solid #ccd4e0;text-align:center;'>{label}</th>"
+                    )
+                table_html.append("</tr></thead><tbody>")
+                for eb_task in eb_tasks_for_table:
+                    table_html.append(
+                        "<tr><th style='position:sticky;left:0;background:#fff;padding:9px;border:1px solid #ccd4e0;text-align:left;max-width:220px;white-space:normal;'>"
+                        + html.escape(str(eb_task.get("title", "勉強タスク")))
+                        + "</th>"
+                    )
+                    task_schedule = eb_due_by_task.get(eb_task.get("id"), {})
+                    completed_keys = set(eb_task.get("completed_dates", []))
+                    for eb_date in eb_date_columns:
+                        completion_key = task_schedule.get(eb_date)
+                        if completion_key:
+                            cell = "✓" if completion_key in completed_keys else eb_date
+                        else:
+                            cell = "—"
+                        table_html.append(
+                            f"<td style='padding:9px;border:1px solid #ccd4e0;text-align:center;"
+                            f"color:{'#16803c' if cell == '✓' else '#334155'};font-weight:{'800' if cell == '✓' else '400'};'>"
+                            f"{html.escape(cell)}</td>"
+                        )
+                    table_html.append("</tr>")
+                table_html.append("</tbody></table></div>")
+                st.markdown("予定日は日付、完了した日は ✓ で表示します。")
+                st.markdown("".join(table_html), unsafe_allow_html=True)
+
         if st.button("↩️ いつもの目標登録に戻る", key="back_from_ebbinghaus"):
             st.session_state.page = "target_page"
             st.rerun()

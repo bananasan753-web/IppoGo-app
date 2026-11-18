@@ -5545,8 +5545,22 @@ elif st.session_state.page in [
                             f"{html.escape(cell)}</td>"
                         )
                     table_html.append("</tr>")
-                table_html.append("</tbody></table></div>")
-                st.markdown("予定日は日付、完了した日は ✓ で表示します。")
+                table_html.append("</tbody><tfoot><tr>")
+                table_html.append(
+                    "<th style='position:sticky;left:0;background:#eef3fb;padding:9px;"
+                    "border:1px solid #ccd4e0;z-index:2;text-align:left;'>当日のタスク合計</th>"
+                )
+                for eb_date in eb_date_columns:
+                    daily_total = sum(
+                        1 for task_schedule in eb_due_by_task.values()
+                        if eb_date in task_schedule
+                    )
+                    table_html.append(
+                        "<td style='background:#f8fafc;padding:9px;border:1px solid #ccd4e0;"
+                        f"text-align:center;font-weight:800;'>{daily_total}件</td>"
+                    )
+                table_html.append("</tr></tfoot></table></div>")
+                st.markdown("予定日は日付、完了した日は ✓ で表示します。最下段には、その日に予定されているタスク数を表示します。")
                 st.markdown("".join(table_html), unsafe_allow_html=True)
 
         if st.button("↩️ いつもの目標登録に戻る", key="back_from_ebbinghaus"):

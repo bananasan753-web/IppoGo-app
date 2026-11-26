@@ -3195,6 +3195,8 @@ PERSISTENT_KEYS = [
     "goal_complete_log",
     "calendar_stickers",
     "calendar_notes",
+    "future_self_mail",
+    "diary_entries",
     "sticker_type",
     "sticker_color",
     "daily_schedule",  # 一日のスケジュール（予定／記録）
@@ -3263,6 +3265,8 @@ PERSISTENT_DEFAULTS = {
     "goal_complete_log": [],
     "calendar_stickers": {},
     "calendar_notes": {},
+    "future_self_mail": [],
+    "diary_entries": {},
     "sticker_type": "circle",
     "sticker_color": "赤",
     "daily_schedule": {},
@@ -4680,6 +4684,10 @@ if "editing_target_index" not in st.session_state:
     st.session_state.editing_target_index = None
 if "calendar_notes" not in st.session_state:
     st.session_state.calendar_notes = {}
+if "future_self_mail" not in st.session_state or st.session_state.future_self_mail is None:
+    st.session_state.future_self_mail = []
+if "diary_entries" not in st.session_state or st.session_state.diary_entries is None:
+    st.session_state.diary_entries = {}
 if "jar_capacity" not in st.session_state:
     st.session_state.jar_capacity = 30
 if "jar_candies" not in st.session_state:
@@ -5087,7 +5095,7 @@ elif st.session_state.page == "menu_select":
     st.markdown("## 🎯 挑戦する項目を選んでください：")
     st.write("")
 
-    col1, col2, col3, col4 = st.columns(4)
+    col1, col2, col3, col4, col5 = st.columns(5)
     with col1:
         if st.button("🎯\n\n目標登録", use_container_width=True, key="menu_target"):
             play_click_sound()
@@ -5108,6 +5116,11 @@ elif st.session_state.page == "menu_select":
             play_click_sound()
             st.session_state.page = "schedule_page"
             st.rerun()
+    with col5:
+        if st.button("💌\n\nメール/日記", use_container_width=True, key="menu_mail_diary"):
+            play_click_sound()
+            st.session_state.page = "mail_diary_page"
+            st.rerun()
 
 # =====================================================
 # 4. 【個別画面】
@@ -5115,7 +5128,7 @@ elif st.session_state.page == "menu_select":
 elif st.session_state.page in [
     "target_page", "calendar_page", "stage_page",
     "candy_page", "candy_collection_page", "aquarium_page", "dino_page", "schedule_page",
-    "future_schedule_page", "schedule_print_page", "quick_add_page", "ebbinghaus_page"
+    "future_schedule_page", "schedule_print_page", "quick_add_page", "ebbinghaus_page", "mail_diary_page"
 ]:
 
     # サイドバーメニュー
@@ -5139,6 +5152,10 @@ elif st.session_state.page in [
         if st.button("📊 一日のスケジュールへ"):
             play_click_sound()
             st.session_state.page = "schedule_page"
+            st.rerun()
+        if st.button("💌 メール/日記へ"):
+            play_click_sound()
+            st.session_state.page = "mail_diary_page"
             st.rerun()
         st.write("---")
         if st.button("↩️ メニューセレクトに戻る"):
@@ -5716,14 +5733,15 @@ elif st.session_state.page in [
                                 entry["date"] == cell_date_str for entry in t.get("deadline_daily_log", []))
                             for t in st.session_state.target_list
                         )
-                        has_note = bool(st.session_state.calendar_notes.get(cell_date_str))
+                        has_note = bool(st.session_state.calendar_notes.get(cell_date_str) or st.session_state.get("diary_entries", {}).get(cell_date_str))
+                        has_mail = any(m.get("delivery_date") == cell_date_str for m in st.session_state.get("future_self_mail", []))
                         # その日に有効な反復リマインドがあれば、カレンダーにベルを表示
                         reminder_tasks = [
                             task for task in st.session_state.get("single_tasks", [])
                             if single_task_is_due(task, cell_date_str)
                         ]
                         has_reminder = bool(reminder_tasks)
-                        markers = ("🎯" if has_deadline else "") + ("📝" if has_note else "") + ("🔔" if has_reminder else "")
+                        markers = ("🎯" if has_deadline else "") + ("📝" if has_note else "") + ("🔔" if has_reminder else "") + ("💌" if has_mail else "")
 
                         label_line2 = " ".join(part for part in [cell_sticker_preview, markers] if part)
                         cell_label = f"{day_label} {label_line2}" if label_line2 else day_label
@@ -5754,17 +5772,28 @@ elif st.session_state.page in [
         else:
             st.caption("🔔 この日に設定された未完了のリマインドはありません")
 
-        existing_note = st.session_state.calendar_notes.get(selected_date_str, "")
-        note_input = st.text_area("📝 この日の一言メモ・予定", value=existing_note,
-                                  key=f"note_input_{selected_date_str}", height=80,
-                                  placeholder="例：友達とカフェに行く予定など")
-        if st.button("💾 メモを保存", key=f"save_note_{selected_date_str}"):
-            play_click_sound(delay=0)
-            if note_input.strip():
-                st.session_state.calendar_notes[selected_date_str] = note_input.strip()
-            else:
-                st.session_state.calendar_notes.pop(selected_date_str, None)
+        legacy_note = st.session_state.calendar_notes.get(selected_date_str, "")
+        if legacy_note:
+            st.markdown("#### 📝 保存済みの一言メモ・予定")
+            st.write(legacy_note)
+        day_diary = st.session_state.get("diary_entries", {}).get(selected_date_str, "")
+        st.markdown("#### 📔 この日の日記")
+        if day_diary:
+            st.write(day_diary)
+        else:
+            st.caption("この日の日記はまだありません")
+        if st.button("💌 メール/日記で日記を書く・編集する", key=f"calendar_open_diary_{selected_date_str}"):
+            st.session_state.diary_edit_date = selected_date_str
+            st.session_state.page = "mail_diary_page"
             st.rerun()
+
+        due_mails = [m for m in st.session_state.get("future_self_mail", [])
+                     if m.get("delivery_date") == selected_date_str]
+        if due_mails:
+            st.markdown("#### 💌 過去の自分から届いたメール")
+            for mail in due_mails:
+                st.info(f"過去の自分からメールが来てるよ！\\n\\n**{mail.get('subject', '未来の自分へ')}**")
+                st.caption(mail.get("body", ""))
 
         st.write("---")
 
@@ -5917,8 +5946,178 @@ elif st.session_state.page in [
                 st.session_state.schedule_print_include_actual = True
                 st.session_state.page = "schedule_print_page"
                 st.rerun()
+        todays_mails = [m for m in st.session_state.get("future_self_mail", [])
+                        if m.get("delivery_date") == today_str]
+        if todays_mails:
+            st.markdown("### 💌 過去の自分からメールが来てるよ！")
+            for mail in todays_mails:
+                with st.container(border=True):
+                    st.markdown(f"**{mail.get('subject', '未来の自分へ')}**")
+                    st.write(mail.get("body", ""))
+                    st.caption("📬 メール/日記タブで送信日時・配達日時を確認できます")
+                    mail["read"] = True
+                    save_progress()
         st.markdown(f"### 📅 {today_dt.strftime('%Y年%m月%d日')} のスケジュール")
         render_schedule_and_events(today_str, editable=True, clipboard_at_bottom=True)
+
+    # --- メール/日記ページ ---
+    elif st.session_state.page == "mail_diary_page":
+        st.title("💌 メール/日記")
+        mail_tab = st.radio("メール/日記", ["📥 受信箱", "✉️ 未来の自分へ", "📔 日記"],
+                            horizontal=True, key="mail_diary_tab")
+        now = get_now_jst()
+        today_str = now.strftime("%Y/%m/%d")
+        weekday_jp = ["月", "火", "水", "木", "金", "土", "日"]
+
+        def mail_datetime_label(value):
+            try:
+                dt = datetime.fromisoformat(value)
+                return dt.strftime("%Y年%m月%d日（") + weekday_jp[dt.weekday()] + dt.strftime("） %H:%M")
+            except (ValueError, TypeError):
+                return str(value or "日時不明")
+
+        if mail_tab == "📥 受信箱":
+            inbox = sorted(
+                [m for m in st.session_state.get("future_self_mail", [])
+                 if m.get("delivery_date", "") <= today_str],
+                key=lambda m: (m.get("delivery_date", ""), m.get("created_at", "")),
+                reverse=True)
+            unread_count = sum(not m.get("read", False) for m in inbox)
+            st.caption(f"未読 {unread_count} 通　／　届いたメール {len(inbox)} 通")
+            if not inbox:
+                st.info("まだ届いたメールはありません。未来の自分へメールを書いてみよう。")
+            for mail in inbox:
+                with st.container(border=True):
+                    status = "📩 未読" if not mail.get("read", False) else "📨 既読済み"
+                    st.markdown(f"### {status}　{mail.get('subject', '未来の自分へ')}")
+                    st.caption(f"送信：{mail_datetime_label(mail.get('created_at'))}")
+                    delivery_dt = mail.get("delivery_date", "")
+                    try:
+                        delivery_date = datetime.strptime(delivery_dt, "%Y/%m/%d").date()
+                        delivered_label = delivery_date.strftime("%Y年%m月%d日（") + weekday_jp[delivery_date.weekday()] + "）"
+                    except ValueError:
+                        delivered_label = delivery_dt
+                    st.caption(f"配達：{delivered_label}")
+                    st.write(mail.get("body", ""))
+                    c_read, c_delete = st.columns(2)
+                    with c_read:
+                        if not mail.get("read", False):
+                            if st.button("既読にする", key=f"mail_read_{mail.get('id')}"):
+                                mail["read"] = True
+                                save_progress()
+                                st.rerun()
+                    with c_delete:
+                        if st.button("🗑️ メールを削除", key=f"mail_delete_{mail.get('id')}"):
+                            st.session_state.future_self_mail = [
+                                m for m in st.session_state.future_self_mail if m.get("id") != mail.get("id")]
+                            save_progress()
+                            st.rerun()
+
+        elif mail_tab == "✉️ 未来の自分へ":
+            st.markdown("### ✉️ 未来の自分へ")
+            st.caption("指定した日に、IPPOの中の受信箱へメールが届きます。")
+            mail_list = st.session_state.setdefault("future_self_mail", [])
+            edit_id = st.session_state.get("future_mail_edit_id")
+            editing_mail = next((m for m in mail_list if m.get("id") == edit_id), None)
+            with st.form("future_mail_form"):
+                subject = st.text_input("件名", value=editing_mail.get("subject", "") if editing_mail else "",
+                                        placeholder="例：試験を終えた自分へ")
+                body = st.text_area("本文", value=editing_mail.get("body", "") if editing_mail else "",
+                                    height=180, placeholder="未来の自分に伝えたいことを書こう")
+                default_delivery = today_dt if 'today_dt' in locals() else now.date()
+                if editing_mail:
+                    try:
+                        default_delivery = datetime.strptime(editing_mail.get("delivery_date", today_str), "%Y/%m/%d").date()
+                    except ValueError:
+                        default_delivery = now.date()
+                delivery_date = st.date_input("配達日", value=default_delivery,
+                                              min_value=None if editing_mail else now.date(),
+                                              key="future_mail_delivery_picker")
+                submit_label = "変更を保存" if editing_mail else "未来の自分へ送信"
+                submitted = st.form_submit_button(submit_label, use_container_width=True)
+            if submitted:
+                if not subject.strip() or not body.strip():
+                    st.warning("件名と本文を入力してください。")
+                elif delivery_date < now.date():
+                    st.warning("配達日は今日以降を選んでください。")
+                else:
+                    if editing_mail:
+                        editing_mail.update({"subject": subject.strip(), "body": body.strip(),
+                                             "delivery_date": delivery_date.strftime("%Y/%m/%d")})
+                        st.session_state.future_mail_edit_id = None
+                    else:
+                        mail_list.append({
+                            "id": now.strftime("%Y%m%d%H%M%S%f") + str(random.randint(100,999)),
+                            "subject": subject.strip(), "body": body.strip(),
+                            "created_at": now.isoformat(timespec="minutes"),
+                            "delivery_date": delivery_date.strftime("%Y/%m/%d"),
+                            "read": False,
+                        })
+                    save_progress()
+                    st.success("未来の自分へのメールを保存しました！")
+                    st.rerun()
+            if editing_mail and st.button("編集をキャンセル", key="cancel_future_mail_edit"):
+                st.session_state.future_mail_edit_id = None
+                st.rerun()
+            st.markdown("### 📬 送る予定のメール")
+            for mail in sorted(mail_list, key=lambda m: m.get("delivery_date", "")):
+                with st.container(border=True):
+                    st.markdown(f"**{mail.get('subject', '未来の自分へ')}**")
+                    st.caption(f"送信：{mail_datetime_label(mail.get('created_at'))}　／　配達：{mail.get('delivery_date', '')}")
+                    st.write(mail.get("body", ""))
+                    edit_col, del_col = st.columns(2)
+                    with edit_col:
+                        if st.button("✏️ 編集", key=f"future_mail_edit_{mail.get('id')}"):
+                            st.session_state.future_mail_edit_id = mail.get("id")
+                            st.rerun()
+                    with del_col:
+                        if st.button("🗑️ 削除", key=f"future_mail_delete_{mail.get('id')}"):
+                            st.session_state.future_self_mail = [m for m in mail_list if m.get("id") != mail.get("id")]
+                            if st.session_state.get("future_mail_edit_id") == mail.get("id"):
+                                st.session_state.future_mail_edit_id = None
+                            save_progress()
+                            st.rerun()
+
+        else:
+            st.markdown("### 📔 日記")
+            if st.session_state.get("diary_edit_date"):
+                try:
+                    st.session_state["diary_date_picker"] = datetime.strptime(
+                        st.session_state.diary_edit_date, "%Y/%m/%d").date()
+                except ValueError:
+                    pass
+                st.session_state.diary_edit_date = None
+            diary_date = st.date_input("日記の日付", value=now.date(), key="diary_date_picker")
+            diary_date_str = diary_date.strftime("%Y/%m/%d")
+            existing_diary = st.session_state.setdefault("diary_entries", {}).get(diary_date_str, "")
+            diary_text = st.text_area("今日の気持ち・出来事", value=existing_diary, height=220,
+                                      key=f"diary_text_{diary_date_str}",
+                                      placeholder="今日の自分に起きたこと、感じたことを書こう")
+            diary_col1, diary_col2 = st.columns(2)
+            with diary_col1:
+                if st.button("💾 日記を保存", use_container_width=True, key=f"save_diary_{diary_date_str}"):
+                    if diary_text.strip():
+                        st.session_state.diary_entries[diary_date_str] = diary_text.strip()
+                    else:
+                        st.session_state.diary_entries.pop(diary_date_str, None)
+                    st.session_state.diary_edit_date = None
+                    save_progress()
+                    st.success("日記を保存しました。カレンダーからも見られます。")
+                    st.rerun()
+            with diary_col2:
+                if st.button("🗑️ 日記を消去", use_container_width=True, key=f"delete_diary_{diary_date_str}"):
+                    st.session_state.diary_entries.pop(diary_date_str, None)
+                    st.session_state.diary_edit_date = None
+                    save_progress()
+                    st.rerun()
+            st.markdown("### 📚 日記一覧")
+            diary_items = sorted(st.session_state.diary_entries.items(), reverse=True)
+            if not diary_items:
+                st.caption("まだ日記はありません")
+            for ds, diary in diary_items:
+                st.markdown(f"**{ds}**")
+                st.write(diary)
+                st.divider()
 
     # --- クイック追加ページ ---
     elif st.session_state.page == "quick_add_page":

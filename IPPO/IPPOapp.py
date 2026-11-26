@@ -1180,11 +1180,21 @@ WILD_DINOS = [
 # コース。1マス＝100m。ready=Falseのコースは「準備中」表示になります。
 DINO_COURSES = {
     "beginner": {"name": "はじめての恐竜レース", "tier": "🟢 初級", "distance_km": 5, "ready": True},
-    "intermediate": {"name": "恐竜ロードレース", "tier": "🟡 中級", "distance_km": 10, "ready": False},
-    "advanced": {"name": "恐竜サバイバルレース", "tier": "🔴 上級", "distance_km": 20, "ready": False},
+    "intermediate": {"name": "恐竜ロードレース", "tier": "🟡 中級", "distance_km": 10, "ready": True},
+    "advanced": {"name": "恐竜グランドレース", "tier": "🔴 上級", "distance_km": 20, "ready": True},
     "survival": DINO_SHOP_DATA["courses"]["survival"],
     "relax": DINO_SHOP_DATA["courses"]["relax"],
 }
+
+# リタイアしたときに、ランダムで1つ表示される言葉（責めない言葉だけ）
+DINO_RETIRE_MESSAGES = [
+    "お疲れ様！途中までよく頑張ったね！！",
+    "ここまで走れたこと、すごいよ！ゆっくり休んでね🌿",
+    "立ち止まる勇気もえらい！また走りたくなったらいつでもどうぞ✨",
+    "今日はここまででも大丈夫！ちゃんと前に進めたよ👏",
+    "よく頑張ったね！恐竜くんも「楽しかった！」って言ってるよ🦖",
+    "無理しないのも大事！次はまた新しい気持ちで走ろう🌈",
+]
 
 DINO_BOOST_MESSAGES = ["💨 追い風が来た！", "🌟 近道を見つけた！", "🌋 地面がゆれて背中を押された！"]
 DINO_SOUND_PRIORITY = {"click": 0, "feed": 1, "points": 1, "achieve": 2, "finish": 3}
@@ -1448,10 +1458,9 @@ def add_dino_exp(dino: dict, amount: int):
     queue_dino_sound("achieve")
 
 
-def build_dino_board(course_key: str) -> dict:
-    """特別マスの配置。コースごとに固定（毎回同じ盤面）。戻るマスはありません。"""
+def _generate_dino_board(course_key: str, rnd) -> dict:
+    """特別マスの配置を1つ作る（rnd に random.Random を渡す）。戻るマスはありません。"""
     goal = dino_course_goal(course_key)
-    rnd = random.Random(f"dino-board-{course_key}")
     mode = DINO_COURSES[course_key].get("mode", "")
 
     # ゆるレースはゴール以外の全マスがイベントマス。
@@ -1465,6 +1474,7 @@ def build_dino_board(course_key: str) -> dict:
         rnd.shuffle(kinds)
         return dict(zip(positions, kinds))
 
+    # 中級・上級・サバイバルなど（イベント頻度は「普通」＝ゴールのマス数の4分の1。サバイバルは2分の1でバトル多め）
     count = max(8, goal // (2 if mode == "survival" else 4))
     positions = sorted(rnd.sample(range(3, goal), min(count, max(0, goal - 3))))
     pattern = ["boost", "again", "food", "battle"]
@@ -1474,6 +1484,28 @@ def build_dino_board(course_key: str) -> dict:
         kinds = [pattern[i % len(pattern)] for i in range(len(positions))]
     rnd.shuffle(kinds)
     return dict(zip(positions, kinds))
+
+
+def new_dino_board(course_key: str):
+    """そのコースの盤面を新しくランダムに作り直して保存する（走り直す／設定し直すときに使う）。"""
+    race = get_dino_race(course_key)
+    board = _generate_dino_board(course_key, random.Random())
+    race["board"] = {str(position): kind for position, kind in board.items()}   # 保存(JSON)用に位置は文字にする
+    return board
+
+
+def build_dino_board(course_key: str) -> dict:
+    """特別マスの配置。走り切る（リタイア・やり直し）までは同じ盤面。ない場合だけ新しく作る。"""
+    race = get_dino_race(course_key)
+    saved = race.get("board")
+    if saved:
+        return {int(position): kind for position, kind in saved.items()}
+    if race["pos"] > 0 and not race["finished"]:
+        # この更新より前に走り始めていた途中のレースは、これまでと同じ盤面で続けられるようにする
+        legacy = _generate_dino_board(course_key, random.Random(f"dino-board-{course_key}"))
+        race["board"] = {str(position): kind for position, kind in legacy.items()}
+        return legacy
+    return new_dino_board(course_key)
 
 
 def render_dino_board(course_key: str, pos: int, token: str) -> str:
@@ -1670,6 +1702,19 @@ def roll_dino_dice(course_key: str, special_dice_value=None):
 def restart_dino_race(course_key: str):
     race = get_dino_race(course_key)
     race.update({"pos": 0, "free_rolls": 0, "pending_battle": None, "finished": False})
+    new_dino_board(course_key)   # 走り直すたびにマスの位置をランダムに作り直す
+    save_progress()
+
+
+def retire_dino_race(course_key: str):
+    """リタイア：進み具合をリセット。責めない言葉をランダムで1つ表示する。"""
+    race = get_dino_race(course_key)
+    race.update({"pos": 0, "free_rolls": 0, "pending_battle": None, "finished": False})
+    new_dino_board(course_key)
+    battle = st.session_state.get("dino_battle")
+    if battle and not battle.get("practice"):   # レース中の力試しだけ終わらせる（模型との練習はそのまま）
+        del st.session_state["dino_battle"]
+    add_dino_message("🏳️ " + random.choice(DINO_RETIRE_MESSAGES))
     save_progress()
 
 
@@ -6869,18 +6914,33 @@ elif st.session_state.page in [
                 if k in st.session_state.get("dino_unlocked_courses", [])
             ]
             locked_course = st.session_state.get("dino_locked_course")
+            if locked_course not in course_keys:
+                # ロックが外れているのに、途中まで走っているコースがあれば、そのコースに戻す
+                locked_course = next((k for k in course_keys
+                                      if get_dino_race(k)["pos"] > 0 and not get_dino_race(k)["finished"]), None)
+                if locked_course:
+                    st.session_state.dino_locked_course = locked_course
             if locked_course in course_keys:
-                # ---- 決定済み：コースを固定して表示。変えるときは変更ボタン ----
+                # ---- 決定済み：コースを固定して表示。0歩のときだけ変更できる ----
                 course_key = locked_course
                 locked_info = DINO_COURSES[course_key]
+                locked_race = get_dino_race(course_key)
+                in_progress = locked_race["pos"] > 0 and not locked_race["finished"]
                 name_col, change_col = st.columns([3, 1])
                 with name_col:
                     st.markdown(f"🗺️ **{locked_info['tier']} {locked_info['name']}（{locked_info['distance_km']}km）**")
                 with change_col:
-                    if st.button("🔄 変更", use_container_width=True, key="dino_course_change"):
-                        st.session_state.dino_locked_course = None
-                        save_progress()
-                        st.rerun()
+                    if in_progress:
+                        if st.button("🏳️ リタイア", use_container_width=True, key="dino_course_retire"):
+                            retire_dino_race(course_key)
+                            st.rerun()
+                    else:
+                        if st.button("🔄 変更", use_container_width=True, key="dino_course_change"):
+                            st.session_state.dino_locked_course = None
+                            save_progress()
+                            st.rerun()
+                if in_progress:
+                    st.caption("🔒 レース中はコースを変えられません。変えたいときは「リタイア」を押してね（リタイアしても大丈夫！）")
             else:
                 # ---- 未決定：選んで「決める」を押すと固定される ----
                 course_key = st.selectbox(
@@ -6890,6 +6950,9 @@ elif st.session_state.page in [
                 )
                 if st.button("✅ このコースに決める", type="primary", use_container_width=True, key="dino_course_lock"):
                     st.session_state.dino_locked_course = course_key
+                    chosen_race = get_dino_race(course_key)
+                    if chosen_race["pos"] == 0 and not chosen_race["finished"]:
+                        new_dino_board(course_key)   # 決め直すたびにマスの位置をランダムに
                     save_progress()
                     st.rerun()
             course = DINO_COURSES[course_key]

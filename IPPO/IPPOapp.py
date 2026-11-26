@@ -5949,14 +5949,7 @@ elif st.session_state.page in [
         todays_mails = [m for m in st.session_state.get("future_self_mail", [])
                         if m.get("delivery_date") == today_str]
         if todays_mails:
-            st.markdown("### 💌 過去の自分からメールが来てるよ！")
-            for mail in todays_mails:
-                with st.container(border=True):
-                    st.markdown(f"**{mail.get('subject', '未来の自分へ')}**")
-                    st.write(mail.get("body", ""))
-                    st.caption("📬 メール/日記タブで送信日時・配達日時を確認できます")
-                    mail["read"] = True
-                    save_progress()
+            st.info("💌 過去の自分からメールが来てるよ！")
         st.markdown(f"### 📅 {today_dt.strftime('%Y年%m月%d日')} のスケジュール")
         render_schedule_and_events(today_str, editable=True, clipboard_at_bottom=True)
 

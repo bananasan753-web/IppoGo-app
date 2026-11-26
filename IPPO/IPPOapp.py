@@ -5947,7 +5947,7 @@ elif st.session_state.page in [
                 st.session_state.page = "schedule_print_page"
                 st.rerun()
         todays_mails = [m for m in st.session_state.get("future_self_mail", [])
-                        if m.get("delivery_date") == today_str]
+                        if m.get("delivery_date") == today_str and not m.get("read", False)]
         if todays_mails:
             st.info("💌 過去の自分からメールが来てるよ！")
         st.markdown(f"### 📅 {today_dt.strftime('%Y年%m月%d日')} のスケジュール")

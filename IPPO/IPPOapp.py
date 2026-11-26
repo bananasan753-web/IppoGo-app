@@ -1714,6 +1714,7 @@ def retire_dino_race(course_key: str):
     battle = st.session_state.get("dino_battle")
     if battle and not battle.get("practice"):   # レース中の力試しだけ終わらせる（模型との練習はそのまま）
         del st.session_state["dino_battle"]
+    st.session_state.pop("dino_retire_confirm", None)
     add_dino_message("🏳️ " + random.choice(DINO_RETIRE_MESSAGES))
     save_progress()
 
@@ -6932,7 +6933,7 @@ elif st.session_state.page in [
                 with change_col:
                     if in_progress:
                         if st.button("🏳️ リタイア", use_container_width=True, key="dino_course_retire"):
-                            retire_dino_race(course_key)
+                            st.session_state.dino_retire_confirm = course_key   # まず確認を出す
                             st.rerun()
                     else:
                         if st.button("🔄 変更", use_container_width=True, key="dino_course_change"):
@@ -6941,6 +6942,20 @@ elif st.session_state.page in [
                             st.rerun()
                 if in_progress:
                     st.caption("🔒 レース中はコースを変えられません。変えたいときは「リタイア」を押してね（リタイアしても大丈夫！）")
+                    if st.session_state.get("dino_retire_confirm") == course_key:
+                        # ---- リタイアの確認 ----
+                        st.warning("🏳️ 本当にリタイアする？ 進んだマスはリセットされるよ（恐竜コインと経験値はそのまま！）")
+                        yes_col, no_col = st.columns(2)
+                        with yes_col:
+                            if st.button("🏳️ はい、リタイアする", type="primary", use_container_width=True, key="dino_retire_yes"):
+                                retire_dino_race(course_key)
+                                st.rerun()
+                        with no_col:
+                            if st.button("🏃 やめる（続ける）", use_container_width=True, key="dino_retire_no"):
+                                st.session_state.pop("dino_retire_confirm", None)
+                                st.rerun()
+                else:
+                    st.session_state.pop("dino_retire_confirm", None)   # レース中でなければ確認状態を消す
             else:
                 # ---- 未決定：選んで「決める」を押すと固定される ----
                 course_key = st.selectbox(

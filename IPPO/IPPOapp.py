@@ -1109,26 +1109,6 @@ with open(DINO_SHOP_DATA_PATH, "r", encoding="utf-8") as f:
     DINO_SHOP_DATA = json.load(f)
 
 
-def show_dino_gif(species_key: str, animation: str = "idle", width: int = 180) -> bool:
-    """登録済みGIFを表示する。ファイルがなければFalseを返して絵文字表示に任せる。"""
-    species = DINO_SPECIES.get(species_key, {})
-    gif_path = species.get("gifs", {}).get(animation) or species.get("gifs", {}).get("idle")
-    if not gif_path:
-        return False
-
-    # JSON内の相対パスはアプリ本体(BASE_DIR)を基準に解決する。
-    candidates = [
-        os.path.join(BASE_DIR, gif_path),
-        os.path.join(BASE_DIR, "data", gif_path),
-    ]
-    resolved_path = next((p for p in candidates if os.path.isfile(p)), None)
-    if not resolved_path:
-        return False
-
-    st.image(resolved_path, width=width)
-    return True
-
-
 DINO_GACHA_COST_POINTS = 5              # 恐竜ガチャ1回に必要なIPPOポイント
 DINO_GACHA_RATES = {1: 40, 2: 30, 3: 18, 4: 9, 5: 3}   # ★ごとの出やすさ
 DINO_GACHA_DUP_EXP_PER_STAR = 10       # すでに仲間の恐竜が出たとき、★1つにつきもらえる経験値
@@ -1906,9 +1886,6 @@ def dino_special_effect(species_key: str, bonus: int, pname: str) -> dict:
 def resolve_dino_battle_turn(partner: dict, action: str):
     battle = st.session_state.dino_battle
     enemy = battle["enemy"]
-    battle["player_animation"] = {
-        "attack": "attack", "special": "attack", "defend": "guard", "flee": "run"
-    }.get(action, "idle")
     pname = f"{DINO_SPECIES[partner['species']]['emoji']} {dino_display_name(partner)}"
     ename = f"{enemy['emoji']} {enemy['name']}"
     bonus_p = dino_attack(partner)
@@ -2027,7 +2004,6 @@ def resolve_dino_battle_turn(partner: dict, action: str):
         queue_dino_sound("achieve")
     elif battle["player_hp"] <= 0:
         battle["over"], battle["result"] = True, "lose"
-        battle["player_animation"] = "fainted"
         if battle.get("practice"):
             log.append(f"😵 模型恐竜に負けてしまった…。練習だから何度でも挑戦できるよ！")
         else:
@@ -7007,9 +6983,7 @@ elif st.session_state.page in [
                 st.markdown(f"#### {partner_species['emoji']} {dino_display_name(partner)}（Lv.{partner_level}）と一緒に走ろう！")
                 st.write(f"📍 現在地：**{race['pos'] * 100}m / {goal * 100}m**（{race['pos']}/{goal}マス）　🏁 完走 {race['laps']}回")
                 st.progress(min(race["pos"] / goal, 1.0))
-                has_run_gif = show_dino_gif(partner["species"], "run", width=180)
-                board_token = "" if has_run_gif else partner_species["emoji"]
-                st.markdown(render_dino_board(course_key, race["pos"], board_token), unsafe_allow_html=True)
+                st.markdown(render_dino_board(course_key, race["pos"], partner_species["emoji"]), unsafe_allow_html=True)
                 st.caption("💨 追い風　🎲 もう一回　🍖 食べ物　⚔️ バトル（力試し・挑むかは自由）　🏁 ゴール")
                 st.write("")
 
@@ -7035,10 +7009,6 @@ elif st.session_state.page in [
                     st.markdown(f"### ⚔️ 力試し！ vs {enemy['emoji']} {enemy['name']}（Lv.{enemy['level']}）")
                     col_me, col_enemy = st.columns(2)
                     with col_me:
-                        player_pose = battle.get("player_animation", "idle")
-                        has_player_gif = show_dino_gif(partner["species"], player_pose, width=180)
-                        if not has_player_gif:
-                            st.markdown(f"<div style='font-size:64px;text-align:center'>{partner_species['emoji']}</div>", unsafe_allow_html=True)
                         st.markdown(f"**{partner_species['emoji']} {dino_display_name(partner)}**")
                         st.caption(f"HP {battle['player_hp']} / {battle['player_max_hp']}")
                         st.progress(battle["player_hp"] / battle["player_max_hp"])

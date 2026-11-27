@@ -1870,12 +1870,12 @@ def start_dino_practice_battle(partner: dict, difficulty: str = "ふつう"):
     partner_hp = dino_max_hp(partner)
     difficulty, level, enemy_hp, enemy_speed, enemy_attack = dino_enemy_stats_by_difficulty(partner, difficulty)
 
-    enemy = {"name": "練習用の模型恐竜", "emoji": "🦖", "level": level,
+    enemy = {"name": "練習用の模型恐竜", "emoji": "🦖", "species": "toy_dino", "level": level,
              "max_hp": enemy_hp, "speed": enemy_speed, "attack": enemy_attack}
     max_hp = partner_hp
     st.session_state.dino_battle = {
         "enemy": enemy, "enemy_hp": enemy["max_hp"], "player_max_hp": max_hp, "player_hp": max_hp,
-        "special_left": DINO_SPECIAL_USES, "player_motion": "idle",
+        "special_left": DINO_SPECIAL_USES, "player_motion": "idle", "enemy_motion": "idle",
         "log": [f"🧸 模型恐竜との練習開始！（{difficulty}）勝っても経験値・報酬はありません。"],
         "over": False, "result": None, "practice": True, "practice_difficulty": difficulty,
     }
@@ -2033,6 +2033,7 @@ def resolve_dino_battle_turn(partner: dict, action: str):
     counter_mult = 2
 
     battle["player_motion"] = {"attack": "attack", "defend": "guard", "special": "special"}.get(action, "idle")
+    battle["enemy_motion"] = {"attack": "attack", "defend": "guard", "special": "special"}[enemy_action]
 
     # --- 自分の行動 ---
     if action == "attack":
@@ -2111,6 +2112,7 @@ def resolve_dino_battle_turn(partner: dict, action: str):
     if battle["enemy_hp"] <= 0:
         battle["over"], battle["result"] = True, "win"
         battle["player_motion"] = "idle"
+        battle["enemy_motion"] = "faint"
         if battle.get("practice"):
             log.append("🎉 模型恐竜に勝利！ 練習おつかれさま！ 経験値・報酬はありません。")
         else:
@@ -7163,6 +7165,11 @@ elif st.session_state.page in [
                         st.caption(f"HP {battle['player_hp']} / {battle['player_max_hp']}")
                         st.progress(battle["player_hp"] / battle["player_max_hp"])
                     with col_enemy:
+                        enemy_species = enemy.get("species")
+                        if enemy_species:   # 野良恐竜には species がないので、今まで通りの表示になります
+                            enemy_gif = dino_gif_html(enemy_species, battle.get("enemy_motion", "idle"),
+                                                      size_px=120, flip=False, fallback=enemy["emoji"])
+                            st.markdown(f'<div style="text-align:center;">{enemy_gif}</div>', unsafe_allow_html=True)
                         st.markdown(f"**{enemy['emoji']} {enemy['name']}**")
                         st.caption(f"HP {battle['enemy_hp']} / {enemy['max_hp']}")
                         st.progress(battle["enemy_hp"] / enemy["max_hp"])

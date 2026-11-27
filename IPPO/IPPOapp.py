@@ -1086,7 +1086,7 @@ def feed_selected_fish(fish_index: int, food_key: str) -> bool:
 # ・お菓子屋さん・水族館・恐竜レースは、すべてIPPOポイントを共有します。
 # ・新しい恐竜を増やすときは DINO_SPECIES に1つ書き足してください。
 DINO_DICE_COST = 3          # サイコロ1回に必要なIPPOポイント
-DINO_MAX_LEVEL = 10
+DINO_MAX_LEVEL = 100
 DINO_BATTLE_WIN_EXP = 6
 DINO_BATTLE_LOSE_EXP = 2
 DINO_SPECIAL_USES = 2

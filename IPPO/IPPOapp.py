@@ -1086,7 +1086,7 @@ def feed_selected_fish(fish_index: int, food_key: str) -> bool:
 # ・お菓子屋さん・水族館・恐竜レースは、すべてIPPOポイントを共有します。
 # ・新しい恐竜を増やすときは DINO_SPECIES に1つ書き足してください。
 DINO_DICE_COST = 3          # サイコロ1回に必要なIPPOポイント
-DINO_MAX_LEVEL = 100
+DINO_MAX_LEVEL = 10
 DINO_BATTLE_WIN_EXP = 6
 DINO_BATTLE_LOSE_EXP = 2
 DINO_SPECIAL_USES = 2
@@ -1107,6 +1107,72 @@ with open(DINO_DATA_PATH, "r", encoding="utf-8") as f:
     DINO_SPECIES = json.load(f)
 with open(DINO_SHOP_DATA_PATH, "r", encoding="utf-8") as f:
     DINO_SHOP_DATA = json.load(f)
+
+DINO_GIF_DIR = os.path.join(BASE_DIR, "dino_gif")
+DINO_COURSE_BACKGROUNDS = {
+    "intermediate": "background/rq_bg_desert.png",
+}
+
+
+@st.cache_data
+def load_dino_asset_b64(rel_path: str) -> str:
+    if not rel_path:
+        return ""
+    path = os.path.join(DINO_GIF_DIR, *rel_path.replace("\\", "/").split("/"))
+    if not os.path.exists(path):
+        return ""
+    with open(path, "rb") as f:
+        return base64.b64encode(f.read()).decode()
+
+
+def dino_gif_html(species_key: str, motion: str = "idle", size_px: int = 120,
+                  flip: bool = False, fallback: str = "", responsive: bool = False) -> str:
+    """dino.json の gifs から指定モーションのGIFを<img>タグで返す。なければ絵文字を返す。"""
+    info = DINO_SPECIES.get(species_key, {})
+    gifs = info.get("gifs", {})
+    candidates = [motion]
+    if motion == "special":
+        candidates.append("attack")
+    for fallback_motion in ("idle", "run"):
+        if fallback_motion not in candidates:
+            candidates.append(fallback_motion)
+    rel_path = next((gifs.get(m) for m in candidates if gifs.get(m)), "")
+    if not rel_path and gifs:
+        rel_path = next(iter(gifs.values()))
+    b64 = load_dino_asset_b64(rel_path) if rel_path else ""
+    if not b64:
+        return fallback or info.get("emoji", "🦖")
+    ext = os.path.splitext(rel_path)[1].lower().lstrip(".") or "gif"
+    flip_css = " transform: scaleX(-1);" if flip else ""
+    if responsive:
+        return (f'<img src="data:image/{ext};base64,{b64}" '
+                f'style="max-width:78%; max-height:28px; object-fit:contain; image-rendering:pixelated;{flip_css}">')
+    return (f'<img src="data:image/{ext};base64,{b64}" width="{size_px}" '
+            f'style="image-rendering:pixelated;{flip_css}">')
+
+
+def render_dino_stage_scene(course_key: str, species_key: str, motion: str,
+                            pos: int, goal: int, flip: bool = True) -> str:
+    """すごろく画面の上部に、コース背景＋その上を移動する恐竜GIFを描画する。"""
+    bg_rel = DINO_COURSE_BACKGROUNDS.get(course_key, "")
+    bg_b64 = load_dino_asset_b64(bg_rel) if bg_rel else ""
+    if bg_b64:
+        bg_ext = os.path.splitext(bg_rel)[1].lower().lstrip(".") or "png"
+        bg_css = f"background-image:url('data:image/{bg_ext};base64,{bg_b64}'); background-size:cover; background-position:center bottom;"
+    else:
+        bg_css = "background:linear-gradient(180deg, #bfe9ff 0%, #eaf9ff 62%, #a8dc88 63%, #6fbf4a 100%);"
+    ratio = min(1.0, max(0.0, pos / max(1, goal)))
+    left_pct = 6 + ratio * 74
+    emoji = DINO_SPECIES.get(species_key, {}).get("emoji", "🦖")
+    dino_tag = dino_gif_html(species_key, motion, size_px=110, flip=flip, fallback=emoji)
+    if "<img" not in dino_tag:
+        dino_tag = f'<span style="font-size:56px; display:inline-block;">{dino_tag}</span>'
+    return (
+        f'<div style="position:relative; width:100%; height:210px; border-radius:16px; overflow:hidden; '
+        f'margin-bottom:10px; border:2px solid #d0d7de; {bg_css}">'
+        f'<div style="position:absolute; bottom:12px; left:{left_pct:.1f}%; transition:left 0.4s ease;">'
+        f'{dino_tag}</div></div>'
+    )
 
 
 DINO_GACHA_COST_POINTS = 5              # 恐竜ガチャ1回に必要なIPPOポイント
@@ -1455,6 +1521,7 @@ def add_dino_exp(dino: dict, amount: int):
         add_dino_coins(DINO_COIN_LEVELUP, "レベルアップごほうび！ ")
         add_dino_message(f"🎉 {name}が Lv.{reached} にレベルアップ！ {info['emoji']} {info['label']}が +1 上がった！")
         log_dino_event(f"🦖 {name}が Lv.{reached} にレベルアップ！（{info['label']}+1）")
+    st.session_state.dino_levelup_gif = dino["species"]
     queue_dino_sound("achieve")
 
 
@@ -1688,6 +1755,7 @@ def roll_dino_dice(course_key: str, special_dice_value=None):
         dino_passive_pickup(passive, who, species_info)
 
     gained = advance_dino(course_key, steps, partner)
+    st.session_state.dino_just_rolled = True
     add_dino_message(f"👣 {gained}マス（{gained * 100}m）進んだ！ 現在 {race['pos'] * 100}m 地点")
     queue_dino_sound("click")
     if race["pos"] >= goal:
@@ -1732,7 +1800,7 @@ def start_dino_battle(course_key: str, partner: dict):
     st.session_state.dino_battle = {
         "enemy": enemy, "enemy_hp": enemy["max_hp"],
         "player_max_hp": max_hp, "player_hp": max_hp,
-        "special_left": DINO_SPECIAL_USES,
+        "special_left": DINO_SPECIAL_USES, "player_motion": "idle",
         "log": ["⚔️ 力試しスタート！ どう戦う？"], "over": False, "result": None, "practice": False,
         "course_key": course_key, "ambush": enemy.get("ambush"),
     }
@@ -1749,7 +1817,7 @@ def start_dino_practice_battle(partner: dict, difficulty: str = "ふつう"):
     max_hp = partner_hp
     st.session_state.dino_battle = {
         "enemy": enemy, "enemy_hp": enemy["max_hp"], "player_max_hp": max_hp, "player_hp": max_hp,
-        "special_left": DINO_SPECIAL_USES,
+        "special_left": DINO_SPECIAL_USES, "player_motion": "idle",
         "log": [f"🧸 模型恐竜との練習開始！（{difficulty}）勝っても経験値・報酬はありません。"],
         "over": False, "result": None, "practice": True, "practice_difficulty": difficulty,
     }
@@ -1906,6 +1974,8 @@ def resolve_dino_battle_turn(partner: dict, action: str):
     stun = counter = False      # 麻痺（相手の行動不能）・カウンター
     counter_mult = 2
 
+    battle["player_motion"] = {"attack": "attack", "defend": "guard", "special": "special"}.get(action, "idle")
+
     # --- 自分の行動 ---
     if action == "attack":
         if enemy_action == "defend":
@@ -1982,6 +2052,7 @@ def resolve_dino_battle_turn(partner: dict, action: str):
 
     if battle["enemy_hp"] <= 0:
         battle["over"], battle["result"] = True, "win"
+        battle["player_motion"] = "idle"
         if battle.get("practice"):
             log.append("🎉 模型恐竜に勝利！ 練習おつかれさま！ 経験値・報酬はありません。")
         else:
@@ -2004,6 +2075,7 @@ def resolve_dino_battle_turn(partner: dict, action: str):
         queue_dino_sound("achieve")
     elif battle["player_hp"] <= 0:
         battle["over"], battle["result"] = True, "lose"
+        battle["player_motion"] = "fainted"
         if battle.get("practice"):
             log.append(f"😵 模型恐竜に負けてしまった…。練習だから何度でも挑戦できるよ！")
         else:
@@ -6899,10 +6971,16 @@ elif st.session_state.page in [
                     save_progress()
                     st.rerun()
 
-        # 直前の出来事（サイコロの結果など）
+        # 直前の出来事（サイコロの結果・レベルアップGIFなど）
         dino_messages = st.session_state.pop("dino_messages", [])
-        if dino_messages:
+        levelup_species = st.session_state.pop("dino_levelup_gif", None)
+        if dino_messages or levelup_species:
             with st.container(border=True):
+                if levelup_species:
+                    gif_tag = dino_gif_html(levelup_species, "levelup", size_px=150,
+                                            fallback=DINO_SPECIES.get(levelup_species, {}).get("emoji", "🦖"))
+                    if "<img" in gif_tag:
+                        st.markdown(f'<div style="text-align:center;">{gif_tag}</div>', unsafe_allow_html=True)
                 for message_text in dino_messages:
                     st.write(message_text)
 
@@ -6980,10 +7058,15 @@ elif st.session_state.page in [
                 goal = dino_course_goal(course_key)
                 partner_species = DINO_SPECIES[partner["species"]]
                 partner_level = dino_level(partner)
+                just_rolled = st.session_state.pop("dino_just_rolled", False)
+                stage_motion = "run" if just_rolled else "idle"
                 st.markdown(f"#### {partner_species['emoji']} {dino_display_name(partner)}（Lv.{partner_level}）と一緒に走ろう！")
+                st.markdown(render_dino_stage_scene(course_key, partner["species"], stage_motion, race["pos"], goal, flip=True),
+                            unsafe_allow_html=True)
                 st.write(f"📍 現在地：**{race['pos'] * 100}m / {goal * 100}m**（{race['pos']}/{goal}マス）　🏁 完走 {race['laps']}回")
                 st.progress(min(race["pos"] / goal, 1.0))
-                st.markdown(render_dino_board(course_key, race["pos"], partner_species["emoji"]), unsafe_allow_html=True)
+                board_token = dino_gif_html(partner["species"], stage_motion, responsive=True, flip=True, fallback=partner_species["emoji"])
+                st.markdown(render_dino_board(course_key, race["pos"], board_token), unsafe_allow_html=True)
                 st.caption("💨 追い風　🎲 もう一回　🍖 食べ物　⚔️ バトル（力試し・挑むかは自由）　🏁 ゴール")
                 st.write("")
 
@@ -7009,7 +7092,12 @@ elif st.session_state.page in [
                     st.markdown(f"### ⚔️ 力試し！ vs {enemy['emoji']} {enemy['name']}（Lv.{enemy['level']}）")
                     col_me, col_enemy = st.columns(2)
                     with col_me:
-                        st.markdown(f"**{partner_species['emoji']} {dino_display_name(partner)}**")
+                        player_motion = battle.get("player_motion", "idle")
+                        # 左向きのGIFを想定して flip=True（右向きにする）。元のGIFが右向きの場合は flip=False に変更
+                        player_gif = dino_gif_html(partner["species"], player_motion, size_px=120,
+                                                   flip=True, fallback=partner_species["emoji"])
+                        st.markdown(f'<div style="text-align:center;">{player_gif}</div>', unsafe_allow_html=True)
+                        st.markdown(f"**{dino_display_name(partner)}**")
                         st.caption(f"HP {battle['player_hp']} / {battle['player_max_hp']}")
                         st.progress(battle["player_hp"] / battle["player_max_hp"])
                     with col_enemy:
@@ -7378,4 +7466,3 @@ elif st.session_state.page in [
 # =====================================================
 if st.session_state.get("game_started"):
     save_progress()
-

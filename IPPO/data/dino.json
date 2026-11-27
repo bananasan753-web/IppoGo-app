@@ -209,7 +209,7 @@
     "gacha_comment": "すごい迫力！ 巨大な肉食恐竜が仲間に加わったよ🐉✨"
   },
   "unicornosaurus": {
-    "name": "ユニコーンサウルス",
+    "name": "ユニコーン",
     "emoji": "🦄",
     "base_hp": 30,
     "stars": 5,
@@ -225,7 +225,7 @@
     "special": {
       "type": "random"
     },
-    "gacha_comment": "きらきら虹色の夢みたいな恐竜が来てくれた！ 大当たり🎊🦄"
+    "gacha_comment": "どこからか迷いこんできたみたい…！？ 大当たり🎊🦄"
   },
   "tyrannosaurus": {
     "name": "ティラノサウルス",

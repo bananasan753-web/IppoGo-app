@@ -1109,6 +1109,20 @@ with open(DINO_SHOP_DATA_PATH, "r", encoding="utf-8") as f:
     DINO_SHOP_DATA = json.load(f)
 
 DINO_GIF_DIR = os.path.join(BASE_DIR, "dino_gif")
+
+# ---------- 🦖 恐竜GIFの置き方ルール ----------
+# dino_gif フォルダの中（サブフォルダの中でもOK）に  dn_恐竜名_モーション.gif  という名前で置くだけで自動で使われます。
+#   dn_raptor_idle.gif    … ふだん（待機）          dn_raptor_run.gif     … サイコロで走っている
+#   dn_raptor_attack.gif  … こうげき               dn_raptor_guard.gif   … ぼうぎょ
+#   dn_raptor_special.gif … 固有技                  dn_raptor_faint.gif   … バトルに負けた時
+#   dn_raptor_levelup.gif … レベルアップした時
+# 「恐竜名」は、dino.json の恐竜キー（例：stegosaurus）がそのまま使われます。
+# ファイル名の恐竜名がキーと違うときだけ、下の DINO_GIF_NAMES に足すか、dino.json のその恐竜に "gif_name": "名前" を書いてください。
+# （置いていないモーションは、idle → run の順で代わりに使います。dino.json の "gifs" に書いた古い指定もそのまま使えます）
+DINO_GIF_NAMES = {
+    "velociraptor": ["raptor", "rapter"],   # ヴェロキラプトル：dn_raptor_XXX.gif
+}
+DINO_GIF_MOTION_ALIASES = {"fainted": "faint"}   # 古い呼び方 → 今の呼び方
 DINO_COURSE_BACKGROUNDS = {
     "intermediate": "background/rq_bg_desert.png",
 }
@@ -1125,9 +1139,49 @@ def load_dino_asset_b64(rel_path: str) -> str:
         return base64.b64encode(f.read()).decode()
 
 
+@st.cache_data(ttl=60)
+def index_dino_gif_files() -> dict:
+    """dino_gif フォルダ以下の全ファイルを {小文字のファイル名: dino_gif からの相対パス} にして返す。"""
+    found = {}
+    if not os.path.isdir(DINO_GIF_DIR):
+        return found
+    for root, _dirs, files in os.walk(DINO_GIF_DIR):
+        for fname in sorted(files):
+            rel = os.path.relpath(os.path.join(root, fname), DINO_GIF_DIR).replace(os.sep, "/")
+            found.setdefault(fname.lower(), rel)
+    return found
+
+
+def dino_gif_names(species_key: str) -> list:
+    """GIFのファイル名に使う恐竜名の候補（dino.jsonの gif_name → DINO_GIF_NAMES → 恐竜キー の順）。"""
+    names = []
+    for source in (DINO_SPECIES.get(species_key, {}).get("gif_name"), DINO_GIF_NAMES.get(species_key), species_key):
+        if isinstance(source, str):
+            names.append(source)
+        elif isinstance(source, (list, tuple)):
+            names.extend(str(n) for n in source)
+    unique = []
+    for name in names:
+        if name and name.lower() not in unique:
+            unique.append(name.lower())
+    return unique
+
+
+def find_dino_gif_path(species_key: str, motion: str) -> str:
+    """dn_恐竜名_モーション.gif を探して、dino_gif からの相対パスを返す（なければ空文字）。"""
+    files = index_dino_gif_files()
+    for name in dino_gif_names(species_key):
+        for ext in ("gif", "png", "webp"):
+            rel = files.get(f"dn_{name}_{motion}.{ext}")
+            if rel:
+                return rel
+    return ""
+
+
 def dino_gif_html(species_key: str, motion: str = "idle", size_px: int = 120,
                   flip: bool = False, fallback: str = "", responsive: bool = False) -> str:
-    """dino.json の gifs から指定モーションのGIFを<img>タグで返す。なければ絵文字を返す。"""
+    """dn_恐竜名_モーション.gif（なければ dino.json の gifs）から指定モーションのGIFを<img>タグで返す。なければ絵文字を返す。"""
+    motion = DINO_GIF_MOTION_ALIASES.get(motion, motion)
     info = DINO_SPECIES.get(species_key, {})
     gifs = info.get("gifs", {})
     candidates = [motion]
@@ -1136,7 +1190,11 @@ def dino_gif_html(species_key: str, motion: str = "idle", size_px: int = 120,
     for fallback_motion in ("idle", "run"):
         if fallback_motion not in candidates:
             candidates.append(fallback_motion)
-    rel_path = next((gifs.get(m) for m in candidates if gifs.get(m)), "")
+    rel_path = ""
+    for m in candidates:
+        rel_path = find_dino_gif_path(species_key, m) or gifs.get(m, "") or (gifs.get("fainted", "") if m == "faint" else "")
+        if rel_path:
+            break
     if not rel_path and gifs:
         rel_path = next(iter(gifs.values()))
     b64 = load_dino_asset_b64(rel_path) if rel_path else ""
@@ -1152,7 +1210,7 @@ def dino_gif_html(species_key: str, motion: str = "idle", size_px: int = 120,
 
 
 def render_dino_stage_scene(course_key: str, species_key: str, motion: str,
-                            pos: int, goal: int, flip: bool = True) -> str:
+                            pos: int, goal: int, flip: bool = True, size_px: int = 170) -> str:
     """すごろく画面の上部に、コース背景＋その上を移動する恐竜GIFを描画する。"""
     bg_rel = DINO_COURSE_BACKGROUNDS.get(course_key, "")
     bg_b64 = load_dino_asset_b64(bg_rel) if bg_rel else ""
@@ -1162,15 +1220,15 @@ def render_dino_stage_scene(course_key: str, species_key: str, motion: str,
     else:
         bg_css = "background:linear-gradient(180deg, #bfe9ff 0%, #eaf9ff 62%, #a8dc88 63%, #6fbf4a 100%);"
     ratio = min(1.0, max(0.0, pos / max(1, goal)))
-    left_pct = 6 + ratio * 74
+    scene_height = size_px + 100
     emoji = DINO_SPECIES.get(species_key, {}).get("emoji", "🦖")
-    dino_tag = dino_gif_html(species_key, motion, size_px=110, flip=flip, fallback=emoji)
+    dino_tag = dino_gif_html(species_key, motion, size_px=size_px, flip=flip, fallback=emoji)
     if "<img" not in dino_tag:
-        dino_tag = f'<span style="font-size:56px; display:inline-block;">{dino_tag}</span>'
+        dino_tag = f'<span style="font-size:{int(size_px * 0.55)}px; display:inline-block;">{dino_tag}</span>'
     return (
-        f'<div style="position:relative; width:100%; height:210px; border-radius:16px; overflow:hidden; '
+        f'<div style="position:relative; width:100%; height:{scene_height}px; border-radius:16px; overflow:hidden; '
         f'margin-bottom:10px; border:2px solid #d0d7de; {bg_css}">'
-        f'<div style="position:absolute; bottom:12px; left:{left_pct:.1f}%; transition:left 0.4s ease;">'
+        f'<div style="position:absolute; bottom:12px; left:calc((100% - {size_px + 20}px) * {ratio:.3f} + 8px); transition:left 0.4s ease;">'
         f'{dino_tag}</div></div>'
     )
 
@@ -2059,7 +2117,11 @@ def resolve_dino_battle_turn(partner: dict, action: str):
             ambush = battle.get("ambush")
             win_exp = round(DINO_BATTLE_WIN_EXP * float(ambush["exp_multiplier"])) if ambush else DINO_BATTLE_WIN_EXP
             log.append(f"🎉 {ename}に勝利！ 経験値 +{win_exp}！" + ("（いきなりバトルボーナス！）" if ambush else ""))
+            level_before_win = dino_level(partner)
             add_dino_exp(partner, win_exp)
+            if dino_level(partner) > level_before_win:
+                battle["player_motion"] = "levelup"                # 戦闘画面でレベルアップGIFを見せる
+                st.session_state.pop("dino_levelup_gif", None)     # 上の画面で二重に出さない
             if random.random() < 0.5:
                 berry_key = random.choice(list(DINO_BERRIES))
                 st.session_state.dino_berries.setdefault(berry_key, 0)
@@ -2075,7 +2137,7 @@ def resolve_dino_battle_turn(partner: dict, action: str):
         queue_dino_sound("achieve")
     elif battle["player_hp"] <= 0:
         battle["over"], battle["result"] = True, "lose"
-        battle["player_motion"] = "fainted"
+        battle["player_motion"] = "faint"
         if battle.get("practice"):
             log.append(f"😵 模型恐竜に負けてしまった…。練習だから何度でも挑戦できるよ！")
         else:
@@ -7065,7 +7127,7 @@ elif st.session_state.page in [
                             unsafe_allow_html=True)
                 st.write(f"📍 現在地：**{race['pos'] * 100}m / {goal * 100}m**（{race['pos']}/{goal}マス）　🏁 完走 {race['laps']}回")
                 st.progress(min(race["pos"] / goal, 1.0))
-                board_token = dino_gif_html(partner["species"], stage_motion, responsive=True, flip=True, fallback=partner_species["emoji"])
+                board_token = partner_species["emoji"]   # すごろくのマスの中はただの絵文字
                 st.markdown(render_dino_board(course_key, race["pos"], board_token), unsafe_allow_html=True)
                 st.caption("💨 追い風　🎲 もう一回　🍖 食べ物　⚔️ バトル（力試し・挑むかは自由）　🏁 ゴール")
                 st.write("")

@@ -37,6 +37,14 @@
   "compsognathus": {
     "name": "コンプソグナトゥス",
     "emoji": "🦎",
+    "gifs": {
+        "idle": "compso_gif/dn_compso_idle.gif",
+        "run": "compso_gif/dn_compso_run.gif",
+        "attack": "compso_gif/dn_compso_attack.gif",
+        "guard": "compso_gif/dn_compso_guard.gif",
+        "fainted": "compso_gif/dn_compso_faint.gif",
+        "levelup": "compso_gif/dn_compso_levelup.gif"
+    },
     "base_hp": 18,
     "stars": 1,
     "passive_name": "木の実ひろい",

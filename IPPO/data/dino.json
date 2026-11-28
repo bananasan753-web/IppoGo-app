@@ -2,6 +2,14 @@
   "stegosaurus": {
     "name": "ステゴサウルス",
     "emoji": "🦕",
+    "gifs": {
+        "idle": "stego_gif/dn_stego_idle.gif",
+        "run": "stego_gif/dn_stego_run.gif",
+        "attack": "stego_gif/dn_stego_attack.gif",
+        "guard": "stego_gif/dn_stego_guard.gif",
+        "fainted": "stego_gif/dn_stego_faint.gif",
+        "levelup": "stego_gif/dn_stego_levelup.gif"
+    },
     "base_hp": 26,
     "passive_name": "どっしり歩き",
     "passive_text": "サイコロの目が1、2、3のとき、一定確率で6マス進む。",

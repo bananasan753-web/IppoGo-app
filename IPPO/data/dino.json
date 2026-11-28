@@ -28,6 +28,15 @@
   "triceratops": {
     "name": "トリケラトプス",
     "emoji": "🦏",
+    "gifs": {
+        "idle": "tricera_gif/dn_tricera_idle.gif",
+        "run": "tricera_gif/dn_tricera_run.gif",
+        "attack": "tricera_gif/dn_tricera_attack.gif",
+        "guard": "tricera_gif/dn_tricera_guard.gif",
+        "fainted": "tricera_gif/dn_tricera_faint.gif",
+        "levelup": "tricera_gif/dn_tricera_levelup.gif"
+   },
+
     "base_hp": 24,
     "passive_name": "突進ダッシュ",
     "passive_text": "サイコロを振るたび、一定確率で+1マス多く進む。",
